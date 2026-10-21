@@ -1,0 +1,39 @@
+
+/* trống đồng xoay bằng card đồ hoạ */
+.fx-drums{position:fixed;inset:0;z-index:-1;pointer-events:none;overflow:hidden}
+.fx-drum{position:absolute;transform:translate(-50%,-50%);opacity:.13;animation:fxbreathe 5.7s ease-in-out infinite}
+.fx-drum.fx-small{opacity:.06;animation:none}
+.fx-ring{position:absolute;inset:0;width:100%;height:100%;animation:fxspin 120s linear infinite;will-change:transform}
+.fx-glow{position:absolute;inset:-10%;border-radius:50%;background:radial-gradient(circle,rgba(255,190,80,.75),rgba(255,190,80,0) 70%)}
+.fx-sweep{position:absolute;inset:1%;border-radius:50%;background:conic-gradient(from 0deg,rgba(255,214,120,0) 0deg,rgba(255,214,120,.9) 18deg,rgba(255,214,120,0) 40deg,rgba(255,214,120,0) 360deg);
+  animation:fxspin 9s linear infinite;mix-blend-mode:screen;opacity:.55;will-change:transform}
+.fx-core{position:absolute;left:39%;top:39%;width:22%;height:22%;border-radius:50%;background:radial-gradient(circle,rgba(255,236,180,1),rgba(255,236,180,0) 70%);animation:fxcore 5.7s ease-in-out infinite}
+@keyframes fxspin{to{transform:rotate(360deg)}}
+@keyframes fxbreathe{0%,100%{opacity:.11}50%{opacity:.17}}
+@keyframes fxcore{0%,100%{opacity:.6}50%{opacity:1}}
+@media (max-width:760px){.fx-drum{opacity:.10}@keyframes fxbreathe{0%,100%{opacity:.08}50%{opacity:.13}}}
+
+/* huy hiệu đơn chờ giao */
+.badge{display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:var(--bad);color:#fff;font-size:11px;font-family:var(--mono);margin-left:4px;vertical-align:1px}
+.btn.gold .badge{background:#b3261e}
+
+/* nút liên hệ sau khi mua */
+.contacts{display:grid;gap:10px}
+.contacts a{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:10px;text-decoration:none;color:#fff;font-weight:600;font-family:var(--display);transition:transform .15s,filter .15s}
+.contacts a:hover{transform:translateY(-2px);filter:brightness(1.1)}
+.contacts a .ci{width:30px;height:30px;border-radius:7px;background:rgba(255,255,255,.2);display:grid;place-items:center;font-size:16px;flex:none}
+.contacts a.dc{background:#5865F2}.contacts a.tg{background:#229ED9}.contacts a.zl{background:#0068ff}
+.contacts a small{margin-left:auto;opacity:.8;font-family:var(--body);font-weight:400;font-size:12px}
+
+/* dải Discord ở trang chính */
+#join-band{display:flex;align-items:center;gap:16px;padding:16px 20px;border-radius:14px;text-decoration:none;color:#fff;
+  background:linear-gradient(100deg,#5865F2,#7c84ff);border:1px solid rgba(255,255,255,.18);box-shadow:0 12px 34px -14px rgba(88,101,242,.8);transition:transform .2s,filter .2s;position:relative;overflow:hidden}
+#join-band:hover{transform:translateY(-2px);filter:brightness(1.07)}
+#join-band::after{content:"";position:absolute;top:0;bottom:0;left:0;width:35%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.3),transparent);transform:translateX(-140%) skewX(-20deg)}
+#join-band:hover::after{animation:shine .8s ease}
+#join-band .jd-ico{width:46px;height:46px;border-radius:12px;background:rgba(255,255,255,.2);display:grid;place-items:center;font-size:24px;flex:none}
+#join-band .jd-txt{display:flex;flex-direction:column;min-width:0}
+#join-band .jd-txt b{font-family:var(--display);font-size:17px}
+#join-band .jd-txt small{opacity:.85;font-size:13px}
+#join-band .jd-btn{margin-left:auto;background:#fff;color:#4650d8;font-family:var(--display);font-weight:700;padding:9px 18px;border-radius:999px;white-space:nowrap;flex:none}
+@media (max-width:620px){#join-band{flex-wrap:wrap}#join-band .jd-btn{margin-left:0;width:100%;text-align:center}}

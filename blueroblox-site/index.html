@@ -605,6 +605,21 @@ window.BR_CONFIG = {
   </div>
 </div>
 
+<div class="modal" id="custdlg" hidden>
+  <div class="dlg wide" role="dialog" aria-modal="true" aria-labelledby="cd-title">
+    <h3 id="cd-title">Chi tiết khách hàng</h3>
+    <div class="hint" id="cd-info"></div>
+    <div style="display:grid;gap:10px;margin-top:8px">
+      <label>Tên đăng nhập<input class="in" id="cd-username" autocomplete="off"></label>
+      <label>Email<input class="in" id="cd-email" type="email" autocomplete="off"></label>
+      <label>Đặt số dư chính xác (VND)<input class="in" id="cd-balance" type="number" step="1000"></label>
+      <label>Đặt lại mật khẩu mới <span class="hint">(để trống nếu không đổi)</span><input class="in" id="cd-pass" type="text" placeholder="Mật khẩu mới ≥ 6 ký tự" autocomplete="new-password"></label>
+    </div>
+    <div class="err" id="cd-err"></div>
+    <div class="acts" style="flex-wrap:wrap;gap:8px"><button class="btn danger" id="cd-delete">Xoá khách</button><button class="btn ghost" id="cd-lock">Khoá tài khoản</button><button class="btn ghost" id="cd-cancel">Đóng</button><button class="btn" id="cd-save">Lưu thay đổi</button></div>
+  </div>
+</div>
+
 <!-- ADMIN -->
 <div class="drawer" id="drawer" hidden>
   <div class="dpanel" role="dialog" aria-modal="true" aria-labelledby="d-title">
@@ -726,7 +741,8 @@ const DEF_SITE = {
 const ERR = {
   INSUFFICIENT_BALANCE: "Số dư không đủ.", OUT_OF_STOCK: "Kho không còn đủ số lượng bạn chọn.", LOCKED: "Tài khoản đã bị khoá. Liên hệ hỗ trợ.",
   NOT_LOGGED_IN: "Hãy đăng nhập trước.", MIN_AMOUNT: "Số tiền thấp hơn mức nạp tối thiểu.", TOO_MANY: "Bạn có quá nhiều lệnh nạp đang chờ. Thử lại sau ít phút.",
-  BAD_QTY: "Số lượng không hợp lệ.", EMPTY: "Hãy dán thông tin cần giao.", BAD_PLAN: "Gói thời gian này không còn bán. Chọn gói khác.", NO_PRODUCT: "Sản phẩm không còn tồn tại.", NOT_ADMIN: "Bạn không có quyền admin.", SELF: "Không thể tự khoá tài khoản của mình."
+  BAD_QTY: "Số lượng không hợp lệ.", EMPTY: "Hãy dán thông tin cần giao.", BAD_PLAN: "Gói thời gian này không còn bán. Chọn gói khác.", NO_PRODUCT: "Sản phẩm không còn tồn tại.", NOT_ADMIN: "Bạn không có quyền admin.", SELF: "Không thể tự khoá/xoá tài khoản của mình.",
+  WEAK_PASS: "Mật khẩu mới phải ≥ 6 ký tự.", IS_ADMIN: "Không thể xoá tài khoản admin.", "duplicate key": "Tên đăng nhập hoặc email này đã có người dùng."
 };
 const errMsg = e => { const m = String(e && (e.message || e.error_description || e)); for (const k in ERR) if (m.includes(k)) return ERR[k]; return m || "Có lỗi, thử lại sau."; };
 
@@ -927,24 +943,42 @@ async function logout() { await sb.auth.signOut(); profile = null; renderUser();
 $("btn-logout").onclick = logout;
 
 /* ---------- nạp tiền ---------- */
-let topMethod = "bank";
+let topMethod = "bank", topPre = 0;
+const USDT_MIN_USD = 2;
 function setTopMethod(m) { topMethod = m; $("tp-m-bank").classList.toggle("on", m === "bank"); $("tp-m-usdt").classList.toggle("on", m === "usdt");
   $("tp-make").textContent = m === "usdt" ? t("Tạo thanh toán USDT", "make_usdt") : t("Tạo mã QR", "make_qr");
+  renderAmts(m);
   show("tp-step1"); show("tp-step2", false); show("tp-crypto", false); $("tp-err").textContent = ""; clearInterval(pollT); }
 $("tp-m-bank").onclick = () => setTopMethod("bank");
 $("tp-m-usdt").onclick = () => setTopMethod("usdt");
+function renderAmts(m) {
+  if (m === "usdt") {
+    $("tp-amts").innerHTML = [1, 2, 5, 10, 20, 50, 100, 200].map(v => `<button data-v="${v}">$${v}</button>`).join("");
+    $("tp-amt").step = "1"; $("tp-amt").min = USDT_MIN_USD; $("tp-amt").value = topPre ? Math.max(USDT_MIN_USD, Math.ceil(topPre / rate())) : 2;
+  } else {
+    $("tp-amts").innerHTML = [20000, 50000, 100000, 200000, 500000, 1000000, 2000000, 5000000].map(v => `<button data-v="${v}">${(v / 1000).toLocaleString("vi-VN")}k</button>`).join("");
+    $("tp-amt").step = "1000"; $("tp-amt").min = +SITE.minTop || 10000; $("tp-amt").value = topPre || 50000;
+  }
+  markAmt(); convHint();
+}
 function openTopup(pre) {
   if (!profile) { openAuth("login"); toast("Đăng nhập để nạp tiền.", 1); return; }
-  $("tp-amts").innerHTML = [20000, 50000, 100000, 200000, 500000, 1000000, 2000000, 5000000].map(v => `<button data-v="${v}">${(v / 1000).toLocaleString("vi-VN")}k</button>`).join("");
-  $("tp-amt").value = pre || 50000; $("tp-amt").min = +SITE.minTop || 10000; markAmt();
+  topPre = +pre || 0;
   setTopMethod("bank"); show("topup");
 }
 function markAmt() { document.querySelectorAll("#tp-amts button").forEach(b => b.classList.toggle("on", +b.dataset.v === +$("tp-amt").value)); }
-$("tp-amts").onclick = e => { const b = e.target.closest("button"); if (!b) return; $("tp-amt").value = b.dataset.v; markAmt(); };
-$("tp-amt").oninput = markAmt;
+function convHint() {
+  let el = $("tp-conv");
+  if (!el) { el = document.createElement("div"); el.id = "tp-conv"; el.style.cssText = "font-size:13px;color:#9fb0d0;margin-top:2px"; const lb = $("tp-amt").closest("label"); if (lb && lb.parentNode) lb.parentNode.insertBefore(el, lb.nextSibling); }
+  const v = +$("tp-amt").value || 0;
+  if (topMethod === "usdt") el.textContent = v ? "\u2248 " + vnd(Math.round(v * rate())) + " " + t("sẽ cộng vào số dư", "will_credit") : "";
+  else el.textContent = v ? "\u2248 $" + (v / rate()).toFixed(2) : "";
+}
+$("tp-amts").onclick = e => { const b = e.target.closest("button"); if (!b) return; $("tp-amt").value = b.dataset.v; markAmt(); convHint(); };
+$("tp-amt").oninput = () => { markAmt(); convHint(); };
 $("tp-make").onclick = () => busy($("tp-make"), async () => {
-  const a = Math.round(+$("tp-amt").value || 0), mn = Math.max(+SITE.minTop || 10000, topMethod === "usdt" ? 50000 : 0);
-  if (a < mn) { $("tp-err").textContent = t("Số tiền tối thiểu là ", "min_amt") + vnd(mn) + "."; return; }
+  const raw = Math.round(+$("tp-amt").value || 0), a = topMethod === "usdt" ? Math.round(raw * rate()) : raw, mn = Math.max(+SITE.minTop || 10000, topMethod === "usdt" ? 50000 : 0);
+  if (a < mn) { $("tp-err").textContent = topMethod === "usdt" ? (t("Số tiền tối thiểu là ", "min_amt") + "$" + Math.ceil(mn / rate()) + ".") : (t("Số tiền tối thiểu là ", "min_amt") + vnd(mn) + "."); return; }
   if (topMethod === "bank" && !SITE.bankAcc) { $("tp-err").textContent = "Shop chưa cài tài khoản ngân hàng."; return; }
   const { data, error } = await sb.rpc("create_topup", { p_amount: a });
   if (error) { $("tp-err").textContent = errMsg(error); return; }
@@ -1114,18 +1148,18 @@ function renderCust() {
   $("ctbl").innerHTML = us.length ? us.map(u => `<tr><td><b>${esc(u.username)}</b>${u.role === "admin" ? ' <span class="pill wt">ADMIN</span>' : ""}<div class="hint">${ago(u.created_at)}</div></td><td>${esc(u.email)}</td>
     <td class="num">${vnd(u.balance)}</td><td>${u.locked ? '<span class="pill bad">Đã khoá</span>' : '<span class="pill ok">Hoạt động</span>'}</td>
     <td style="white-space:nowrap;text-align:right"><input class="in" style="width:110px;display:inline-block;padding:5px 8px" type="number" step="1000" placeholder="± số tiền" id="adj-${u.id}" aria-label="Điều chỉnh số dư">
-    <button class="btn ghost sm" data-adj="${u.id}">Cộng/trừ</button>${u.id === profile.id ? "" : ` <button class="btn ${u.locked ? "ghost" : "danger"} sm" data-lock="${u.id}" data-to="${u.locked ? 0 : 1}">${u.locked ? "Mở khoá" : "Khoá"}</button>`}</td></tr>`).join("")
+    <button class="btn ghost sm" data-adj="${u.id}">Cộng/trừ</button> <button class="btn okb sm" data-cust="${u.id}">Chi tiết</button>${u.id === profile.id ? "" : ` <button class="btn ${u.locked ? "ghost" : "danger"} sm" data-lock="${u.id}" data-to="${u.locked ? 0 : 1}">${u.locked ? "Mở khoá" : "Khoá"}</button>`}</td></tr>`).join("")
     : `<tr><td colspan="5" style="color:var(--muted);text-align:center;padding:24px">Chưa có khách nào.</td></tr>`;
 }
 function renderTx() {
   $("ttbl").innerHTML = ADM.topups.length ? ADM.topups.map(t => `<tr><td>${ago(t.created_at)}</td><td>${esc(uname(t.user_id))}</td><td class="num">${esc(t.memo)}</td><td class="num">${vnd(t.amount)}</td>
     <td>${t.status === "done" ? '<span class="pill ok">Thành công</span>' : '<span class="pill wt">Chờ</span>'}</td>
-    <td style="text-align:right">${t.status === "pending" ? `<button class="btn ghost sm" data-approve="${t.id}">Duyệt tay</button>` : ""}</td></tr>`).join("")
+    <td style="text-align:right;white-space:nowrap">${t.status === "pending" ? `<button class="btn ghost sm" data-approve="${t.id}">Duyệt tay</button> ` : ""}<button class="btn danger sm" data-deltop="${t.id}">Xoá</button></td></tr>`).join("")
     : `<tr><td colspan="6" style="color:var(--muted);text-align:center;padding:24px">Chưa có lệnh nạp nào.</td></tr>`;
 }
 function renderOrd() {
   $("otbl").innerHTML = ADM.orders.length ? ADM.orders.map(o => `<tr${o.status === "pending" ? ' style="background:rgba(255,203,69,.06)"' : ""}><td>${ago(o.created_at)}</td><td>${esc(uname(o.user_id))}</td><td>${esc(o.product_name)}</td><td class="num">${o.qty}</td><td class="num">${vnd(o.total)}</td>
-    <td>${ordPill(o.status)}</td><td style="text-align:right;white-space:nowrap">${o.status === "pending" ? `<button class="btn sm" data-deliver="${o.id}">Giao hàng</button>` : `<button class="btn ghost sm" data-view="${o.id}">Xem</button>`}</td></tr>`).join("")
+    <td>${ordPill(o.status)}</td><td style="text-align:right;white-space:nowrap">${o.status === "pending" ? `<button class="btn sm" data-deliver="${o.id}">Giao hàng</button>` : `<button class="btn ghost sm" data-view="${o.id}">Xem</button>`} <button class="btn danger sm" data-delord="${o.id}">Xoá</button></td></tr>`).join("")
     : `<tr><td colspan="7" style="color:var(--muted);text-align:center;padding:24px">Chưa có đơn hàng nào.</td></tr>`;
   setBadge(ADM.orders.filter(o => o.status === "pending").length);
 }
@@ -1165,13 +1199,60 @@ async function pollPending() {
 setInterval(pollPending, 30000);
 $("cq").oninput = renderCust;
 $("ctbl").onclick = async e => {
-  const a = e.target.closest("[data-adj]"), l = e.target.closest("[data-lock]");
+  const a = e.target.closest("[data-adj]"), l = e.target.closest("[data-lock]"), c = e.target.closest("[data-cust]");
+  if (c) return openCust(c.dataset.cust);
   if (a) { const v = Math.round(+$("adj-" + a.dataset.adj).value || 0); if (!v) return;
     await busy(a, async () => { const { error } = await sb.rpc("admin_adjust_balance", { p_user: a.dataset.adj, p_delta: v }); if (error) return toast(errMsg(error), 1); toast((v > 0 ? "Đã cộng " : "Đã trừ ") + vnd(Math.abs(v))); await loadAdmin(); if (a.dataset.adj === profile.id) { await loadProfile(); renderUser(); } }); }
   if (l) await busy(l, async () => { const { error } = await sb.rpc("admin_set_locked", { p_user: l.dataset.lock, p_locked: l.dataset.to === "1" }); if (error) return toast(errMsg(error), 1); toast(l.dataset.to === "1" ? "Đã khoá tài khoản." : "Đã mở khoá."); await loadAdmin(); });
 };
-$("ttbl").onclick = async e => { const b = e.target.closest("[data-approve]"); if (!b) return;
-  await busy(b, async () => { const { data, error } = await sb.rpc("admin_approve_topup", { p_id: +b.dataset.approve }); if (error) return toast(errMsg(error), 1); toast(data ? "Đã duyệt và cộng tiền." : "Lệnh này đã được xử lý."); await loadAdmin(); }); };
+$("ttbl").onclick = async e => {
+  const b = e.target.closest("[data-approve]"), d = e.target.closest("[data-deltop]");
+  if (b) return busy(b, async () => { const { data, error } = await sb.rpc("admin_approve_topup", { p_id: +b.dataset.approve }); if (error) return toast(errMsg(error), 1); toast(data ? "Đã duyệt và cộng tiền." : "Lệnh này đã được xử lý."); await loadAdmin(); });
+  if (d) { if (!confirm("Xoá lệnh nạp này? Không thể hoàn tác.")) return; await busy(d, async () => { const { error } = await sb.rpc("admin_delete_topup", { p_id: +d.dataset.deltop }); if (error) return toast(errMsg(error), 1); toast("Đã xoá lệnh nạp."); await loadAdmin(); }); }
+};
+$("otbl").addEventListener("click", async e => {
+  const d = e.target.closest("[data-delord]"); if (!d) return;
+  e.stopImmediatePropagation();
+  if (!confirm("Xoá đơn hàng này? Không thể hoàn tác. (Nếu muốn trả tiền cho khách, hãy dùng Huỷ đơn & hoàn tiền thay vì Xoá.)")) return;
+  await busy(d, async () => { const { error } = await sb.rpc("admin_delete_order", { p_order: d.dataset.delord }); if (error) return toast(errMsg(error), 1); toast("Đã xoá đơn hàng."); await loadAdmin(); });
+}, true);
+/* ---------- chi tiết / quản lý khách ---------- */
+let custId = null;
+function openCust(id) {
+  const u = ADM.users.find(x => x.id === id); if (!u) return;
+  custId = id;
+  const nTop = ADM.topups.filter(t => t.user_id === id).length, nOrd = ADM.orders.filter(o => o.user_id === id).length;
+  $("cd-info").textContent = `${u.username} · ${u.role === "admin" ? "ADMIN · " : ""}tạo ${ago(u.created_at)} · ${nTop} lệnh nạp · ${nOrd} đơn · ${u.locked ? "ĐANG KHOÁ" : "hoạt động"}`;
+  $("cd-username").value = u.username || ""; $("cd-email").value = u.email || "";
+  $("cd-balance").value = +u.balance || 0; $("cd-pass").value = ""; $("cd-err").textContent = "";
+  $("cd-lock").textContent = u.locked ? "Mở khoá" : "Khoá tài khoản";
+  const self = u.id === profile.id || u.role === "admin";
+  show("cd-delete", !self); show("cd-lock", u.id !== profile.id);
+  show("custdlg");
+}
+$("cd-cancel").onclick = () => show("custdlg", false);
+$("cd-save").onclick = () => busy($("cd-save"), async () => {
+  const u = ADM.users.find(x => x.id === custId); if (!u) return;
+  $("cd-err").textContent = "";
+  const un = $("cd-username").value.trim(), em = $("cd-email").value.trim().toLowerCase(), bal = Math.round(+$("cd-balance").value || 0), pw = $("cd-pass").value;
+  try {
+    if (un !== u.username || em !== u.email) { const { error } = await sb.rpc("admin_update_user", { p_user: custId, p_username: un, p_email: em }); if (error) throw error; }
+    if (bal !== (+u.balance || 0)) { const { error } = await sb.rpc("admin_set_balance", { p_user: custId, p_amount: bal }); if (error) throw error; }
+    if (pw) { if (pw.length < 6) { $("cd-err").textContent = "Mật khẩu mới phải ≥ 6 ký tự."; return; } const { error } = await sb.rpc("admin_set_password", { p_user: custId, p_pass: pw }); if (error) throw error; }
+    toast("Đã lưu thay đổi khách."); show("custdlg", false); await loadAdmin();
+    if (custId === profile.id) { await loadProfile(); renderUser(); }
+  } catch (err) { $("cd-err").textContent = errMsg(err); }
+});
+$("cd-lock").onclick = () => busy($("cd-lock"), async () => {
+  const u = ADM.users.find(x => x.id === custId); if (!u) return;
+  const { error } = await sb.rpc("admin_set_locked", { p_user: custId, p_locked: !u.locked }); if (error) return void ($("cd-err").textContent = errMsg(error));
+  toast(!u.locked ? "Đã khoá tài khoản." : "Đã mở khoá."); show("custdlg", false); await loadAdmin();
+});
+$("cd-delete").onclick = () => {
+  const u = ADM.users.find(x => x.id === custId); if (!u) return;
+  if (!confirm(`XOÁ HẲN khách "${u.username}" cùng toàn bộ lệnh nạp & đơn hàng của họ? Không thể hoàn tác.`)) return;
+  busy($("cd-delete"), async () => { const { error } = await sb.rpc("admin_delete_user", { p_user: custId }); if (error) return void ($("cd-err").textContent = errMsg(error)); toast("Đã xoá khách."); show("custdlg", false); await loadAdmin(); });
+};
 
 function planRow(d = "", pr = "") {
   const r = document.createElement("div"); r.className = "plan-row";

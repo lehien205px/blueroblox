@@ -435,7 +435,7 @@ window.BR_CONFIG = {
 <section class="wrap pay" id="pay">
   <div class="click" id="pay-bank"><span class="ico" style="background:#1d4ed8;color:#fff">BANK</span><span><b data-i18n="pay_bank">Chuyển khoản</b><small data-i18n="pay_bank_s">Quét QR, tự cộng tiền</small></span></div>
   <div><span class="ico" style="background:#f59e0b;color:#1a1200">CARD</span><span><b data-i18n="pay_card">Thẻ cào</b><small data-i18n="soon">Sắp có</small></span></div>
-  <div><span class="ico" style="background:#10b981;color:#02261a">USDT</span><span><b>Crypto</b><small data-i18n="soon">Sắp có</small></span></div>
+  <div class="click" id="pay-crypto"><span class="ico" style="background:#10b981;color:#02261a">USDT</span><span><b>Crypto (USDT)</b><small data-i18n="pay_crypto_s">Nạp tự động TRC20</small></span></div>
   <div><span class="ico" style="background:#6b7fa8;color:#fff">LTC</span><span><b>Litecoin</b><small data-i18n="soon">Sắp có</small></span></div>
 </section>
 
@@ -513,7 +513,8 @@ window.BR_CONFIG = {
 <!-- NẠP TIỀN -->
 <div class="modal" id="topup" hidden>
   <div class="dlg wide" role="dialog" aria-modal="true" aria-labelledby="tp-title">
-    <h3 id="tp-title" data-i18n="topup_title">Nạp tiền qua chuyển khoản</h3>
+    <h3 id="tp-title" data-i18n="topup_title">Nạp tiền</h3>
+    <div class="seg" id="tp-method" style="justify-self:center"><button id="tp-m-bank" class="on" data-i18n="m_bank">🏦 Ngân hàng</button><button id="tp-m-usdt" data-i18n="m_usdt">₮ USDT</button></div>
     <div id="tp-step1" style="display:grid;gap:12px">
       <div class="amts" id="tp-amts"></div>
       <label><span data-i18n="or_amount">Hoặc nhập số tiền</span><input class="in" id="tp-amt" type="number" step="1000" value="50000"></label>
@@ -535,6 +536,20 @@ window.BR_CONFIG = {
       <div class="wait" id="tp-wait"><span class="sp"></span><span id="tp-wait-t">Đang chờ ngân hàng báo có…</span></div>
       <div class="note">Chuyển <b>đúng số tiền</b> và <b>đúng nội dung</b> để được cộng tự động trong 1–2 phút. Sai nội dung thì liên hệ hỗ trợ kèm ảnh chụp giao dịch.</div>
       <div class="acts"><button class="btn ghost" id="tp-back" data-i18n="change_amount">Đổi số tiền</button></div>
+    </div>
+    <div id="tp-crypto" hidden style="display:grid;gap:14px">
+      <div class="qrwrap">
+        <div class="qr" id="cr-qr"></div>
+        <div class="kv">
+          <div><span data-i18n="cr_type">Loại</span><b>USDT · TRC20</b></div>
+          <div><span data-i18n="cr_send">Số USDT cần gửi</span><b id="cr-amt" class="hl"></b><button data-copy="cr-amt-raw">Chép</button></div>
+          <div><span data-i18n="cr_addr">Địa chỉ ví</span><b id="cr-addr" style="font-size:11px"></b><button data-copy="cr-addr">Chép</button></div>
+          <span id="cr-amt-raw" hidden></span>
+        </div>
+      </div>
+      <div class="wait" id="cr-wait"><span class="sp"></span><span id="cr-wait-t">Đang chờ xác nhận trên blockchain…</span></div>
+      <div class="note" data-i18n="cr_note">Gửi <b>đúng số USDT</b> trên <b>mạng TRC20</b> tới địa chỉ trên. Tiền tự cộng sau khi mạng xác nhận (vài phút). Gửi sai mạng có thể mất tiền.</div>
+      <div class="acts"><button class="btn ghost" id="cr-back" data-i18n="change_amount">Đổi số tiền</button></div>
     </div>
     <button class="btn ghost sm" id="tp-close" data-i18n="close">Đóng</button>
   </div>
@@ -742,7 +757,7 @@ const EN = {
   view_orders:"View orders", orders_title:"Your orders & transactions",
   buy_now:"Buy now", sold_out:"Sold out", left:"Left", from:"from", plan:"Plan", days:"days",
   login_to_buy:"Log in to buy", topup:"Top up", pay:"Pay", not_logged:"Not logged in",
-  cat_all:"All", thanks_ok:"Success!", order_ok:"Order placed!"
+  cat_all:"All", thanks_ok:"Success!", order_ok:"Order placed!", m_bank:"🏦 Bank", m_usdt:"₮ USDT", cr_type:"Type", cr_send:"USDT to send", cr_addr:"Wallet address", pay_crypto_s:"Auto TRC20", make_usdt:"Create USDT payment", min_amt:"Minimum is ", cr_wait:"Waiting for blockchain confirmation…", received:"Received ", credited:"Balance credited.", topup_ok:"Top-up success +", cr_note:"Send the <b>exact USDT amount</b> on the <b>TRC20 network</b> to the address above. Credited automatically after network confirmation (a few minutes). Wrong network may lose funds."
 };
 const t = (vi, key) => (LANG === "en" && EN[key]) ? EN[key] : vi;
 function applyStatic() {
@@ -912,22 +927,41 @@ async function logout() { await sb.auth.signOut(); profile = null; renderUser();
 $("btn-logout").onclick = logout;
 
 /* ---------- nạp tiền ---------- */
+let topMethod = "bank";
+function setTopMethod(m) { topMethod = m; $("tp-m-bank").classList.toggle("on", m === "bank"); $("tp-m-usdt").classList.toggle("on", m === "usdt");
+  $("tp-make").textContent = m === "usdt" ? t("Tạo thanh toán USDT", "make_usdt") : t("Tạo mã QR", "make_qr");
+  show("tp-step1"); show("tp-step2", false); show("tp-crypto", false); $("tp-err").textContent = ""; clearInterval(pollT); }
+$("tp-m-bank").onclick = () => setTopMethod("bank");
+$("tp-m-usdt").onclick = () => setTopMethod("usdt");
 function openTopup(pre) {
   if (!profile) { openAuth("login"); toast("Đăng nhập để nạp tiền.", 1); return; }
-  if (!SITE.bankAcc) { toast("Shop chưa cài tài khoản nhận tiền. Liên hệ hỗ trợ.", 1); return; }
   $("tp-amts").innerHTML = [20000, 50000, 100000, 200000, 500000, 1000000, 2000000, 5000000].map(v => `<button data-v="${v}">${(v / 1000).toLocaleString("vi-VN")}k</button>`).join("");
   $("tp-amt").value = pre || 50000; $("tp-amt").min = +SITE.minTop || 10000; markAmt();
-  show("tp-step1"); show("tp-step2", false); $("tp-err").textContent = ""; show("topup");
+  setTopMethod("bank"); show("topup");
 }
 function markAmt() { document.querySelectorAll("#tp-amts button").forEach(b => b.classList.toggle("on", +b.dataset.v === +$("tp-amt").value)); }
 $("tp-amts").onclick = e => { const b = e.target.closest("button"); if (!b) return; $("tp-amt").value = b.dataset.v; markAmt(); };
 $("tp-amt").oninput = markAmt;
 $("tp-make").onclick = () => busy($("tp-make"), async () => {
-  const a = Math.round(+$("tp-amt").value || 0), mn = +SITE.minTop || 10000;
-  if (a < mn) { $("tp-err").textContent = "Số tiền tối thiểu là " + vnd(mn) + "."; return; }
+  const a = Math.round(+$("tp-amt").value || 0), mn = Math.max(+SITE.minTop || 10000, topMethod === "usdt" ? 50000 : 0);
+  if (a < mn) { $("tp-err").textContent = t("Số tiền tối thiểu là ", "min_amt") + vnd(mn) + "."; return; }
+  if (topMethod === "bank" && !SITE.bankAcc) { $("tp-err").textContent = "Shop chưa cài tài khoản ngân hàng."; return; }
   const { data, error } = await sb.rpc("create_topup", { p_amount: a });
   if (error) { $("tp-err").textContent = errMsg(error); return; }
   curTop = data;
+  if (topMethod === "usdt") {
+    try {
+      const r = await fetch("/api/crypto-create", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ order_id: data.memo }) });
+      const j = await r.json();
+      if (!r.ok || !j.pay_address) { $("tp-err").textContent = j.error || "Không tạo được thanh toán USDT."; return; }
+      $("cr-amt").textContent = j.pay_amount + " " + (j.pay_currency || "USDT").toUpperCase(); $("cr-amt-raw").textContent = String(j.pay_amount);
+      $("cr-addr").textContent = j.pay_address;
+      try { const qr = qrcode(0, "M"); qr.addData(j.pay_address); qr.make(); $("cr-qr").innerHTML = qr.createSvgTag(5, 0); } catch (e) { $("cr-qr").innerHTML = ""; }
+      $("cr-wait").className = "wait"; $("cr-wait-t").textContent = t("Đang chờ xác nhận trên blockchain…", "cr_wait");
+      show("tp-step1", false); show("tp-crypto"); startPoll("cr-wait", "cr-wait-t");
+    } catch (e) { $("tp-err").textContent = "Lỗi kết nối, thử lại."; }
+    return;
+  }
   const bank = BANKS.find(b => b[0] === SITE.bankBin);
   $("tp-bank").textContent = bank ? bank[1] : SITE.bankBin; $("tp-acc").textContent = SITE.bankAcc; $("tp-name").textContent = SITE.bankName;
   $("tp-money").textContent = vnd(a); $("tp-money-raw").textContent = String(a); $("tp-memo").textContent = data.memo;
@@ -936,19 +970,22 @@ $("tp-make").onclick = () => busy($("tp-make"), async () => {
   $("tp-wait").className = "wait"; $("tp-wait-t").textContent = "Đang chờ ngân hàng báo có… Giữ đúng nội dung chuyển khoản.";
   show("tp-step1", false); show("tp-step2"); startPoll();
 });
-function startPoll() {
+function startPoll(waitId, waitTxtId) {
+  waitId = waitId || "tp-wait"; waitTxtId = waitTxtId || "tp-wait-t";
   clearInterval(pollT); const started = Date.now();
   pollT = setInterval(async () => {
-    if (!curTop || Date.now() - started > 20 * 60 * 1000 || $("topup").hidden) { clearInterval(pollT); return; }
+    if (!curTop || Date.now() - started > 30 * 60 * 1000 || $("topup").hidden) { clearInterval(pollT); return; }
     const { data } = await sb.from("topups").select("status,amount").eq("id", curTop.id).maybeSingle();
     if (data && data.status === "done") {
-      clearInterval(pollT); $("tp-wait").className = "wait done"; $("tp-wait-t").textContent = "Đã nhận " + vnd(data.amount) + ". Số dư đã được cộng.";
-      await loadProfile(); renderUser(); toast("Nạp thành công +" + vnd(data.amount));
+      clearInterval(pollT); $(waitId).className = "wait done"; $(waitTxtId).textContent = t("Đã nhận ", "received") + vnd(data.amount) + ". " + t("Số dư đã được cộng.", "credited");
+      await loadProfile(); renderUser(); toast(t("Nạp thành công +", "topup_ok") + vnd(data.amount));
     }
-  }, 4000);
+  }, 5000);
 }
+$("cr-back").onclick = () => { clearInterval(pollT); setTopMethod("usdt"); };
 $("tp-back").onclick = () => { clearInterval(pollT); show("tp-step1"); show("tp-step2", false); };
 $("tp-close").onclick = () => { clearInterval(pollT); show("topup", false); };
+$("pay-crypto") && ($("pay-crypto").onclick = () => { openTopup(); setTopMethod("usdt"); });
 document.querySelectorAll("[data-copy]").forEach(b => b.onclick = async () => {
   const t = $(b.dataset.copy).textContent;
   try { await navigator.clipboard.writeText(t); b.textContent = "Đã chép"; setTimeout(() => b.textContent = "Chép", 1500); }

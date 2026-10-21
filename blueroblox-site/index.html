@@ -382,15 +382,16 @@ window.BR_CONFIG = {
   <div class="wrap">
     <a class="logo" href="/"><div class="mark"><span></span></div><b>BLUE<i>ROBLOX</i></b></a>
     <nav>
-      <a class="on" href="/">Trang chủ</a><a href="#shop">Sản phẩm</a><a id="nav-topup">Nạp tiền</a><a id="nav-orders">Đơn hàng</a><a href="#policy">Chính sách</a>
+      <a class="on" href="/" data-i18n="nav_home">Trang chủ</a><a href="#shop" data-i18n="nav_shop">Sản phẩm</a><a id="nav-topup" data-i18n="nav_topup">Nạp tiền</a><a id="nav-orders" data-i18n="nav_orders">Đơn hàng</a><a href="#policy" data-i18n="nav_policy">Chính sách</a>
     </nav>
     <div class="acct">
+      <div class="seg" id="lang-seg" role="group" aria-label="Language"><button id="lang-vi" class="on">VI</button><button id="lang-en">EN</button></div>
       <div class="seg" role="group" aria-label="Đơn vị tiền"><button id="cur-vnd" class="on">VND</button><button id="cur-usd">USD</button></div>
-      <span id="guest-acts"><button class="btn ghost" id="btn-login">Đăng nhập</button> <button class="btn" id="btn-reg">Đăng ký</button></span>
+      <span id="guest-acts"><button class="btn ghost" id="btn-login" data-i18n="login">Đăng nhập</button> <button class="btn" id="btn-reg" data-i18n="signup">Đăng ký</button></span>
       <span id="user-acts" hidden style="display:flex;gap:8px;align-items:center">
-        <span class="bal">Số dư: <b id="bal">0đ</b></span>
-        <button class="btn okb sm" id="btn-topup">+ Nạp</button>
-        <span class="who"><span class="av" id="who-av">?</span><span id="who-name"></span><button class="btn ghost sm" id="btn-logout">Thoát</button></span>
+        <span class="bal"><span data-i18n="balance">Số dư</span>: <b id="bal">0đ</b></span>
+        <button class="btn okb sm" id="btn-topup" data-i18n="btn_topup">+ Nạp</button>
+        <span class="who"><span class="av" id="who-av">?</span><span id="who-name"></span><button class="btn ghost sm" id="btn-logout" data-i18n="logout">Thoát</button></span>
       </span>
       <button class="btn gold" id="admin-open" hidden>Quản trị <span class="badge" id="adm-badge" hidden></span></button>
     </div>
@@ -403,9 +404,9 @@ window.BR_CONFIG = {
     <h1 id="h-title"></h1>
     <p id="h-desc"></p>
     <div class="stats">
-      <div><b id="st-a"></b><span>Clone đã bán</span></div>
-      <div><b id="st-b"></b><span>VPS đang chạy</span></div>
-      <div><b>24/7</b><span>Hỗ trợ</span></div>
+      <div><b id="st-a"></b><span data-i18n="stat_sold">Clone đã bán</span></div>
+      <div><b id="st-b"></b><span data-i18n="stat_vps">VPS đang chạy</span></div>
+      <div><b>24/7</b><span data-i18n="stat_sup">Hỗ trợ</span></div>
     </div>
   </div>
   <div class="notice" id="notices"></div>
@@ -420,69 +421,69 @@ window.BR_CONFIG = {
 </section>
 
 <section class="wrap shop" id="shop">
-  <aside class="side"><h3>Chuyên mục</h3><div class="cats" id="cats"></div></aside>
+  <aside class="side"><h3 data-i18n="categories">Chuyên mục</h3><div class="cats" id="cats"></div></aside>
   <div class="main">
     <div class="bar">
-      <h2 id="cat-title">Tất cả sản phẩm</h2>
-      <input class="search" id="q" type="search" placeholder="Tìm sản phẩm…" aria-label="Tìm sản phẩm">
-      <select id="sort" aria-label="Sắp xếp"><option value="hot">Bán chạy</option><option value="asc">Giá thấp → cao</option><option value="desc">Giá cao → thấp</option></select>
+      <h2 id="cat-title" data-i18n="all_products">Tất cả sản phẩm</h2>
+      <input class="search" id="q" type="search" placeholder="Tìm sản phẩm…" data-ph="search_ph" aria-label="Search">
+      <select id="sort" aria-label="Sắp xếp"><option value="hot" data-i18n="sort_hot">Bán chạy</option><option value="asc" data-i18n="sort_asc">Giá thấp → cao</option><option value="desc" data-i18n="sort_desc">Giá cao → thấp</option></select>
     </div>
-    <div class="grid" id="grid"><div class="empty">Đang tải sản phẩm…</div></div>
+    <div class="grid" id="grid"><div class="empty" data-i18n="loading">Đang tải sản phẩm…</div></div>
   </div>
 </section>
 
 <section class="wrap pay" id="pay">
-  <div class="click" id="pay-bank"><span class="ico" style="background:#1d4ed8;color:#fff">BANK</span><span><b>Chuyển khoản</b><small>Quét QR, tự cộng tiền</small></span></div>
-  <div><span class="ico" style="background:#f59e0b;color:#1a1200">CARD</span><span><b>Thẻ cào</b><small>Sắp có</small></span></div>
-  <div><span class="ico" style="background:#10b981;color:#02261a">USDT</span><span><b>Crypto</b><small>Sắp có</small></span></div>
-  <div><span class="ico" style="background:#6b7fa8;color:#fff">LTC</span><span><b>Litecoin</b><small>Sắp có</small></span></div>
+  <div class="click" id="pay-bank"><span class="ico" style="background:#1d4ed8;color:#fff">BANK</span><span><b data-i18n="pay_bank">Chuyển khoản</b><small data-i18n="pay_bank_s">Quét QR, tự cộng tiền</small></span></div>
+  <div><span class="ico" style="background:#f59e0b;color:#1a1200">CARD</span><span><b data-i18n="pay_card">Thẻ cào</b><small data-i18n="soon">Sắp có</small></span></div>
+  <div><span class="ico" style="background:#10b981;color:#02261a">USDT</span><span><b>Crypto</b><small data-i18n="soon">Sắp có</small></span></div>
+  <div><span class="ico" style="background:#6b7fa8;color:#fff">LTC</span><span><b>Litecoin</b><small data-i18n="soon">Sắp có</small></span></div>
 </section>
 
 <section class="wrap" id="policy" style="padding-block:0 40px">
-  <div class="panel"><h3>Chính sách</h3><div id="policy-text" style="color:var(--muted);font-size:14px;white-space:pre-line"></div></div>
+  <div class="panel"><h3 data-i18n="policy">Chính sách</h3><div id="policy-text" style="color:var(--muted);font-size:14px;white-space:pre-line"></div></div>
 </section>
 
 <footer>
   <div class="wrap">
     <div><a class="logo" href="/"><div class="mark"><span></span></div><b>BLUE<i>ROBLOX</i></b></a><p id="ft-about"></p></div>
-    <div><h5>Liên kết</h5><ul><li><a href="#policy">Chính sách</a></li><li><a href="#shop">Sản phẩm</a></li></ul></div>
-    <div><h5>Liên hệ</h5><ul><li id="ct-zalo"></li><li id="ct-email"></li><li id="ct-discord"></li></ul></div>
+    <div><h5 data-i18n="f_links">Liên kết</h5><ul><li><a href="#policy" data-i18n="policy">Chính sách</a></li><li><a href="#shop" data-i18n="nav_shop">Sản phẩm</a></li></ul></div>
+    <div><h5 data-i18n="f_contact">Liên hệ</h5><ul><li id="ct-zalo"></li><li id="ct-email"></li><li id="ct-discord"></li></ul></div>
   </div>
-  <div class="copy">© <span id="year"></span> BLUEROBLOX. Không liên kết với Roblox Corporation.</div>
+  <div class="copy">© <span id="year"></span> BLUEROBLOX. <span data-i18n="disclaimer">Không liên kết với Roblox Corporation.</span></div>
 </footer>
 
 <!-- MUA -->
 <div class="modal" id="modal" hidden>
   <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="m-title">
-    <h3 id="m-title">Mua sản phẩm</h3>
+    <h3 id="m-title" data-i18n="buy_title">Mua sản phẩm</h3>
     <div id="m-name" style="color:var(--muted);font-size:14px"></div>
-    <div id="m-plans-box" hidden style="display:grid;gap:8px"><span style="font-size:13px;color:var(--muted)">Chọn thời gian thuê</span><div class="amts plans" id="m-plans"></div></div>
-    <div class="qty"><span style="margin-right:auto">Số lượng</span><button id="m-minus" aria-label="Giảm">−</button><input id="m-qty" type="number" min="1" value="1" aria-label="Số lượng"><button id="m-plus" aria-label="Tăng">+</button></div>
-    <div class="sum"><span>Tổng thanh toán</span><b id="m-total"></b></div>
-    <div class="sum"><span>Số dư hiện tại</span><span id="m-bal" style="font-family:var(--mono)"></span></div>
+    <div id="m-plans-box" hidden style="display:grid;gap:8px"><span style="font-size:13px;color:var(--muted)" data-i18n="rent_period">Chọn thời gian thuê</span><div class="amts plans" id="m-plans"></div></div>
+    <div class="qty"><span style="margin-right:auto" data-i18n="quantity">Số lượng</span><button id="m-minus" aria-label="Giảm">−</button><input id="m-qty" type="number" min="1" value="1" aria-label="Số lượng"><button id="m-plus" aria-label="Tăng">+</button></div>
+    <div class="sum"><span data-i18n="total">Tổng thanh toán</span><b id="m-total"></b></div>
+    <div class="sum"><span data-i18n="cur_bal">Số dư hiện tại</span><span id="m-bal" style="font-family:var(--mono)"></span></div>
     <div class="err" id="m-err"></div>
-    <div class="acts"><button class="btn ghost" id="m-cancel">Huỷ</button><button class="btn" id="m-ok">Thanh toán</button></div>
+    <div class="acts"><button class="btn ghost" id="m-cancel" data-i18n="cancel">Huỷ</button><button class="btn" id="m-ok">Thanh toán</button></div>
   </div>
 </div>
 
 <!-- TÀI KHOẢN -->
 <div class="modal" id="auth" hidden>
   <div class="dlg" role="dialog" aria-modal="true" aria-label="Tài khoản">
-    <div class="atabs" id="atabs"><button id="at-login" class="on">Đăng nhập</button><button id="at-reg">Đăng ký</button></div>
+    <div class="atabs" id="atabs"><button id="at-login" class="on" data-i18n="login">Đăng nhập</button><button id="at-reg" data-i18n="signup">Đăng ký</button></div>
     <form id="f-login" style="display:grid;gap:12px">
       <label>Email<input class="in" id="li-e" type="email" autocomplete="email" required></label>
       <label>Mật khẩu<input class="in" id="li-p" type="password" autocomplete="current-password" required></label>
       <div class="err" id="li-err"></div>
-      <button class="btn" type="submit" id="li-btn">Đăng nhập</button>
-      <button class="btn ghost sm" type="button" id="go-forgot">Quên mật khẩu?</button>
+      <button class="btn" type="submit" id="li-btn" data-i18n="login">Đăng nhập</button>
+      <button class="btn ghost sm" type="button" id="go-forgot" data-i18n="forgot_q">Quên mật khẩu?</button>
     </form>
     <form id="f-reg" style="display:grid;gap:12px" hidden>
-      <label>Tên đăng nhập<input class="in" id="rg-u" autocomplete="username" required minlength="3" maxlength="24" pattern="[A-Za-z0-9_]+" title="3–24 ký tự: chữ, số và dấu _"></label>
+      <label><span data-i18n="username">Tên đăng nhập</span><input class="in" id="rg-u" autocomplete="username" required minlength="3" maxlength="24" pattern="[A-Za-z0-9_]+" title="3–24 ký tự: chữ, số và dấu _"></label>
       <label>Email<input class="in" id="rg-e" type="email" autocomplete="email" required></label>
       <label>Mật khẩu (ít nhất 8 ký tự)<input class="in" id="rg-p" type="password" autocomplete="new-password" required minlength="8"></label>
       <label>Nhập lại mật khẩu<input class="in" id="rg-p2" type="password" autocomplete="new-password" required minlength="8"></label>
       <div class="err" id="rg-err"></div>
-      <button class="btn" type="submit" id="rg-btn">Tạo tài khoản</button>
+      <button class="btn" type="submit" id="rg-btn" data-i18n="create_acc">Tạo tài khoản</button>
     </form>
     <form id="f-forgot" style="display:grid;gap:12px" hidden>
       <h3>Khôi phục mật khẩu</h3>
@@ -505,19 +506,19 @@ window.BR_CONFIG = {
       <div class="err" id="np-err"></div>
       <button class="btn" type="submit">Lưu mật khẩu</button>
     </form>
-    <button class="btn ghost sm" id="auth-close">Đóng</button>
+    <button class="btn ghost sm" id="auth-close" data-i18n="close">Đóng</button>
   </div>
 </div>
 
 <!-- NẠP TIỀN -->
 <div class="modal" id="topup" hidden>
   <div class="dlg wide" role="dialog" aria-modal="true" aria-labelledby="tp-title">
-    <h3 id="tp-title">Nạp tiền qua chuyển khoản</h3>
+    <h3 id="tp-title" data-i18n="topup_title">Nạp tiền qua chuyển khoản</h3>
     <div id="tp-step1" style="display:grid;gap:12px">
       <div class="amts" id="tp-amts"></div>
-      <label>Hoặc nhập số tiền<input class="in" id="tp-amt" type="number" step="1000" value="50000"></label>
+      <label><span data-i18n="or_amount">Hoặc nhập số tiền</span><input class="in" id="tp-amt" type="number" step="1000" value="50000"></label>
       <div class="err" id="tp-err"></div>
-      <button class="btn" id="tp-make">Tạo mã QR</button>
+      <button class="btn" id="tp-make" data-i18n="make_qr">Tạo mã QR</button>
     </div>
     <div id="tp-step2" hidden style="display:grid;gap:14px">
       <div class="qrwrap">
@@ -533,9 +534,9 @@ window.BR_CONFIG = {
       </div>
       <div class="wait" id="tp-wait"><span class="sp"></span><span id="tp-wait-t">Đang chờ ngân hàng báo có…</span></div>
       <div class="note">Chuyển <b>đúng số tiền</b> và <b>đúng nội dung</b> để được cộng tự động trong 1–2 phút. Sai nội dung thì liên hệ hỗ trợ kèm ảnh chụp giao dịch.</div>
-      <div class="acts"><button class="btn ghost" id="tp-back">Đổi số tiền</button></div>
+      <div class="acts"><button class="btn ghost" id="tp-back" data-i18n="change_amount">Đổi số tiền</button></div>
     </div>
-    <button class="btn ghost sm" id="tp-close">Đóng</button>
+    <button class="btn ghost sm" id="tp-close" data-i18n="close">Đóng</button>
   </div>
 </div>
 
@@ -549,16 +550,16 @@ window.BR_CONFIG = {
     <div class="acts"><button class="btn gold" id="th-copy" type="button">📋 Copy</button><button class="btn okb" id="th-dl" type="button" hidden>⬇ Tải file .txt</button></div>
     <div class="note" id="th-note" style="text-align:center"></div>
     <div class="contacts" id="th-contacts"></div>
-    <div class="acts"><button class="btn ghost" id="th-orders">Xem đơn hàng</button><button class="btn" id="th-close">Đóng</button></div>
+    <div class="acts"><button class="btn ghost" id="th-orders" data-i18n="view_orders">Xem đơn hàng</button><button class="btn" id="th-close" data-i18n="close">Đóng</button></div>
   </div>
 </div>
 
 <!-- ĐƠN HÀNG -->
 <div class="modal" id="orders" hidden>
   <div class="dlg wide" role="dialog" aria-modal="true" aria-labelledby="or-title">
-    <h3 id="or-title">Đơn hàng & giao dịch của bạn</h3>
+    <h3 id="or-title" data-i18n="orders_title">Đơn hàng & giao dịch của bạn</h3>
     <div class="olist" id="or-list"></div>
-    <button class="btn ghost sm" id="or-close">Đóng</button>
+    <button class="btn ghost sm" id="or-close" data-i18n="close">Đóng</button>
   </div>
 </div>
 
@@ -725,6 +726,34 @@ const vnd = v => Math.round(+v || 0).toLocaleString("vi-VN") + "đ";
 const catName = id => (CATS.find(c => c.id === id) || { name: id }).name;
 const ago = t => { const s = (Date.now() - new Date(t).getTime()) / 1000; if (s < 60) return "vừa xong"; if (s < 3600) return Math.floor(s / 60) + " phút trước"; if (s < 86400) return Math.floor(s / 3600) + " giờ trước"; return new Date(t).toLocaleString("vi-VN"); };
 const show = (id, on = true) => { $(id).hidden = !on; };
+/* ---------- song ngữ VI/EN ---------- */
+let LANG = "vi"; try { LANG = localStorage.getItem("br_lang") === "en" ? "en" : "vi"; } catch (e) {}
+const EN = {
+  nav_home:"Home", nav_shop:"Products", nav_topup:"Top up", nav_orders:"Orders", nav_policy:"Policy",
+  login:"Log in", signup:"Sign up", balance:"Balance", btn_topup:"+ Top up", logout:"Log out", admin:"Admin",
+  stat_sold:"Clones sold", stat_vps:"VPS running", stat_sup:"Support",
+  categories:"Categories", all_products:"All products", search_ph:"Search products…",
+  sort_hot:"Best sellers", sort_asc:"Price: low → high", sort_desc:"Price: high → low", loading:"Loading products…",
+  pay_bank:"Bank transfer", pay_bank_s:"Scan QR, auto credit", pay_card:"Phone card", soon:"Coming soon",
+  policy:"Policy", f_links:"Links", f_contact:"Contact", disclaimer:"Not affiliated with Roblox Corporation.",
+  buy_title:"Buy product", rent_period:"Choose rental period", quantity:"Quantity", total:"Total", cur_bal:"Current balance", cancel:"Cancel",
+  username:"Username", forgot_q:"Forgot password?", create_acc:"Create account", close:"Close",
+  topup_title:"Top up by bank transfer", or_amount:"Or enter amount", make_qr:"Create QR code", change_amount:"Change amount",
+  view_orders:"View orders", orders_title:"Your orders & transactions",
+  buy_now:"Buy now", sold_out:"Sold out", left:"Left", from:"from", plan:"Plan", days:"days",
+  login_to_buy:"Log in to buy", topup:"Top up", pay:"Pay", not_logged:"Not logged in",
+  cat_all:"All", thanks_ok:"Success!", order_ok:"Order placed!"
+};
+const t = (vi, key) => (LANG === "en" && EN[key]) ? EN[key] : vi;
+function applyStatic() {
+  document.querySelectorAll("[data-i18n]").forEach(el => { if (!el._vi) el._vi = el.textContent; el.textContent = LANG === "en" ? (EN[el.dataset.i18n] || el._vi) : el._vi; });
+  document.querySelectorAll("[data-ph]").forEach(el => { if (!el._viph) el._viph = el.getAttribute("placeholder") || ""; el.setAttribute("placeholder", LANG === "en" ? (EN[el.dataset.ph] || el._viph) : el._viph); });
+  document.documentElement.lang = LANG;
+}
+function setLang(l) { LANG = l === "en" ? "en" : "vi"; try { localStorage.setItem("br_lang", LANG); } catch (e) {}
+  $("lang-vi").classList.toggle("on", LANG === "vi"); $("lang-en").classList.toggle("on", LANG === "en");
+  applyStatic(); renderCats(); renderGrid(); renderUser(); if (sel) upd(); }
+$("lang-vi").onclick = () => setLang("vi"); $("lang-en").onclick = () => setLang("en");
 const plansOf = p => (Array.isArray(p.plans) ? p.plans : []).filter(x => +x.days > 0 && +x.price >= 0).sort((a, b) => a.days - b.days);
 const minPrice = p => { const pl = plansOf(p); return pl.length ? Math.min(...pl.map(x => +x.price)) : +p.price; };
 const isAdmin = () => !!(profile && profile.role === "admin" && !profile.locked);
@@ -771,15 +800,15 @@ function renderGrid() {
   const q = $("q").value.trim().toLowerCase(), so = $("sort").value;
   let l = P.filter(p => (cat === "all" || p.cat === cat) && String(p.name).toLowerCase().includes(q));
   if (so === "asc") l.sort((a, b) => minPrice(a) - minPrice(b)); else if (so === "desc") l.sort((a, b) => minPrice(b) - minPrice(a)); else l.sort((a, b) => (b.hot ? 1 : 0) - (a.hot ? 1 : 0) || a.sort - b.sort);
-  $("cat-title").textContent = cat === "all" ? "Tất cả sản phẩm" : catName(cat);
+  $("cat-title").textContent = cat === "all" ? t("Tất cả sản phẩm","all_products") : catName(cat);
   if (!l.length) { $("grid").innerHTML = `<div class="empty">${P.length ? "Không có sản phẩm khớp “" + esc(q) + "”." : "Chưa có sản phẩm nào."}</div>`; return; }
   $("grid").innerHTML = l.map(p => {
-    const s = +p.stock || 0, st = s === 0 ? ["out", "Hết hàng"] : s < 15 ? ["low", "Còn " + s] : ["ok", "Còn " + s];
+    const s = +p.stock || 0, st = s === 0 ? ["out", t("Hết hàng","sold_out")] : s < 15 ? ["low", t("Còn","left") + " " + s] : ["ok", t("Còn","left") + " " + s];
     return `<article class="card"><div class="thumb">${p.image ? `<img class="thumb-img" src="${esc(p.image)}" alt="" loading="lazy">` : `<canvas data-id="${esc(p.id)}" data-c="${esc(p.thumb || p.cat)}"></canvas>`}<span class="tag">${esc(catName(p.cat).toUpperCase())}</span>${p.hot ? '<span class="hot">HOT</span>' : ""}</div>
     <div class="body"><h4>${esc(p.name)}</h4><div class="feats">${(p.features || []).map(f => `<span>${esc(f)}</span>`).join("")}</div>
-    ${plansOf(p).length ? `<div class="days-chip">Gói: ${plansOf(p).map(x => x.days).join(" · ")} ngày</div>` : ""}
-    <div class="row"><span class="price">${plansOf(p).length ? '<small style="font-size:12px;color:var(--muted);font-family:var(--body)">từ </small>' : ""}${fmt(minPrice(p))}</span><span class="stock ${st[0]}">${st[1]}</span></div>
-    <button class="btn" data-buy="${esc(p.id)}" ${s === 0 ? "disabled" : ""}>${s === 0 ? "Hết hàng" : "Mua ngay"}</button></div></article>`;
+    ${plansOf(p).length ? `<div class="days-chip">${t("Gói","plan")}: ${plansOf(p).map(x => x.days).join(" · ")} ${t("ngày","days")}</div>` : ""}
+    <div class="row"><span class="price">${plansOf(p).length ? `<small style="font-size:12px;color:var(--muted);font-family:var(--body)">${t("từ","from")} </small>` : ""}${fmt(minPrice(p))}</span><span class="stock ${st[0]}">${st[1]}</span></div>
+    <button class="btn" data-buy="${esc(p.id)}" ${s === 0 ? "disabled" : ""}>${s === 0 ? t("Hết hàng","sold_out") : t("Mua ngay","buy_now")}</button></div></article>`;
   }).join("");
   document.querySelectorAll("canvas[data-id]").forEach(cv => drawThumb(cv, seedOf(cv.dataset.id), HUES[cv.dataset.c] ?? 210));
 }
@@ -804,9 +833,9 @@ $("m-plans").onclick = e => { const b = e.target.closest("button"); if (!b) retu
 function upd() {
   const p = selP(); if (!p) return; const tot = unitPrice(p) * Math.max(1, +$("m-qty").value || 1);
   $("m-total").textContent = fmt(tot);
-  const u = profile; $("m-bal").textContent = u ? fmt(u.balance) : "Chưa đăng nhập";
+  const u = profile; $("m-bal").textContent = u ? fmt(u.balance) : t("Chưa đăng nhập","not_logged");
   $("m-err").textContent = u && u.balance < tot ? "Số dư không đủ. Cần nạp thêm " + fmt(tot - u.balance) + "." : "";
-  $("m-ok").textContent = !u ? "Đăng nhập để mua" : u.balance < tot ? "Nạp tiền" : "Thanh toán";
+  $("m-ok").textContent = !u ? t("Đăng nhập để mua","login_to_buy") : u.balance < tot ? t("Nạp tiền","topup") : t("Thanh toán","pay");
 }
 function openBuy(id) { sel = id; const p = selP(); const pl = plansOf(p); selDays = pl.length ? +(pl.find(x => +x.days === 30) || pl[0]).days : null;
   $("m-name").textContent = p.name; $("m-qty").value = 1; $("m-qty").max = p.stock; renderPlans(); upd(); show("modal"); }
@@ -1224,7 +1253,7 @@ document.querySelectorAll(".modal").forEach(m => m.addEventListener("click", e =
 document.addEventListener("keydown", e => { if (e.key === "Escape") { show("drawer", false); document.querySelectorAll(".modal").forEach(m => m.hidden = true); sel = null; clearInterval(pollT); } });
 
 /* ---------- khởi động ---------- */
-renderSite(); renderCats();
+try { $("lang-vi").classList.toggle("on", LANG === "vi"); $("lang-en").classList.toggle("on", LANG === "en"); } catch(e){} applyStatic(); renderSite(); renderCats();
 sb.auth.onAuthStateChange((ev, s) => {
   session = s;
   setTimeout(async () => { await loadProfile(); renderUser(); if (ev === "PASSWORD_RECOVERY") openAuth("newpw"); if (profile) { minePending = null; watchMine(); pollPending(); } }, 0);

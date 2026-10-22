@@ -24,8 +24,8 @@ module.exports = async (req, res) => {
     const st = (await sb(`/rest/v1/settings?select=data&id=eq.1`))[0];
     const rate = Number(st && st.data && st.data.rate) || 25000;
     const usd = Math.max(1, Math.round((tp.amount / rate) * 100) / 100);
-    // Cộng % phí sàn vào số khách phải gửi (shop nhận đủ). Mặc định 3%, chỉnh qua CRYPTO_FEE_PCT.
-    const FEE_PCT = Number(process.env.CRYPTO_FEE_PCT) || 3;
+    // Cộng % phí sàn vào số khách phải gửi (shop nhận đủ). Mặc định 5%, chỉnh qua CRYPTO_FEE_PCT.
+    const FEE_PCT = Number(process.env.CRYPTO_FEE_PCT) || 5;
     const payUsd = Math.round(usd * (1 + FEE_PCT / 100) * 100) / 100;
 
     // Hỏi NOWPayments mức tối thiểu THẬT của coin này (quy ra USD) để báo rõ cho khách

@@ -25,6 +25,17 @@ module.exports = async (req, res) => {
     const rate = Number(st && st.data && st.data.rate) || 25000;
     const usd = Math.max(1, Math.round((tp.amount / rate) * 100) / 100);
 
+    // Hỏi NOWPayments mức tối thiểu THẬT của coin này (quy ra USD) để báo rõ cho khách
+    try {
+      const mr = await fetch(`https://api.nowpayments.io/v1/min-amount?currency_from=${payCur}&currency_to=${payCur}&fiat_equivalent=usd`, { headers: { "x-api-key": key } });
+      const mj = await mr.json();
+      const minUsd = Number(mj && mj.fiat_equivalent);
+      if (minUsd && usd < minUsd) {
+        const need = Math.ceil(minUsd * 1.05);
+        return res.status(400).json({ error: `Số tiền quá nhỏ cho ${payCur.toUpperCase().replace("TRC20", " TRC20")}. Tối thiểu khoảng $${need}. Hãy nạp nhiều hơn, hoặc dùng tab Ngân hàng cho số nhỏ/lẻ.` });
+      }
+    } catch (e) { /* bỏ qua nếu không lấy được, để NOWPayments tự kiểm tra */ }
+
     const r = await fetch("https://api.nowpayments.io/v1/payment", {
       method: "POST",
       headers: { "x-api-key": key, "Content-Type": "application/json" },
@@ -39,14 +50,14 @@ module.exports = async (req, res) => {
     });
     const p = await r.json();
     if (!r.ok || !p.pay_address) {
-      return res.status(400).json({ error: p.message || "NOWPayments từ chối (có thể số tiền quá nhỏ cho USDT). Hãy nạp số tiền lớn hơn." });
+      return res.status(400).json({ error: p.message || "NOWPayments từ chối. Có thể số tiền quá nhỏ — hãy nạp nhiều hơn hoặc dùng tab Ngân hàng." });
     }
     return res.status(200).json({
       payment_id: p.payment_id,
       pay_address: p.pay_address,
       pay_amount: p.pay_amount,
       pay_currency: p.pay_currency,
-      network: "TRC20",
+      network: payCur === "ltc" ? "Litecoin" : "TRC20",
       usd,
     });
   } catch (e) {

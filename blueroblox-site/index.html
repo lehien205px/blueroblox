@@ -323,8 +323,6 @@ code{font-family:var(--mono);font-size:.92em;color:var(--sky)}
 .modal:not([hidden]) .dlg{animation:pop .32s cubic-bezier(.2,.8,.2,1) both}
 .drawer:not([hidden]) .dpanel{animation:slidein .35s cubic-bezier(.2,.8,.2,1) both}
 .toast:not([hidden]){animation:fade .3s both}
-html.fx-off *{transition:none!important;animation:none!important}
-@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 
 /* ===== điện thoại / máy tính bảng ===== */
 @media (max-width:1060px){
@@ -413,6 +411,38 @@ html{overflow-x:hidden}
 }
 @media (max-width:620px){ .who .av{display:none} .who{padding:2px} .bal{padding:6px 9px} #user-acts{gap:6px!important} }
 
+/* ===== trống đồng LỚN như bản cũ ===== */
+/* nền toàn trang: trống lớn + trống nhỏ xoay từng vành (hiện khi cuộn qua phần đầu trang) */
+#fx-bg{position:fixed;inset:0;width:100%;height:100%;z-index:-1;pointer-events:none}
+.fx-drums{position:fixed;inset:0;z-index:-1;pointer-events:none;overflow:hidden;opacity:0;transition:opacity 1.2s}
+body.past-hero .fx-drums{opacity:1}
+.fx-drum{position:absolute;transform:translate(-50%,-50%);opacity:.16;animation:fxbreathe 5.7s ease-in-out infinite}
+.fx-drum.fx-small{opacity:.08;animation:none}
+.fx-ring{position:absolute;inset:0;width:100%;height:100%;animation:fxspin 120s linear infinite;will-change:transform}
+.fx-glow{position:absolute;inset:-10%;border-radius:50%;background:radial-gradient(circle,rgba(255,190,80,.6),rgba(255,190,80,0) 70%)}
+.fx-sweep{position:absolute;inset:1%;border-radius:50%;background:conic-gradient(from 0deg,rgba(255,214,120,0) 0deg,rgba(255,214,120,.9) 18deg,rgba(255,214,120,0) 40deg,rgba(255,214,120,0) 360deg);
+  animation:fxspin 9s linear infinite;mix-blend-mode:screen;opacity:.55;will-change:transform}
+.fx-core{position:absolute;left:39%;top:39%;width:22%;height:22%;border-radius:50%;background:radial-gradient(circle,rgba(255,236,180,1),rgba(255,236,180,0) 70%);animation:fxcore 5.7s ease-in-out infinite}
+@keyframes fxspin{to{transform:rotate(360deg)}}
+@keyframes fxbreathe{0%,100%{opacity:.13}50%{opacity:.2}}
+@keyframes fxcore{0%,100%{opacity:.6}50%{opacity:1}}
+
+/* đầu trang: trống 3D phóng to tràn sang phải, nằm sau chữ */
+@media (min-width:901px){
+  .hero{grid-template-columns:minmax(0,600px) 1fr;min-height:clamp(640px,90vh,900px);overflow:visible}
+  .hero>div:first-child{position:relative;z-index:2}
+  .stage{position:absolute;z-index:1;right:-19vw;top:50%;width:min(1080px,74vw);max-width:none;margin-top:calc(min(1080px,74vw) / -2);pointer-events:none}
+}
+/* chuyển động như bản cũ: ánh quét vàng quay, lõi sáng nhấp nháy, trống "thở", nghiêng lắc rõ hơn */
+.drum3d{animation:wob 9s ease-in-out infinite}
+@keyframes wob{0%,100%{transform:rotateX(28deg) rotateY(-7deg) rotateZ(-4deg) scale(1)}50%{transform:rotateX(34deg) rotateY(7deg) rotateZ(4deg) scale(1.03)}}
+.d-sweep{position:absolute;inset:1%;border-radius:50%;transform:translateZ(3px);mix-blend-mode:screen;pointer-events:none;opacity:.6;
+  background:conic-gradient(from 0deg,rgba(255,214,120,0) 0deg,rgba(255,214,120,.85) 18deg,rgba(255,214,120,0) 40deg,rgba(255,214,120,0) 360deg);animation:sweep3d 9s linear infinite}
+@keyframes sweep3d{to{transform:translateZ(3px) rotate(360deg)}}
+.d-core{position:absolute;left:36%;top:36%;width:28%;height:28%;border-radius:50%;transform:translateZ(4px);pointer-events:none;
+  background:radial-gradient(circle,rgba(255,240,190,.95),rgba(255,236,180,0) 70%);mix-blend-mode:screen;animation:fxcore 5.7s ease-in-out infinite}
+.halo{animation:pulse 5.7s ease-in-out infinite}
+
 </style>
 <script>
 // Đã điền sẵn cho blueroblox.shop
@@ -467,13 +497,13 @@ window.BR_CONFIG = {
     <div class="halo"></div>
     <div class="drum3d" id="drum3d">
       <div class="face"></div>
-      <canvas class="layer spin-cw"  style="--t:120s" data-part="outer"></canvas>
-      <canvas class="layer spin-ccw" style="--t:80s"  data-part="zig"></canvas>
-      <canvas class="layer spin-ccw" style="--t:46s"  data-part="birds"></canvas>
-      <canvas class="layer spin-cw"  style="--t:100s" data-part="lattice"></canvas>
-      <canvas class="layer spin-ccw" style="--t:34s"  data-part="feather"></canvas>
-      <canvas class="layer spin-cw"  style="--t:60s"  data-part="core"></canvas>
-      <div class="sheen"></div>
+      <canvas class="layer spin-cw"  style="--t:90s" data-part="outer"></canvas>
+      <canvas class="layer spin-ccw" style="--t:55s"  data-part="zig"></canvas>
+      <canvas class="layer spin-ccw" style="--t:30s"  data-part="birds"></canvas>
+      <canvas class="layer spin-cw"  style="--t:70s" data-part="lattice"></canvas>
+      <canvas class="layer spin-ccw" style="--t:22s"  data-part="feather"></canvas>
+      <canvas class="layer spin-cw"  style="--t:40s"  data-part="core"></canvas>
+      <div class="sheen"></div><div class="d-sweep"></div><div class="d-core"></div>
     </div>
     <canvas class="fx" id="stage-fx" width="700" height="700"></canvas>
   </div>
@@ -986,9 +1016,8 @@ if (typeof module !== "undefined") module.exports = { drawDongSon };
 (function () {
   "use strict";
   const TAU = Math.PI * 2;
-  const fxOn = (function () { let v = null; try { v = localStorage.getItem("br_fx"); } catch (e) {}
-    if (location.hash === "#fxon") return true; if (location.hash === "#fxoff") return false; return v !== "off"; })();
-  const reduce = !fxOn || (window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches);
+  try { localStorage.removeItem("br_fx"); } catch (e) {}
+  const reduce = false; // luôn chuyển động
   const mobile = Math.min(innerWidth, innerHeight) < 720;
   const goldOf = (g, R) => { const gr = g.createRadialGradient(0, 0, R * .05, 0, 0, R);
     gr.addColorStop(0, "#fff4d2"); gr.addColorStop(.35, "#f6d585"); gr.addColorStop(.7, "#e0aa4c"); gr.addColorStop(1, "#b37a26"); return gr; };
@@ -1015,6 +1044,10 @@ if (typeof module !== "undefined") module.exports = { drawDongSon };
     };
     paint(); let rt; addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(paint, 250); });
   }
+
+  /* trống lớn ở nền chỉ hiện khi đã cuộn qua phần đầu trang (tránh 2 trống chồng nhau) */
+  (function () { const h = document.querySelector(".hero"); if (!h || !("IntersectionObserver" in window)) { document.body.classList.add("past-hero"); return; }
+    new IntersectionObserver(e => document.body.classList.toggle("past-hero", !e[0].isIntersecting), { threshold: 0, rootMargin: "-35% 0px 0px 0px" }).observe(h); })();
 
   /* ---- sao lấp lánh + sao băng quanh trống (chỉ chạy khi nhìn thấy) ---- */
   const fx = document.getElementById("stage-fx");
@@ -1137,6 +1170,122 @@ if (typeof module !== "undefined") module.exports = { drawDongSon };
     }
   }
   requestAnimationFrame(step);
+})();
+
+/* ===== Nền toàn trang như bản cũ: trống đồng lớn xoay từng vành + ánh quét + lõi sáng, trống nhỏ góc dưới,
+   sao lấp lánh, sao rơi, sao băng, kim tuyến theo chuột — vẽ bằng mặt trống Đông Sơn mới ===== */
+(function () {
+  const reduce = false;
+  const cv = document.createElement("canvas"); cv.id = "fx-bg"; cv.setAttribute("aria-hidden", "true"); document.body.prepend(cv);
+  const x = cv.getContext("2d"), TAU = Math.PI * 2;
+  let dpr = .65, lowQ = false;
+  let W = 0, H = 0, mobile = false;
+  const LAYERS = [[["core"], .00005], [["feather"], .00016], [["lattice"], -.00007], [["birds"], .00011], [["zig", "outer"], -.00004]];
+  function buildDrum(R, parts) {
+    const c = document.createElement("canvas"); c.width = c.height = Math.ceil(R * 2) + 4;
+    const g = c.getContext("2d"); g.translate(c.width / 2, c.height / 2);
+    const gold = g.createRadialGradient(0, 0, R * .05, 0, 0, R);
+    gold.addColorStop(0, "#fff4d2"); gold.addColorStop(.35, "#f6d585"); gold.addColorStop(.7, "#e0aa4c"); gold.addColorStop(1, "#b37a26");
+    if (window.drawDongSon) drawDongSon(g, R, parts ? { color: gold, cut: true, parts } : { color: gold, cut: true });
+    return c;
+  }
+
+  /* --- sao --- */
+  let stars = [], falls = [], shoots = [], sparks = [], nextShoot = 0;
+  function seed() {
+    const ns = lowQ ? 40 : mobile ? 45 : 90, nf = lowQ ? 10 : mobile ? 12 : 22;
+    stars = Array.from({ length: ns }, () => ({ x: Math.random() * W, y: Math.random() * H, r: (.4 + Math.random() * 1.3) * dpr, b: .25 + Math.random() * .6, sp: .0008 + Math.random() * .002, ph: Math.random() * TAU, gold: Math.random() < .25 }));
+    falls = Array.from({ length: nf }, () => newFall(true));
+  }
+  function newFall(any) { return { x: Math.random() * W, y: any ? Math.random() * H : -20 * dpr, s: (2 + Math.random() * 4) * dpr, vy: (.015 + Math.random() * .045) * dpr, sw: Math.random() * TAU, swa: (6 + Math.random() * 18) * dpr, rot: Math.random() * TAU, vr: (Math.random() - .5) * .002, gold: Math.random() < .55, a: .35 + Math.random() * .5 }; }
+  function spawnShoot(t) {
+    const ang = (200 + Math.random() * 25) * Math.PI / 180, sp = (.9 + Math.random() * .8) * dpr;
+    shoots.push({ x: W * (.35 + Math.random() * .8), y: -H * .05 + Math.random() * H * .35, vx: Math.cos(ang) * sp, vy: -Math.sin(ang) * sp, len: (140 + Math.random() * 180) * dpr, life: 0, max: 1400 + Math.random() * 900 });
+    nextShoot = t + (mobile ? 3500 : 2200) + Math.random() * 4000;
+  }
+  function sparkle(px, py, s, rot, col, a) {
+    x.save(); x.translate(px, py); x.rotate(rot); x.globalAlpha = a; x.fillStyle = col;
+    x.beginPath(); for (let i = 0; i < 8; i++) { const r = i % 2 ? s * .28 : s, an = i * Math.PI / 4; x.lineTo(Math.cos(an) * r, Math.sin(an) * r); } x.closePath(); x.fill();
+    x.restore();
+  }
+
+  const host = document.createElement("div"); host.className = "fx-drums"; host.setAttribute("aria-hidden", "true");
+  document.body.prepend(host);
+  function size() {
+    mobile = innerWidth < 760; dpr = lowQ ? .42 : mobile ? .5 : .62;
+    W = cv.width = Math.max(1, Math.round(innerWidth * dpr)); H = cv.height = Math.max(1, Math.round(innerHeight * dpr));
+    // trống đồng: vẽ 1 lần, để card đồ hoạ tự xoay bằng CSS
+    const Rc = Math.round((mobile ? Math.max(innerWidth, innerHeight) * .55 : Math.max(innerWidth, innerHeight) * .42));
+    const res = Math.min(1, (window.devicePixelRatio || 1)) * (mobile ? .75 : .8), Rp = Math.round(Rc * res);
+    const cx = mobile ? innerWidth * .5 : innerWidth * .74, cy = mobile ? innerHeight * .26 : innerHeight * .42;
+    host.innerHTML = "";
+    const main = document.createElement("div"); main.className = "fx-drum";
+    main.style.cssText = `left:${cx}px;top:${cy}px;width:${Rc * 2}px;height:${Rc * 2}px`;
+    main.innerHTML = '<div class="fx-glow"></div>';
+    for (const [parts, sp] of LAYERS) {
+      const c = buildDrum(Rp, parts); c.className = "fx-ring";
+      c.style.animationDuration = (TAU / Math.abs(sp) / 1000).toFixed(1) + "s"; if (sp < 0) c.style.animationDirection = "reverse";
+      main.appendChild(c);
+    }
+    main.insertAdjacentHTML("beforeend", '<div class="fx-sweep"></div><div class="fx-core"></div>');
+    const small = document.createElement("div"); small.className = "fx-drum fx-small";
+    const sR = Rc * .55; small.style.cssText = `left:${mobile ? innerWidth * .1 : innerWidth * .08}px;top:${innerHeight * .92}px;width:${sR * 2}px;height:${sR * 2}px`;
+    const sc = buildDrum(Math.round(sR * res)); sc.className = "fx-ring"; sc.style.animationDuration = "105s"; sc.style.animationDirection = "reverse"; small.appendChild(sc);
+    host.append(main, small);
+    seed(); if (reduce) draw(0, 0);
+  }
+
+  let last = 0;
+  function draw(t, dt) {
+    x.clearRect(0, 0, W, H);
+    // sao lấp lánh
+    for (const s of stars) { const a = s.b * (.45 + .55 * Math.sin(t * s.sp + s.ph)); x.globalAlpha = a; x.fillStyle = s.gold ? "#ffe29a" : "#dfe9ff"; x.beginPath(); x.arc(s.x, s.y, s.r, 0, TAU); x.fill(); }
+    x.globalAlpha = 1;
+    // sao rơi
+    for (const f of falls) {
+      f.y += f.vy * dt; f.sw += dt * .0012; f.rot += f.vr * dt; if (f.y > H + 20 * dpr) Object.assign(f, newFall(false));
+      sparkle(f.x + Math.sin(f.sw) * f.swa, f.y, f.s, f.rot, f.gold ? "#ffd56b" : "#ffffff", f.a * (.6 + .4 * Math.sin(t * .004 + f.sw)));
+    }
+    // sao băng
+    if (!reduce && t > nextShoot) spawnShoot(t);
+    for (let i = shoots.length - 1; i >= 0; i--) {
+      const s = shoots[i]; s.life += dt; s.x += s.vx * dt; s.y += s.vy * dt;
+      const k = s.life / s.max, fade = k < .15 ? k / .15 : 1 - Math.max(0, (k - .6) / .4);
+      const mag = Math.hypot(s.vx, s.vy), tx = s.x - s.vx / mag * s.len, ty = s.y - s.vy / mag * s.len;
+      const gr = x.createLinearGradient(s.x, s.y, tx, ty); gr.addColorStop(0, `rgba(255,248,220,${.95 * fade})`); gr.addColorStop(.25, `rgba(255,205,110,${.55 * fade})`); gr.addColorStop(1, "rgba(63,224,255,0)");
+      x.strokeStyle = gr; x.lineWidth = 2 * dpr; x.lineCap = "round"; x.beginPath(); x.moveTo(s.x, s.y); x.lineTo(tx, ty); x.stroke();
+      const hg = x.createRadialGradient(s.x, s.y, 0, s.x, s.y, 10 * dpr); hg.addColorStop(0, `rgba(255,255,255,${fade})`); hg.addColorStop(1, "rgba(255,220,140,0)");
+      x.fillStyle = hg; x.beginPath(); x.arc(s.x, s.y, 10 * dpr, 0, TAU); x.fill();
+      if (k >= 1 || s.x < -s.len || s.y > H + s.len) shoots.splice(i, 1);
+    }
+    // kim tuyến theo chuột
+    for (let i = sparks.length - 1; i >= 0; i--) { const p = sparks[i]; p.life += dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vy += .00008 * dt * dpr;
+      const k = p.life / p.max; if (k >= 1) { sparks.splice(i, 1); continue; } sparkle(p.x, p.y, p.s * (1 - k * .5), p.rot + k * 2, p.col, 1 - k); }
+  }
+  let slow = 0, cnt = 0;
+  function frame(t) {
+    if (document.hidden) { last = 0; setTimeout(() => requestAnimationFrame(frame), 500); return; }
+    const gap = t - (last || t);
+    if (last && gap < 33) { requestAnimationFrame(frame); return; }
+    const dt = Math.min(60, gap); last = t;
+    const t0 = performance.now(); draw(t, dt); const cost = performance.now() - t0;
+    // tự hạ chất lượng nếu máy yếu
+    if (!lowQ) { cnt++; if (cost > 12 || dt > 50) slow++; if (cnt >= 90) { if (slow > 30) { lowQ = true; size(); } cnt = 0; slow = 0; } }
+    requestAnimationFrame(frame);
+  }
+
+  size(); addEventListener("resize", () => { clearTimeout(size._t); size._t = setTimeout(size, 150); });
+  if (reduce) return;
+  if (window.matchMedia && matchMedia("(pointer: fine)").matches) {
+    let lx = 0, ly = 0;
+    addEventListener("pointermove", e => {
+      const px = e.clientX * dpr, py = e.clientY * dpr; if (Math.hypot(px - lx, py - ly) < 14 * dpr) return; lx = px; ly = py;
+      if (sparks.length > 60) return;
+      sparks.push({ x: px, y: py, vx: (Math.random() - .5) * .05 * dpr, vy: (Math.random() - .7) * .05 * dpr, s: (3 + Math.random() * 4) * dpr, rot: Math.random() * TAU, life: 0, max: 600 + Math.random() * 500, col: Math.random() < .7 ? "#ffd56b" : "#bff4ff" });
+    }, { passive: true });
+  }
+  nextShoot = performance.now() + 1200;
+  requestAnimationFrame(frame);
 })();
 
 </script>
@@ -1874,19 +2023,7 @@ loadSettings(); loadProducts();
 setInterval(() => { if (!document.hidden) loadProducts(); }, 60000);
 
 /* ===== công tắc hiệu ứng ===== */
-window.BRfxOn = (function () { let v = null; try { v = localStorage.getItem("br_fx"); } catch (e) {}
-  if (location.hash === "#fxon") return true; if (location.hash === "#fxoff") return false;
-  if (v === "on") return true; if (v === "off") return false;
-  return true; })();
-document.documentElement.classList.toggle("fx-off", !window.BRfxOn);
-(function () {
-  const b = document.createElement("button"); b.type = "button"; b.id = "fx-toggle";
-  b.className = window.BRfxOn ? "" : "off"; b.textContent = window.BRfxOn ? "✨ Hiệu ứng: Bật" : "✨ Bật hiệu ứng";
-  b.title = "Bật hoặc tắt chuyển động trên trang";
-  b.onclick = () => { const next = window.BRfxOn ? "off" : "on"; try { localStorage.setItem("br_fx", next); } catch (e) {}
-    try { history.replaceState(null, "", "#fx" + next); } catch (e) { location.hash = "fx" + next; } location.reload(); };
-  document.body.appendChild(b);
-})();
+window.BRfxOn = true; // luôn bật chuyển động, không còn nút tắt
 
 /* ===== hiệu ứng ===== */
 (function () {

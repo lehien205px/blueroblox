@@ -544,9 +544,9 @@ window.BR_CONFIG = {
       <div class="qrwrap">
         <div class="qr" id="cr-qr"></div>
         <div class="kv">
-          <div><span>Loại coin</span><b id="cr-type"></b></div>
+          <div><span data-i18n="cr_coin">Loại coin</span><b id="cr-type"></b></div>
           <div><span id="cr-send-label">Số tiền cần gửi</span><b id="cr-amt" class="hl"></b><button data-copy="cr-amt-raw">Chép</button></div>
-          <div><span id="cr-net-label">Mạng lưới</span><b id="cr-net"></b></div>
+          <div><span data-i18n="cr_network" id="cr-net-label">Mạng lưới</span><b id="cr-net"></b></div>
           <div><span data-i18n="cr_addr">Địa chỉ ví</span><b id="cr-addr" style="font-size:11px"></b><button data-copy="cr-addr">Chép</button></div>
           <span id="cr-amt-raw" hidden></span>
         </div>
@@ -762,7 +762,7 @@ const catName = id => (CATS.find(c => c.id === id) || { name: id }).name;
 const ago = t => { const s = (Date.now() - new Date(t).getTime()) / 1000; if (s < 60) return "vừa xong"; if (s < 3600) return Math.floor(s / 60) + " phút trước"; if (s < 86400) return Math.floor(s / 3600) + " giờ trước"; return new Date(t).toLocaleString("vi-VN"); };
 const show = (id, on = true) => { $(id).hidden = !on; };
 /* ---------- song ngữ VI/EN ---------- */
-let LANG = "vi"; try { LANG = localStorage.getItem("br_lang") === "en" ? "en" : "vi"; } catch (e) {}
+let LANG = "en"; try { const _sv = localStorage.getItem("br_lang"); if (_sv) LANG = _sv === "vi" ? "vi" : "en"; } catch (e) {}
 const EN = {
   nav_home:"Home", nav_shop:"Products", nav_topup:"Top up", nav_orders:"Orders", nav_policy:"Policy",
   login:"Log in", signup:"Sign up", balance:"Balance", btn_topup:"+ Top up", logout:"Log out", admin:"Admin",
@@ -777,7 +777,7 @@ const EN = {
   view_orders:"View orders", orders_title:"Your orders & transactions",
   buy_now:"Buy now", sold_out:"Sold out", left:"Left", from:"from", plan:"Plan", days:"days",
   login_to_buy:"Log in to buy", topup:"Top up", pay:"Pay", not_logged:"Not logged in",
-  cat_all:"All", thanks_ok:"Success!", order_ok:"Order placed!", m_bank:"🏦 Bank", m_usdt:"₮ USDT", cr_type:"Type", cr_send:"USDT to send", cr_addr:"Wallet address", pay_crypto_s:"Auto TRC20", make_usdt:"Create USDT payment", min_amt:"Minimum is ", cr_wait:"Waiting for blockchain confirmation…", received:"Received ", credited:"Balance credited.", topup_ok:"Top-up success +", cr_note:"Send the <b>exact USDT amount</b> on the <b>TRC20 network</b> to the address above. Credited automatically after network confirmation (a few minutes). Wrong network may lose funds."
+  cat_all:"All", thanks_ok:"Success!", order_ok:"Order placed!", m_bank:"🏦 Bank", m_usdt:"₮ USDT", cr_type:"Type", cr_coin:"Coin type", cr_network:"Network", will_credit:"will be credited", cr_send:"USDT to send", cr_addr:"Wallet address", pay_crypto_s:"Auto TRC20", make_usdt:"Create USDT payment", min_amt:"Minimum is ", cr_wait:"Waiting for blockchain confirmation…", received:"Received ", credited:"Balance credited.", topup_ok:"Top-up success +", cr_note:"Send the <b>exact USDT amount</b> on the <b>TRC20 network</b> to the address above. Credited automatically after network confirmation (a few minutes). Wrong network may lose funds."
 };
 const t = (vi, key) => (LANG === "en" && EN[key]) ? EN[key] : vi;
 function applyStatic() {
@@ -787,7 +787,7 @@ function applyStatic() {
 }
 function setLang(l) { LANG = l === "en" ? "en" : "vi"; try { localStorage.setItem("br_lang", LANG); } catch (e) {}
   $("lang-vi").classList.toggle("on", LANG === "vi"); $("lang-en").classList.toggle("on", LANG === "en");
-  applyStatic(); renderCats(); renderGrid(); renderUser(); if (sel) upd(); }
+  applyStatic(); renderCats(); renderGrid(); renderUser(); if (sel) upd(); try { i18nCrypto(); } catch (e) {} }
 $("lang-vi").onclick = () => setLang("vi"); $("lang-en").onclick = () => setLang("en");
 const plansOf = p => (Array.isArray(p.plans) ? p.plans : []).filter(x => +x.days > 0 && +x.price >= 0).sort((a, b) => a.days - b.days);
 const minPrice = p => { const pl = plansOf(p); return pl.length ? Math.min(...pl.map(x => +x.price)) : +p.price; };
@@ -952,7 +952,7 @@ const USDT_MIN_USD = 10, LTC_MIN_USD = 1;
 const coinMin = () => cryptoCoin === "ltc" ? LTC_MIN_USD : USDT_MIN_USD;
 const coinName = () => cryptoCoin === "ltc" ? "LTC" : "USDT";
 function setTopMethod(m) { topMethod = m; $("tp-m-bank").classList.toggle("on", m === "bank"); $("tp-m-usdt").classList.toggle("on", m === "usdt");
-  show("tp-coin", m === "usdt"); show("tp-cnote", m === "usdt");
+  show("tp-coin", m === "usdt"); show("tp-cnote", m === "usdt"); i18nCrypto();
   renderAmts(m);
   show("tp-step1"); show("tp-step2", false); show("tp-crypto", false); $("tp-err").textContent = ""; clearInterval(pollT); }
 $("tp-m-bank").onclick = () => setTopMethod("bank");
@@ -966,13 +966,20 @@ function renderAmts(m) {
     $("tp-amts").innerHTML = list.map(v => `<button data-v="${v}">$${v}</button>`).join("");
     $("tp-amt").step = "0.01"; $("tp-amt").min = coinMin();
     $("tp-amt").value = topPre ? Math.max(coinMin(), Math.ceil(topPre / rate())) : (cryptoCoin === "ltc" ? 1 : 10);
-    $("tp-make").textContent = "Tạo thanh toán " + coinName();
+    $("tp-make").textContent = LANG === "en" ? ("Create " + coinName() + " payment") : ("Tạo thanh toán " + coinName());
   } else {
     $("tp-amts").innerHTML = [20000, 50000, 100000, 200000, 500000, 1000000, 2000000, 5000000].map(v => `<button data-v="${v}">${(v / 1000).toLocaleString("vi-VN")}k</button>`).join("");
     $("tp-amt").step = "1000"; $("tp-amt").min = +SITE.minTop || 10000; $("tp-amt").value = topPre || 50000;
     $("tp-make").textContent = t("Tạo mã QR", "make_qr");
   }
   markAmt(); convHint();
+}
+function i18nCrypto() {
+  const en = LANG === "en";
+  if ($("tp-cnote")) $("tp-cnote").innerHTML = en
+    ? "\ud83d\udca1 Minimum: <b>USDT ~$10</b> \u00b7 <b>LTC ~$1</b> \u2014 for smaller/odd amounts use the <b>Bank</b> tab (any amount)"
+    : "\ud83d\udca1 T\u1ed1i thi\u1ec3u: <b>USDT ~$10</b> \u00b7 <b>LTC ~$1</b> \u2014 s\u1ed1 nh\u1ecf/l\u1ebb h\u01a1n h\u00e3y d\u00f9ng tab <b>Ng\u00e2n h\u00e0ng</b> (n\u1ea1p bao nhi\u00eau c\u0169ng \u0111\u01b0\u1ee3c)";
+  if (topMethod === "usdt" && $("tp-make")) $("tp-make").textContent = en ? ("Create " + coinName() + " payment") : ("T\u1ea1o thanh to\u00e1n " + coinName());
 }
 function openTopup(pre) {
   if (!profile) { openAuth("login"); toast("Đăng nhập để nạp tiền.", 1); return; }
@@ -991,7 +998,7 @@ $("tp-amts").onclick = e => { const b = e.target.closest("button"); if (!b) retu
 $("tp-amt").oninput = () => { markAmt(); convHint(); };
 $("tp-make").onclick = () => busy($("tp-make"), async () => {
   const raw = +$("tp-amt").value || 0;
-  if (topMethod === "usdt" && raw < coinMin()) { $("tp-err").textContent = coinName() + " tối thiểu $" + coinMin() + (cryptoCoin === "ltc" ? "." : ". Nạp nhỏ/lẻ hơn: chọn LTC hoặc dùng tab Ngân hàng."); return; }
+  if (topMethod === "usdt" && raw < coinMin()) { $("tp-err").textContent = LANG === "en" ? (coinName() + " minimum is $" + coinMin() + (cryptoCoin === "ltc" ? "." : ". For smaller amounts choose LTC or use the Bank tab.")) : (coinName() + " tối thiểu $" + coinMin() + (cryptoCoin === "ltc" ? "." : ". Nạp nhỏ/lẻ hơn: chọn LTC hoặc dùng tab Ngân hàng.")); return; }
   const a = topMethod === "usdt" ? Math.round(raw * rate()) : Math.round(raw), mn = +SITE.minTop || 10000;
   if (a < mn) { $("tp-err").textContent = t("Số tiền tối thiểu là ", "min_amt") + vnd(mn) + "."; return; }
   if (topMethod === "bank" && !SITE.bankAcc) { $("tp-err").textContent = "Shop chưa cài tài khoản ngân hàng."; return; }
@@ -1003,17 +1010,20 @@ $("tp-make").onclick = () => busy($("tp-make"), async () => {
       const r = await fetch("/api/crypto-create", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ order_id: data.memo, coin: cryptoCoin }) });
       const j = await r.json();
       if (!r.ok || !j.pay_address) { $("tp-err").textContent = j.error || "Không tạo được thanh toán."; return; }
+      const en = LANG === "en";
       const CO = cryptoCoin === "ltc"
         ? { name: "LTC", full: "Litecoin", net: "Litecoin", color: "#345d9d" }
         : { name: "USDT", full: "Tether USDT", net: "TRC20 (Tron)", color: "#1a8f6b" };
-      $("cr-banner").textContent = "⚠️ CHỈ gửi " + CO.full + " (" + CO.name + ") trên mạng " + CO.net;
+      $("cr-banner").textContent = en ? ("⚠️ ONLY send " + CO.full + " (" + CO.name + ") on the " + CO.net + " network") : ("⚠️ CHỈ gửi " + CO.full + " (" + CO.name + ") trên mạng " + CO.net);
       $("cr-banner").style.background = CO.color;
       $("cr-type").textContent = CO.name + " · " + CO.net;
-      $("cr-send-label").textContent = "Số " + CO.name + " cần gửi";
+      $("cr-send-label").textContent = en ? (CO.name + " to send") : ("Số " + CO.name + " cần gửi");
       $("cr-net").textContent = CO.net;
       $("cr-amt").textContent = j.pay_amount + " " + CO.name; $("cr-amt-raw").textContent = String(j.pay_amount);
       $("cr-addr").textContent = j.pay_address;
-      $("cr-note").innerHTML = "Gửi <b>đúng số " + CO.name + "</b> trên <b>mạng " + CO.net + "</b> tới địa chỉ trên. Tiền tự cộng sau khi mạng xác nhận (vài phút). <b style=\"color:#ff8a8a\">Gửi sai coin hoặc sai mạng sẽ MẤT TIỀN!</b>";
+      $("cr-note").innerHTML = en
+        ? ("Send the <b>exact " + CO.name + " amount</b> on the <b>" + CO.net + " network</b> to the address above. Auto-credited after network confirmation (a few minutes). <b style=\"color:#ff8a8a\">Wrong coin or network will LOSE funds!</b>")
+        : ("Gửi <b>đúng số " + CO.name + "</b> trên <b>mạng " + CO.net + "</b> tới địa chỉ trên. Tiền tự cộng sau khi mạng xác nhận (vài phút). <b style=\"color:#ff8a8a\">Gửi sai coin hoặc sai mạng sẽ MẤT TIỀN!</b>");
       try { const qr = qrcode(0, "M"); qr.addData(j.pay_address); qr.make(); $("cr-qr").innerHTML = qr.createSvgTag(5, 0); } catch (e) { $("cr-qr").innerHTML = ""; }
       $("cr-wait").className = "wait"; $("cr-wait-t").textContent = t("Đang chờ xác nhận trên blockchain…", "cr_wait");
       show("tp-step1", false); show("tp-crypto"); startPoll("cr-wait", "cr-wait-t");

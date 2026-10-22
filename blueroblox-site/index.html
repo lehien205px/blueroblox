@@ -1823,13 +1823,16 @@ function openThanks(ord, p, q, tot, vpsInfo) {
   thMsg = `[BLUEROBLOX] Mình vừa mua hàng, cần nhận:\n• Sản phẩm: ${label} × ${q}\n• Đã thanh toán: ${fmt(tot)}\n• Khách: ${profile ? profile.username : ""}${ord && ord.id ? "\n• Mã đơn: " + ord.id : ""}`;
   thDl = null; show("th-dl", false);
   if (vpsInfo) {
-    const code = payCode(ord), now = new Date().toLocaleString("vi-VN", { hour12: false });
-    thMsg = `[BLUEROBLOX] ĐÃ THANH TOÁN THÀNH CÔNG — NHỜ SHOP CÀI VPS\n• Mã thanh toán: ${code || "(xem trong Đơn hàng)"}\n• Sản phẩm: ${label}\n• Số lượng VPS: ${q}\n• Đã thanh toán: ${fmt(tot)}\n• Tài khoản: ${profile ? profile.username : ""}\n` +
+    const code = payCode(ord), t0 = new Date(), pad = n => String(n).padStart(2, "0");
+    const dt = d => `${pad(d.getHours())}:${pad(d.getMinutes())} ngày ${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
+    const days = plansOf(p).length ? +selDays : 0, exp = days ? new Date(t0.getTime() + days * 864e5) : null;
+    const paid = fmt(tot) + (cur === "USD" ? " (" + vnd(tot) + ")" : "");
+    thMsg = `[BLUEROBLOX] ĐÃ THANH TOÁN THÀNH CÔNG — NHỜ SHOP CÀI VPS\n• Mã thanh toán: ${code || "(xem trong Đơn hàng)"}\n• Sản phẩm: ${label}\n• Số lượng VPS: ${q}\n• Đã thanh toán: ${paid}\n• Tài khoản: ${profile ? profile.username : ""}\n` +
       (vpsInfo.m === "farmv5" ? `• Cách nhận: FarmV5\n• Mã PIN FarmV5: ${vpsInfo.pin}` : `• Cách nhận: FarmSync\n• Mình sẽ gửi ID + mật khẩu UltraViewer ngay sau tin nhắn này`) +
-      `\n• Thời gian: ${now}${ord && ord.id ? "\n• Mã đơn: " + ord.id : ""}`;
+      `\n• Thời gian mua: ${dt(t0)}` + (exp ? `\n• Thuê: ${days} ngày → Hạn sử dụng: ${dt(exp)}` : "") + `${ord && ord.id ? "\n• Mã đơn: " + ord.id : ""}`;
     try { if (ord && ord.id) localStorage.setItem("br_vmsg_" + ord.id, thMsg); } catch (e) {}
     $("th-title").textContent = "Thanh toán thành công!";
-    $("th-sum").innerHTML = `${esc(label)} × ${q} · ${fmt(tot)}<br>Mã thanh toán: <b style="color:var(--gold-hi);font-family:var(--mono);font-size:16px">${esc(code)}</b>`;
+    $("th-sum").innerHTML = `${esc(label)} × ${q} · ${fmt(tot)}<br>Mã thanh toán: <b style="color:var(--gold-hi);font-family:var(--mono);font-size:16px">${esc(code)}</b>` + (exp ? `<br>Hạn sử dụng: <b style="color:var(--gold-hi)">${dt(exp)}</b>` : "");
     $("th-info").textContent = thMsg; $("th-copy").textContent = "📋 Copy tin nhắn gửi shop";
     $("th-note").innerHTML = vpsInfo.m === "farmv5"
       ? "Bước 1: bấm <b>Copy tin nhắn</b>. Bước 2: bấm một kênh bên dưới, <b>dán và gửi</b> cho shop. Shop nhận tin có <b>mã thanh toán + mã PIN</b> sẽ bắt đầu cài FarmV5."

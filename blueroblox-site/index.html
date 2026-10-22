@@ -1017,7 +1017,7 @@ $("tp-make").onclick = () => busy($("tp-make"), async () => {
       $("cr-banner").textContent = en ? ("⚠️ ONLY send " + CO.full + " (" + CO.name + ") on the " + CO.net + " network") : ("⚠️ CHỈ gửi " + CO.full + " (" + CO.name + ") trên mạng " + CO.net);
       $("cr-banner").style.background = CO.color;
       $("cr-type").textContent = CO.name + " · " + CO.net;
-      $("cr-send-label").textContent = en ? (CO.name + " to send") : ("Số " + CO.name + " cần gửi");
+      $("cr-send-label").textContent = en ? (CO.name + " to send (fee included)") : ("Số " + CO.name + " cần gửi (đã gồm phí)");
       $("cr-net").textContent = CO.net;
       $("cr-amt").textContent = j.pay_amount + " " + CO.name; $("cr-amt-raw").textContent = String(j.pay_amount);
       $("cr-addr").textContent = j.pay_address;

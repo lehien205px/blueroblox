@@ -742,9 +742,9 @@ window.BR_CONFIG = {
   <div class="dlg wide" role="dialog" aria-modal="true" aria-labelledby="sk-title">
     <h3 id="sk-title">Nhập kho</h3>
     <div class="hint" id="sk-name"></div>
-    <label class="full">Tải file .txt (mỗi dòng 1 tài khoản) — hoặc dán trực tiếp bên dưới
-      <input class="in" id="sk-file" type="file" accept=".txt,text/plain"></label>
-    <label>Nội dung kho (mỗi dòng là 1 tài khoản giao cho khách, VD: <code>user|pass</code>)
+    <label class="full">Chọn file .txt (mỗi dòng 1 tài khoản) — không giới hạn dung lượng, chọn được nhiều file cùng lúc
+      <input class="in" id="sk-file" type="file" accept=".txt,text/plain" multiple></label>
+    <label>Hoặc dán thêm vào đây (mỗi dòng là 1 tài khoản giao cho khách, VD: <code>user|pass</code>)
       <textarea class="in" id="sk-lines" rows="9" style="font-family:var(--mono);font-size:13px"></textarea></label>
     <div class="hint" id="sk-count">0 dòng</div>
     <div class="err" id="sk-err"></div>
@@ -2043,18 +2043,46 @@ $("ptbl").onclick = async e => {
     if (delArm !== id) { delArm = id; dl.textContent = "Bấm lần nữa để xoá"; setTimeout(() => { if (delArm === id) { delArm = null; renderTable(); } }, 3000); return; }
     delArm = null; const { error } = await sb.from("products").delete().eq("id", id); if (error) return toast(errMsg(error), 1); toast("Đã xoá sản phẩm."); if (editId === id) resetForm(); await loadProducts(); }
 };
-function skCount() { $("sk-count").textContent = $("sk-lines").value.split("\n").filter(l => l.trim()).length + " tài khoản"; }
-function openStock(id) { stockFor = id; const p = P.find(x => x.id === id); $("sk-name").textContent = p.name + " · đang còn " + (+p.stock || 0) + " tài khoản"; $("sk-lines").value = ""; $("sk-file").value = ""; skCount(); $("sk-err").textContent = ""; show("stockdlg"); }
-$("sk-file").onchange = () => { const f = $("sk-file").files[0]; if (!f) return;
-  if (f.size > 8 * 1024 * 1024) { $("sk-err").textContent = "File tối đa 8MB."; return; }
-  const rd = new FileReader(); rd.onload = () => { const t = String(rd.result || "").replace(/\r/g, ""); $("sk-lines").value = $("sk-lines").value.trim() ? ($("sk-lines").value.replace(/\s+$/,"") + "\n" + t) : t; skCount(); $("sk-err").textContent = ""; }; rd.readAsText(f); };
+/* Nhập kho: đọc file ngay trên máy (không giới hạn dung lượng, chọn được nhiều file), gửi lên theo từng đợt 5.000 dòng */
+let skFile = [], skNames = [];
+const SK_CHUNK = 5000;
+const skPaste = () => $("sk-lines").value.split("\n").map(l => l.trim()).filter(Boolean);
+function skCount() {
+  const n = skPaste().length + skFile.length;
+  $("sk-count").innerHTML = n.toLocaleString("vi-VN") + " tài khoản" + (skFile.length ? ` <span style="color:var(--muted)">(${skFile.length.toLocaleString("vi-VN")} dòng từ ${skNames.length} file: ${esc(skNames.slice(0, 3).join(", "))}${skNames.length > 3 ? "…" : ""})</span> <button class="btn ghost sm" type="button" id="sk-unfile">Bỏ file</button>` : "");
+  const u = $("sk-unfile"); if (u) u.onclick = () => { skFile = []; skNames = []; $("sk-file").value = ""; skCount(); };
+}
+function openStock(id) { stockFor = id; const p = P.find(x => x.id === id); $("sk-name").textContent = p.name + " · đang còn " + (+p.stock || 0).toLocaleString("vi-VN") + " tài khoản"; $("sk-lines").value = ""; $("sk-file").value = ""; skFile = []; skNames = []; skCount(); $("sk-err").textContent = ""; show("stockdlg"); }
+$("sk-file").onchange = async () => {
+  const fs = [...($("sk-file").files || [])]; if (!fs.length) return;
+  $("sk-err").textContent = ""; $("sk-count").textContent = "Đang đọc file…";
+  for (const f of fs) {
+    try {
+      const t = await f.text();
+      let s = 0; while (s < t.length) { let e = t.indexOf("\n", s); if (e < 0) e = t.length; const l = t.slice(s, e).replace(/\r$/, "").trim(); if (l) skFile.push(l); s = e + 1; }
+      skNames.push(f.name);
+    } catch (e) { $("sk-err").textContent = "Không đọc được file " + f.name + ". Thử lại hoặc tách file nhỏ hơn."; }
+  }
+  $("sk-file").value = ""; skCount();
+};
 $("sk-lines").oninput = skCount;
 $("sk-cancel").onclick = () => show("stockdlg", false);
 $("sk-save").onclick = () => busy($("sk-save"), async () => {
-  const lines = $("sk-lines").value; if (!lines.trim()) { $("sk-err").textContent = "Dán ít nhất 1 dòng."; return; }
-  const { data, error } = await sb.rpc("admin_add_stock", { p_product: stockFor, p_lines: lines });
-  if (error) { $("sk-err").textContent = errMsg(error); return; }
-  show("stockdlg", false); toast("Đã thêm " + data + " sản phẩm vào kho."); await loadProducts();
+  const all = skFile.concat(skPaste()); if (!all.length) { $("sk-err").textContent = "Chọn file .txt hoặc dán ít nhất 1 dòng."; return; }
+  let done = 0;
+  for (let i = 0; i < all.length; i += SK_CHUNK) {
+    const part = all.slice(i, i + SK_CHUNK);
+    let error = null;
+    for (let k = 0; k < 3; k++) { ({ error } = await sb.rpc("admin_add_stock", { p_product: stockFor, p_lines: part.join("\n") })); if (!error) break; await new Promise(r => setTimeout(r, 1500)); }
+    if (error) {
+      $("sk-err").textContent = `Dừng ở dòng ${(i + 1).toLocaleString("vi-VN")}: ${errMsg(error)}. Đã thêm ${done.toLocaleString("vi-VN")} dòng — phần còn lại đã giữ trong ô, bấm "Thêm vào kho" để tiếp tục.`;
+      skFile = all.slice(i); skNames = ["phần còn lại"]; $("sk-lines").value = ""; skCount(); await loadProducts(); return;
+    }
+    done += part.length;
+    $("sk-count").innerHTML = `Đang tải lên <b>${done.toLocaleString("vi-VN")}</b> / ${all.length.toLocaleString("vi-VN")} (${Math.round(done / all.length * 100)}%)<div style="height:8px;background:rgba(143,208,255,.12);border-radius:99px;overflow:hidden;margin-top:6px"><div style="height:100%;width:${done / all.length * 100}%;background:linear-gradient(90deg,#3d7bff,#8fd0ff)"></div></div>`;
+  }
+  skFile = []; skNames = [];
+  show("stockdlg", false); toast("Đã thêm " + done.toLocaleString("vi-VN") + " tài khoản vào kho."); await loadProducts();
 });
 let clearArm = false;
 $("sk-clear").onclick = () => busy($("sk-clear"), async () => {

@@ -443,6 +443,35 @@ body.past-hero .fx-drums{opacity:1}
   background:radial-gradient(circle,rgba(255,240,190,.95),rgba(255,236,180,0) 70%);mix-blend-mode:screen;animation:fxcore 5.7s ease-in-out infinite}
 .halo{animation:pulse 5.7s ease-in-out infinite}
 
+/* ===== tiêu đề nổi bật: chữ trắng hiện từng ký tự, chữ vàng ánh kim chạy + gạch chân vàng + sao lấp lánh ===== */
+h1{perspective:600px;color:#fff;text-shadow:0 2px 0 rgba(61,123,255,.35),0 0 34px rgba(120,170,255,.35)}
+h1 .w{display:inline-block;white-space:nowrap}
+h1 .ch{display:inline-block;transform-origin:50% 100%;animation:chIn .8s cubic-bezier(.2,.8,.2,1) backwards;animation-delay:calc(var(--i) * 32ms + .1s);
+  transition:transform .25s cubic-bezier(.2,.8,.2,1),color .25s,text-shadow .25s}
+h1 .ch:hover{transform:translateY(-.14em) scale(1.08);color:var(--gold-hi);text-shadow:0 0 20px rgba(255,220,140,.8)}
+@keyframes chIn{from{opacity:0;transform:translateY(.7em) rotateX(-80deg);filter:blur(8px)}}
+h1 em{position:relative;display:block;width:fit-content;padding-right:.08em;margin-top:.04em;
+  background:linear-gradient(100deg,#c08a2c 0%,#ffe9a8 18%,#fffbe8 26%,#f2c766 38%,#b98128 52%,#ffe9a8 70%,#fffbe8 78%,#e9c063 90%,#c08a2c 100%);
+  background-size:200% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;text-shadow:none;
+  animation:emIn 1.1s .65s cubic-bezier(.2,.8,.2,1) backwards,goldflow 3.6s linear infinite,emGlow 3.2s ease-in-out infinite}
+@keyframes emIn{from{clip-path:inset(-20% 100% -20% 0);transform:translateX(-14px);opacity:.3}to{clip-path:inset(-20% -10% -40% -10%);transform:none;opacity:1}}
+@keyframes goldflow{to{background-position:-200% 0}}
+@keyframes emGlow{0%,100%{filter:drop-shadow(0 3px 0 #6b4512) drop-shadow(0 0 14px rgba(233,192,99,.35))}50%{filter:drop-shadow(0 3px 0 #6b4512) drop-shadow(0 0 30px rgba(255,214,120,.75))}}
+h1 em::after{content:"";position:absolute;left:.04em;right:.1em;bottom:-.06em;height:.09em;border-radius:99px;transform-origin:left;
+  background:linear-gradient(90deg,rgba(233,192,99,0),#e9c063 15%,#fff3c4 50%,#e9c063 85%,rgba(233,192,99,0));
+  animation:lineIn .9s 1.5s cubic-bezier(.2,.8,.2,1) backwards}
+@keyframes lineIn{from{transform:scaleX(0);opacity:0}}
+h1 .spk{position:absolute;width:.32em;height:.32em;pointer-events:none;background:radial-gradient(circle,#fff 0 18%,#ffe9a8 30%,rgba(255,233,168,0) 62%);
+  clip-path:polygon(50% 0,60% 40%,100% 50%,60% 60%,50% 100%,40% 60%,0 50%,40% 40%);animation:spk 2.4s ease-in-out infinite}
+h1 .spk.s1{right:-.18em;top:-.1em;animation-delay:1.6s}
+h1 .spk.s2{left:38%;top:-.22em;width:.2em;height:.2em;animation-delay:2.4s}
+h1 .spk.s3{right:22%;bottom:-.02em;width:.24em;height:.24em;animation-delay:3.1s}
+@keyframes spk{0%,100%{transform:scale(0) rotate(0);opacity:0}45%{transform:scale(1.15) rotate(90deg);opacity:1}60%{transform:scale(.9) rotate(120deg);opacity:.9}}
+/* sóng sáng chạy qua chữ trắng mỗi vài giây */
+h1 .ch{animation:chIn .8s cubic-bezier(.2,.8,.2,1) backwards,chWave 5s ease-in-out infinite;animation-delay:calc(var(--i) * 32ms + .1s),calc(var(--i) * 55ms + 2.2s)}
+@keyframes chWave{0%,14%,100%{translate:0 0;text-shadow:0 2px 0 rgba(61,123,255,.35),0 0 34px rgba(120,170,255,.35)}6%{translate:0 -.07em;text-shadow:0 2px 0 rgba(61,123,255,.5),0 0 22px rgba(170,215,255,.95)}}
+h1 em{font-size:1.06em}
+
 </style>
 <script>
 // Đã điền sẵn cho blueroblox.shop
@@ -1286,6 +1315,33 @@ if (typeof module !== "undefined") module.exports = { drawDongSon };
   }
   nextShoot = performance.now() + 1200;
   requestAnimationFrame(frame);
+})();
+
+/* ===== tiêu đề: tách từng ký tự để chạy hiệu ứng, thêm sao lấp lánh vào chữ vàng ===== */
+(function () {
+  const h = document.getElementById("h-title"); if (!h) return;
+  let busy = false;
+  const run = () => {
+    if (busy || h.querySelector(".ch")) return; busy = true;
+    let i = 0;
+    [...h.childNodes].forEach(n => {
+      if (n.nodeType !== 3 || !n.textContent.trim()) return;
+      const frag = document.createDocumentFragment();
+      n.textContent.split(/(\s+)/).forEach(part => {
+        if (!part) return;
+        if (/^\s+$/.test(part)) { frag.appendChild(document.createTextNode(" ")); return; }
+        const w = document.createElement("span"); w.className = "w";
+        for (const c of part) { const s = document.createElement("span"); s.className = "ch"; s.style.setProperty("--i", i++); s.textContent = c; w.appendChild(s); }
+        frag.appendChild(w);
+      });
+      h.replaceChild(frag, n);
+    });
+    const em = h.querySelector("em");
+    if (em && !em.querySelector(".spk")) em.insertAdjacentHTML("beforeend", '<i class="spk s1"></i><i class="spk s2"></i><i class="spk s3"></i>');
+    busy = false;
+  };
+  new MutationObserver(run).observe(h, { childList: true });
+  run();
 })();
 
 </script>

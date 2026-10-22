@@ -497,6 +497,20 @@ h1 em::after{background:linear-gradient(90deg,rgba(143,208,255,0),#8fd0ff 15%,#f
 @keyframes chWaveM{0%,14%,100%{translate:0 0}6%{translate:0 -.07em}}
 @media (hover:none) and (pointer:coarse){.top::after{animation:none}}
 
+/* chọn cách nhận VPS */
+.vps-pick{display:grid;gap:8px}
+.vps-opts{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.vps-opts button{display:grid;gap:3px;text-align:left;padding:11px 13px;border-radius:12px;background:rgba(6,10,28,.55);border:1px solid var(--line2);color:var(--fg);transition:border-color .2s,background .2s}
+.vps-opts button b{font-size:15px}
+.vps-opts button small{font-size:12px;color:var(--muted)}
+.vps-opts button.on{border-color:var(--gold);background:rgba(201,215,238,.1)}
+.vps-opts button.on b{color:var(--gold-hi)}
+#m-pin{font-family:var(--mono);font-size:16px;letter-spacing:.08em}
+/* sửa lệch trang trên điện thoại (trống to tràn ra ngoài làm trang trượt ngang) */
+.hero{max-width:none;padding-inline:max(18px,calc((100% - 1184px) / 2));overflow:clip}
+.hero{overflow:visible;overflow-x:clip}
+@media (min-width:901px){ .stage{right:calc(max(0px, (100% - 1220px) / 2) - 19vw)} }
+
 </style>
 <script>
 // Đã điền sẵn cho blueroblox.shop
@@ -609,6 +623,15 @@ window.BR_CONFIG = {
     <h3 id="m-title" data-i18n="buy_title">Mua sản phẩm</h3>
     <div id="m-name" style="color:var(--muted);font-size:14px"></div>
     <div id="m-plans-box" hidden style="display:grid;gap:8px"><span style="font-size:13px;color:var(--muted)" data-i18n="rent_period">Chọn thời gian thuê</span><div class="amts plans" id="m-plans"></div></div>
+    <div id="m-vps" class="vps-pick" hidden>
+      <span class="hint">Cách nhận VPS</span>
+      <div class="vps-opts" id="m-vps-opts">
+        <button type="button" data-m="farmv5" class="on"><b>FarmV5</b><small>Nhập mã PIN để shop kết nối</small></button>
+        <button type="button" data-m="farmsync"><b>FarmSync</b><small>Nhắn shop · gửi UltraViewer</small></button>
+      </div>
+      <label id="m-pin-wrap">Mã PIN FarmV5 (bắt buộc)<input class="in" id="m-pin" inputmode="numeric" maxlength="40" placeholder="Nhập mã PIN FarmV5 của bạn" autocomplete="off"></label>
+      <div class="note" id="m-vps-note"></div>
+    </div>
     <div class="qty"><span style="margin-right:auto" data-i18n="quantity">Số lượng</span><button id="m-minus" aria-label="Giảm">−</button><input id="m-qty" type="number" min="1" value="1" aria-label="Số lượng"><button id="m-plus" aria-label="Tăng">+</button></div>
     <div class="sum"><span data-i18n="total">Tổng thanh toán</span><b id="m-total"></b></div>
     <div class="sum"><span data-i18n="cur_bal">Số dư hiện tại</span><span id="m-bal" style="font-family:var(--mono)"></span></div>
@@ -1529,12 +1552,28 @@ function upd() {
   $("m-err").textContent = u && u.balance < tot ? "Số dư không đủ. Cần nạp thêm " + fmt(tot - u.balance) + "." : "";
   $("m-ok").textContent = !u ? t("Đăng nhập để mua","login_to_buy") : u.balance < tot ? t("Nạp tiền","topup") : t("Thanh toán","pay");
 }
+/* VPS: chọn cách nhận — FarmV5 (khách nhập mã PIN) hoặc FarmSync (khách nhắn shop + gửi UltraViewer) */
+let vpsMethod = "farmv5";
+const isVps = p => !!p && p.cat === "vps";
+const payCode = ord => ord && ord.id ? "BR-" + String(ord.id).replace(/-/g, "").slice(0, 8).toUpperCase() : "";
+function setVpsMethod(m) {
+  vpsMethod = m; document.querySelectorAll("#m-vps-opts button").forEach(b => b.classList.toggle("on", b.dataset.m === m));
+  show("m-pin-wrap", m === "farmv5");
+  $("m-vps-note").innerHTML = m === "farmv5"
+    ? "Shop dùng <b>mã PIN</b> này để kết nối và cài <b>FarmV5</b> cho bạn. Sau khi thanh toán, bấm <b>Copy</b> tin nhắn và gửi cho shop — shop chỉ bắt đầu làm khi nhận được <b>mã thanh toán</b>."
+    : "Sau khi thanh toán, bấm <b>Copy</b> tin nhắn gửi shop, rồi gửi kèm <b>ID + mật khẩu UltraViewer</b> để shop vào cài <b>FarmSync</b>. Shop chỉ bắt đầu làm khi nhận được <b>mã thanh toán</b>.";
+}
+$("m-pin").oninput = () => upd();
+$("m-vps-opts").onclick = e => { const b = e.target.closest("button"); if (b) { setVpsMethod(b.dataset.m); $("m-err").textContent = ""; } };
 function openBuy(id) { sel = id; const p = selP(); const pl = plansOf(p); selDays = pl.length ? +(pl.find(x => +x.days === 30) || pl[0]).days : null;
-  $("m-name").textContent = p.name; $("m-qty").value = 1; $("m-qty").max = p.stock; renderPlans(); upd(); show("modal"); }
+  $("m-name").textContent = p.name; $("m-qty").value = 1; $("m-qty").max = p.stock; renderPlans(); upd();
+  show("m-vps", isVps(p)); $("m-pin").value = ""; setVpsMethod("farmv5"); show("modal"); }
 function closeBuy() { show("modal", false); sel = null; }
 async function doBuy() {
   const p = selP(); if (!p) return;
   if (!profile) { closeBuy(); openAuth("login"); return; }
+  if (isVps(p) && vpsMethod === "farmv5" && !$("m-pin").value.trim()) { $("m-err").textContent = "Nhập mã PIN FarmV5 trước khi thanh toán."; $("m-pin").focus(); return; }
+  const vpsInfo = isVps(p) ? { m: vpsMethod, pin: $("m-pin").value.trim() } : null;
   const q = Math.max(1, Math.min(+p.stock || 1, Math.floor(+$("m-qty").value || 1))), tot = unitPrice(p) * q;
   if (profile.balance < tot) { closeBuy(); openTopup(Math.max(+SITE.minTop || 10000, Math.ceil((tot - profile.balance) / 1000) * 1000)); return; }
   await busy($("m-ok"), async () => {
@@ -1542,7 +1581,7 @@ async function doBuy() {
     if (error) { $("m-err").textContent = errMsg(error); return; }
     closeBuy(); await Promise.all([loadProfile(), loadProducts()]); renderUser();
     if (ord && ord.status === "pending") watchMine();
-    openThanks(ord, p, q, tot);
+    openThanks(ord, p, q, tot, vpsInfo);
   });
 }
 
@@ -1765,7 +1804,7 @@ function downloadTxt(filename, text) {
   catch (e) { toast("Trình duyệt chặn tải file. Hãy copy thủ công.", 1); }
 }
 let thMsg = "", thDl = null;
-function openThanks(ord, p, q, tot) {
+function openThanks(ord, p, q, tot, vpsInfo) {
   const label = `${p.name}${plansOf(p).length ? " · " + selDays + " ngày" : ""}`;
   $("th-sum").textContent = `${label} × ${q} · ${fmt(tot)}`;
   const auto = ord && ord.status === "done" && ord.items;
@@ -1783,6 +1822,21 @@ function openThanks(ord, p, q, tot) {
   const c = contactsHTML();
   thMsg = `[BLUEROBLOX] Mình vừa mua hàng, cần nhận:\n• Sản phẩm: ${label} × ${q}\n• Đã thanh toán: ${fmt(tot)}\n• Khách: ${profile ? profile.username : ""}${ord && ord.id ? "\n• Mã đơn: " + ord.id : ""}`;
   thDl = null; show("th-dl", false);
+  if (vpsInfo) {
+    const code = payCode(ord), now = new Date().toLocaleString("vi-VN", { hour12: false });
+    thMsg = `[BLUEROBLOX] ĐÃ THANH TOÁN THÀNH CÔNG — NHỜ SHOP CÀI VPS\n• Mã thanh toán: ${code || "(xem trong Đơn hàng)"}\n• Sản phẩm: ${label}\n• Số lượng VPS: ${q}\n• Đã thanh toán: ${fmt(tot)}\n• Tài khoản: ${profile ? profile.username : ""}\n` +
+      (vpsInfo.m === "farmv5" ? `• Cách nhận: FarmV5\n• Mã PIN FarmV5: ${vpsInfo.pin}` : `• Cách nhận: FarmSync\n• Mình sẽ gửi ID + mật khẩu UltraViewer ngay sau tin nhắn này`) +
+      `\n• Thời gian: ${now}${ord && ord.id ? "\n• Mã đơn: " + ord.id : ""}`;
+    try { if (ord && ord.id) localStorage.setItem("br_vmsg_" + ord.id, thMsg); } catch (e) {}
+    $("th-title").textContent = "Thanh toán thành công!";
+    $("th-sum").innerHTML = `${esc(label)} × ${q} · ${fmt(tot)}<br>Mã thanh toán: <b style="color:var(--gold-hi);font-family:var(--mono);font-size:16px">${esc(code)}</b>`;
+    $("th-info").textContent = thMsg; $("th-copy").textContent = "📋 Copy tin nhắn gửi shop";
+    $("th-note").innerHTML = vpsInfo.m === "farmv5"
+      ? "Bước 1: bấm <b>Copy tin nhắn</b>. Bước 2: bấm một kênh bên dưới, <b>dán và gửi</b> cho shop. Shop nhận tin có <b>mã thanh toán + mã PIN</b> sẽ bắt đầu cài FarmV5."
+      : "Bước 1: bấm <b>Copy tin nhắn</b>. Bước 2: bấm một kênh bên dưới, <b>dán và gửi</b> cho shop, rồi gửi tiếp <b>ID + mật khẩu UltraViewer</b>. Shop sẽ vào cài FarmSync.";
+    $("th-contacts").innerHTML = c || (SITE.zalo ? `<div class="note" style="text-align:center">Zalo shop: <b>${esc(SITE.zalo)}</b></div>` : "");
+    show("thanks"); return;
+  }
   if (!SITE.afterBuy || !c) { toast("Đặt hàng thành công. Xem mục Đơn hàng."); openOrders(); return; }
   $("th-title").textContent = "Đặt hàng thành công!";
   $("th-info").textContent = thMsg; $("th-copy").textContent = "📋 Copy thông tin đơn";
@@ -1828,7 +1882,8 @@ async function openOrders() {
     const done = x.status === "done" && x.items, n = done ? x.items.split("\n").filter(l => l.trim()).length : 0;
     const body = done
       ? `<div class="oacts"><span class="okt">✓ ${n} tài khoản</span><button class="btn okb sm" data-dl="${x.id}">⬇ Tải .txt</button><button class="btn ghost sm" data-cp="${x.id}">📋 Copy</button><button class="btn ghost sm" data-view="${x.id}">👁 Xem</button></div><pre id="opre-${x.id}" hidden>${esc(x.items)}</pre>`
-      : `<div class="hint">${esc(x.items || "")}</div>`;
+      : (() => { let m = null; try { m = localStorage.getItem("br_vmsg_" + x.id); } catch (e) {}
+          return `<div class="hint">${esc(x.items || "")}</div>` + (m && x.status === "pending" ? `<div class="oacts"><span class="hint" style="margin-right:auto">Mã thanh toán: <b style="color:var(--gold-hi)">${esc(payCode(x))}</b></span><button class="btn sm" data-cpmsg="${x.id}">📋 Copy tin nhắn gửi shop</button></div>` : ""); })();
     return { t: x.created_at, h: `<div class="oi"><div class="h"><b>${esc(x.product_name)} × ${x.qty}</b><span style="color:${x.status === "refunded" ? "var(--muted)" : "var(--bad)"};font-family:var(--mono)">${x.status === "refunded" ? "Đã hoàn" : "−" + vnd(x.total)}</span></div><div class="hint">${ago(x.created_at)} · ${ordPill(x.status)}</div>${body}</div>` };
   }),
     ...(t.data || []).map(x => ({ t: x.created_at, h: `<div class="oi"><div class="h"><b>Nạp tiền · ${esc(x.memo)}</b><span style="color:${x.status === "done" ? "var(--ok)" : "var(--gold)"};font-family:var(--mono)">${x.status === "done" ? "+" : ""}${vnd(x.amount)}</span></div><div class="hint">${ago(x.created_at)} · ${x.status === "done" ? "Thành công" : "Đang chờ chuyển khoản"}</div></div>` }))]
@@ -1837,6 +1892,9 @@ async function openOrders() {
 }
 $("or-close").onclick = () => show("orders", false);
 $("or-list").onclick = async e => {
+  const cm = e.target.closest("[data-cpmsg]");
+  if (cm) { let m = ""; try { m = localStorage.getItem("br_vmsg_" + cm.dataset.cpmsg) || ""; } catch (er) {}
+    try { await navigator.clipboard.writeText(m); cm.textContent = "✓ Đã copy"; setTimeout(() => cm.textContent = "📋 Copy tin nhắn gửi shop", 1800); } catch (er) { toast("Không copy được, hãy mở lại đơn.", 1); } return; }
   const dl = e.target.closest("[data-dl]"), cp = e.target.closest("[data-cp]"), vw = e.target.closest("[data-view]");
   if (dl) { const o = myOrders.find(x => x.id === dl.dataset.dl); if (o && o.items) downloadTxt(`BLUEROBLOX-${safeName(o.product_name)}-${Date.now()}.txt`, o.items); }
   if (cp) { const o = myOrders.find(x => x.id === cp.dataset.cp); if (!o) return;

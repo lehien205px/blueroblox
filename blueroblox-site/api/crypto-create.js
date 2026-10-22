@@ -47,7 +47,6 @@ module.exports = async (req, res) => {
         order_description: "BLUEROBLOX top-up",
         ipn_callback_url: SITE + "/api/crypto-webhook",
         is_fee_paid_by_user: true,  // khách trả phí sàn → shop nhận đủ số tiền
-        is_fixed_rate: true,        // khoá tỷ giá, tránh khách trả thiếu khi giá biến động
       }),
     });
     const p = await r.json();

@@ -10,8 +10,10 @@ module.exports = async (req, res) => {
   const key = process.env.NOWPAYMENTS_API_KEY;
   if (!key) return res.status(500).json({ error: "NOWPAYMENTS_API_KEY chưa cấu hình" });
 
-  const { order_id } = body(req);
+  const { order_id, coin } = body(req);
   if (!order_id || !/^[A-Za-z0-9]{3,40}$/.test(String(order_id))) return res.status(400).json({ error: "order_id" });
+  const ALLOWED = { usdttrc20: "usdttrc20", ltc: "ltc" };
+  const payCur = ALLOWED[String(coin || "").toLowerCase()] || PAY_CURRENCY;
 
   try {
     // Lấy lệnh nạp đang chờ theo order_id (memo) — số tiền VND lấy từ DB, không tin client
@@ -29,7 +31,7 @@ module.exports = async (req, res) => {
       body: JSON.stringify({
         price_amount: usd,
         price_currency: "usd",
-        pay_currency: PAY_CURRENCY,
+        pay_currency: payCur,
         order_id: String(order_id),
         order_description: "BLUEROBLOX top-up",
         ipn_callback_url: SITE + "/api/crypto-webhook",

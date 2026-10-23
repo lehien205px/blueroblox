@@ -836,6 +836,10 @@ window.BR_CONFIG = {
     <div class="hint" id="dl-info"></div>
     <label>Thông tin giao cho khách, mỗi dòng 1 sản phẩm (VD: <code>IP:port|user|pass</code>). Đơn có gói ngày sẽ tự thêm ngày hết hạn.
       <textarea class="in" id="dl-items" rows="8" style="font-family:var(--mono);font-size:13px"></textarea></label>
+    <div id="dl-vpsbar" hidden style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:-6px">
+      <button class="btn ghost sm" type="button" id="dl-split">✂️ Tách nhanh (theo dấu - hoặc ,)</button>
+      <span class="hint" id="dl-count"></span>
+    </div>
     <div class="err" id="dl-err"></div>
     <div class="acts"><button class="btn danger" id="dl-refund">Huỷ đơn &amp; hoàn tiền</button><button class="btn ghost" id="dl-cancel">Đóng</button><button class="btn" id="dl-save">Giao cho khách</button></div>
   </div>
@@ -1528,7 +1532,7 @@ const ERR_EN = {
   BAD_QTY: "Invalid quantity.", BAD_PLAN: "This rental plan is no longer available. Choose another.", NO_PRODUCT: "This product no longer exists.",
   "duplicate key": "This username or email is already taken."
 };
-ERR.NO_MACHINE = "Không tìm thấy máy VPS."; ERR_EN && (ERR_EN.NO_MACHINE = "VPS machine not found.");
+ERR.NO_MACHINE = "Không tìm thấy máy VPS."; ERR.ALREADY = "Đơn này đã tạo máy VPS rồi."; ERR_EN && (ERR_EN.NO_MACHINE = "VPS machine not found.");
 const errMsg = e => { const m = String(e && (e.message || e.error_description || e)); const D = LANG === "en" ? { ...ERR, ...ERR_EN } : ERR; for (const k in D) if (m.includes(k)) return D[k]; return m || L("Có lỗi, thử lại sau.", "Something went wrong, try again."); };
 
 let SITE = { ...DEF_SITE }, P = [], cur = "VND", cat = "all", sel = null, selDays = null, editId = null;
@@ -2071,26 +2075,32 @@ function renderOrd() {
   setBadge(ADM.orders.filter(o => o.status === "pending").length);
 }
 function setBadge(n) { for (const id of ["ord-badge", "adm-badge"]) { $(id).textContent = n; show(id, n > 0); } document.title = (n > 0 ? `(${n}) ` : "") + document.title.replace(/^\(\d+\) /, ""); }
-let delOrder = null, refundArm = false, delVps = false;
+let delOrder = null, refundArm = false, delVps = false, delAssign = false;
 $("otbl").onclick = e => {
   const d = e.target.closest("[data-deliver]"), v = e.target.closest("[data-view]");
   const o = ADM.orders.find(x => x.id === (d || v || {}).dataset?.deliver || x.id === (v || {}).dataset?.view); if (!o) return;
   delOrder = o; refundArm = false; $("dl-refund").textContent = "Huỷ đơn & hoàn tiền";
   const prod = P.find(x => x.id === o.product_id); delVps = prod ? !!prod.manual : (o.days != null);
+  const hasMach = (ADM.vps || []).some(m => m.order_id === o.id);
+  delAssign = delVps && !hasMach;                      // tạo máy được: đơn chờ, hoặc đơn đã giao mà chưa có máy
+  const editable = o.status === "pending" || delAssign;
   $("dl-info").textContent = `${uname(o.user_id)} · ${o.product_name} × ${o.qty} · ${vnd(o.total)} · ${ago(o.created_at)}`;
-  const pending = o.status === "pending";
-  if (pending && delVps) $("dl-items").placeholder = `Mỗi dòng 1 tên máy (cần ${o.qty} máy). VD: BR-VPS-01`;
-  $("dl-items").value = pending ? "" : o.items; $("dl-items").readOnly = !pending; $("dl-err").textContent = "";
-  $("dl-title").textContent = pending ? (delVps ? "Giao VPS — nhập TÊN MÁY (mỗi dòng 1 máy)" : "Giao đơn hàng") : "Chi tiết đơn"; show("dl-save", pending); show("dl-refund", pending);
-  show("deldlg"); if (pending) $("dl-items").focus();
+  $("dl-items").placeholder = delAssign ? `Mỗi dòng 1 tên máy — hoặc dán "54-118-10-254-665" rồi bấm Tách nhanh (cần ${o.qty} máy)` : "";
+  $("dl-items").value = editable ? "" : o.items; $("dl-items").readOnly = !editable; $("dl-err").textContent = "";
+  $("dl-title").textContent = delAssign ? `Giao VPS — nhập TÊN MÁY (cần ${o.qty} máy)` : (o.status === "pending" ? "Giao đơn hàng" : "Chi tiết đơn");
+  show("dl-save", editable); show("dl-refund", o.status === "pending"); show("dl-vpsbar", delAssign);
+  if (delAssign) dlCount();
+  show("deldlg"); if (editable) $("dl-items").focus();
 };
 $("dl-cancel").onclick = () => show("deldlg", false);
 $("dl-save").onclick = () => busy($("dl-save"), async () => {
   const items = $("dl-items").value; if (!items.trim()) { $("dl-err").textContent = ERR.EMPTY; return; }
-  if (delVps) {
+  if (delAssign) {
+    const lines = items.split("\n").map(s => s.trim()).filter(Boolean);
+    if (lines.length !== (+delOrder.qty || 1) && !confirm(`Đơn mua ${delOrder.qty} máy nhưng bạn nhập ${lines.length} tên. Vẫn tạo ${lines.length} máy?`)) return;
     const { data, error } = await sb.rpc("admin_assign_vps", { p_order: delOrder.id, p_names: items });
     if (error) { $("dl-err").textContent = errMsg(error); return; }
-    show("deldlg", false); toast(data ? ("Đã giao " + data + " máy VPS cho khách.") : "Đơn này đã được xử lý trước đó."); await loadAdmin(); return;
+    show("deldlg", false); toast(data ? ("Đã tạo " + data + " máy VPS cho khách.") : "Đơn đã xử lý."); await loadAdmin(); return;
   }
   const { data, error } = await sb.rpc("admin_deliver_order", { p_order: delOrder.id, p_items: items });
   if (error) { $("dl-err").textContent = errMsg(error); return; }
@@ -2692,6 +2702,20 @@ async function loadStats() {
     : `<tr><td colspan="3" style="text-align:center;color:var(--muted);padding:16px">Chưa có đơn nào.</td></tr>`;
 }
 $("st-reload") && ($("st-reload").onclick = loadStats);
+
+
+/* ---- nhập tên máy khi giao VPS: đếm & tách nhanh ---- */
+function dlCount() {
+  if (!delAssign || !delOrder) return;
+  const el = $("dl-count"); if (!el) return;
+  const n = ($("dl-items").value || "").split("\n").map(s => s.trim()).filter(Boolean).length, need = +delOrder.qty || 1;
+  el.innerHTML = `Đơn cần <b>${need}</b> máy · đã nhập <b style="color:${n === need ? "var(--ok)" : "var(--gold-hi)"}">${n}</b>`;
+}
+$("dl-items") && $("dl-items").addEventListener("input", () => { if (delAssign) dlCount(); });
+$("dl-split") && ($("dl-split").onclick = () => {
+  const parts = ($("dl-items").value || "").split(/[\n,\-]+| +/).map(s => s.trim()).filter(Boolean);
+  $("dl-items").value = parts.join("\n"); dlCount(); $("dl-items").focus();
+});
 
 </script>
 </body>

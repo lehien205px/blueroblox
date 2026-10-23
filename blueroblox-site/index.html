@@ -511,6 +511,19 @@ h1 em::after{background:linear-gradient(90deg,rgba(143,208,255,0),#8fd0ff 15%,#f
 .hero{overflow:visible;overflow-x:clip}
 @media (min-width:901px){ .stage{right:calc(max(0px, (100% - 1220px) / 2) - 19vw)} }
 
+
+/* ===== Máy VPS ===== */
+.vmi{background:rgba(6,10,28,.55);border:1px solid var(--line);border-radius:14px;padding:12px 14px;display:grid;gap:8px}
+.vmi .top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.vmi .nm{font-weight:700;font-size:15px}.vmi .nm small{display:block;color:var(--muted);font-weight:400;font-size:12.5px;margin-top:2px}
+.vmi .exp{font-size:12.5px;color:var(--muted);font-family:var(--mono)}
+.vpill{font-size:11.5px;font-weight:700;padding:3px 10px;border-radius:999px;white-space:nowrap;border:1px solid}
+.vpill.ok{color:var(--ok);border-color:rgba(60,224,176,.5);background:rgba(60,224,176,.08)}
+.vpill.soon{color:var(--gold-hi);border-color:rgba(233,192,99,.5);background:rgba(233,192,99,.08)}
+.vpill.exp{color:var(--bad);border-color:rgba(255,107,129,.5);background:rgba(255,107,129,.08)}
+.vpill.off{color:var(--muted);border-color:var(--line)}
+.vmi .acts{display:flex;gap:8px;flex-wrap:wrap}
+
 </style>
 <script>
 // Đã điền sẵn cho blueroblox.shop
@@ -529,7 +542,7 @@ window.BR_CONFIG = {
   <div class="wrap">
     <a class="logo" href="/" aria-label="BlueRoblox"><span class="mark"></span><span class="wm"><b><em>Blue</em>Roblox</b><small>Clone Roblox &amp; VPS GPU</small></span></a>
     <nav>
-      <a class="on" href="/"><svg class="ic" viewBox="0 0 24 24"><path d="M3 11l9-8 9 8M5 10v10h14V10"/></svg><span data-i18n="nav_home">Trang chủ</span></a><a href="#shop"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3h2l2.6 13h10L21 7H6"/><circle cx="9" cy="20" r="1.5"/><circle cx="18" cy="20" r="1.5"/></svg><span data-i18n="nav_shop">Sản phẩm</span></a><a id="nav-topup"><svg class="ic" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.4"/></svg><span data-i18n="nav_topup">Nạp tiền</span></a><a id="nav-orders"><svg class="ic" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg><span data-i18n="nav_orders">Đơn hàng</span></a><a href="#policy"><svg class="ic" viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6l8-3z"/><path d="M9 12l2 2 4-4"/></svg><span data-i18n="nav_policy">Chính sách</span></a>
+      <a class="on" href="/"><svg class="ic" viewBox="0 0 24 24"><path d="M3 11l9-8 9 8M5 10v10h14V10"/></svg><span data-i18n="nav_home">Trang chủ</span></a><a href="#shop"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3h2l2.6 13h10L21 7H6"/><circle cx="9" cy="20" r="1.5"/><circle cx="18" cy="20" r="1.5"/></svg><span data-i18n="nav_shop">Sản phẩm</span></a><a id="nav-topup"><svg class="ic" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.4"/></svg><span data-i18n="nav_topup">Nạp tiền</span></a><a id="nav-orders"><svg class="ic" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg><span data-i18n="nav_orders">Đơn hàng</span></a><a id="nav-vps" hidden><svg class="ic" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg><span data-i18n="nav_vps">VPS của tôi</span> <span class="badge" id="vps-nav-badge" hidden></span></a><a href="#policy"><svg class="ic" viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6l8-3z"/><path d="M9 12l2 2 4-4"/></svg><span data-i18n="nav_policy">Chính sách</span></a>
     </nav>
     <div class="acct">
       <div class="seg" id="lang-seg" role="group" aria-label="Language"><button id="lang-vi" class="on">VI</button><button id="lang-en">EN</button></div>
@@ -580,8 +593,8 @@ window.BR_CONFIG = {
 <section class="wrap" id="join-wrap" hidden style="padding-block:0 28px">
   <a id="join-band" href="#" target="_blank" rel="noopener">
     <span class="jd-ico">🎮</span>
-    <span class="jd-txt"><b>Tham gia Discord BLUEROBLOX</b><small>Nhận thông báo hàng mới, giveaway, cập nhật kho và hỗ trợ nhanh</small></span>
-    <span class="jd-btn">Tham gia ngay</span>
+    <span class="jd-txt"><b data-i18n="dc_t">Tham gia Discord BLUEROBLOX</b><small data-i18n="dc_s">Nhận thông báo hàng mới, giveaway, cập nhật kho và hỗ trợ nhanh</small></span>
+    <span class="jd-btn" data-i18n="dc_b">Tham gia ngay</span>
   </a>
 </section>
 
@@ -601,7 +614,7 @@ window.BR_CONFIG = {
   <div class="click" id="pay-bank"><span class="ico" style="background:#1d4ed8;color:#fff">BANK</span><span><b data-i18n="pay_bank">Chuyển khoản</b><small data-i18n="pay_bank_s">Quét QR, tự cộng tiền</small></span></div>
   <div><span class="ico" style="background:#8fa3c4;color:#0b1433">CARD</span><span><b data-i18n="pay_card">Thẻ cào</b><small data-i18n="soon">Sắp có</small></span></div>
   <div class="click" id="pay-crypto"><span class="ico" style="background:#10b981;color:#02261a">USDT</span><span><b>USDT (TRC20)</b><small data-i18n="pay_crypto_s">Nạp tự động TRC20</small></span></div>
-  <div class="click" id="pay-ltc"><span class="ico" style="background:#345d9d;color:#fff">LTC</span><span><b>Litecoin</b><small>Từ $1 · tự động</small></span></div>
+  <div class="click" id="pay-ltc"><span class="ico" style="background:#345d9d;color:#fff">LTC</span><span><b>Litecoin</b><small data-i18n="ltc_s">Từ $1 · tự động</small></span></div>
 </section>
 
 <section class="wrap" id="policy" style="padding-block:0 40px">
@@ -624,12 +637,12 @@ window.BR_CONFIG = {
     <div id="m-name" style="color:var(--muted);font-size:14px"></div>
     <div id="m-plans-box" hidden style="display:grid;gap:8px"><span style="font-size:13px;color:var(--muted)" data-i18n="rent_period">Chọn thời gian thuê</span><div class="amts plans" id="m-plans"></div></div>
     <div id="m-vps" class="vps-pick" hidden>
-      <span class="hint">Cách nhận VPS</span>
+      <span class="hint" data-i18n="vps_how">Cách nhận VPS</span>
       <div class="vps-opts" id="m-vps-opts">
-        <button type="button" data-m="farmv5" class="on"><b>FarmV5</b><small>Nhập mã PIN để shop kết nối</small></button>
-        <button type="button" data-m="farmsync"><b>FarmSync</b><small>Nhắn shop · gửi UltraViewer</small></button>
+        <button type="button" data-m="farmv5" class="on"><b>FarmV5</b><small data-i18n="vps_v5_s">Nhập mã PIN để shop kết nối</small></button>
+        <button type="button" data-m="farmsync"><b>FarmSync</b><small data-i18n="vps_sync_s">Nhắn shop · gửi UltraViewer</small></button>
       </div>
-      <label id="m-pin-wrap">Mã PIN FarmV5 (bắt buộc)<input class="in" id="m-pin" inputmode="numeric" maxlength="40" placeholder="Nhập mã PIN FarmV5 của bạn" autocomplete="off"></label>
+      <label id="m-pin-wrap"><span data-i18n="vps_pin">Mã PIN FarmV5 (bắt buộc)</span><input class="in" id="m-pin" inputmode="numeric" maxlength="40" placeholder="Nhập mã PIN FarmV5 của bạn" data-ph="vps_pin_ph" autocomplete="off"></label>
       <div class="note" id="m-vps-note"></div>
     </div>
     <div class="qty"><span style="margin-right:auto" data-i18n="quantity">Số lượng</span><button id="m-minus" aria-label="Giảm">−</button><input id="m-qty" type="number" min="1" value="1" aria-label="Số lượng"><button id="m-plus" aria-label="Tăng">+</button></div>
@@ -646,7 +659,7 @@ window.BR_CONFIG = {
     <div class="atabs" id="atabs"><button id="at-login" class="on" data-i18n="login">Đăng nhập</button><button id="at-reg" data-i18n="signup">Đăng ký</button></div>
     <form id="f-login" style="display:grid;gap:12px">
       <label>Email<input class="in" id="li-e" type="email" autocomplete="email" required></label>
-      <label>Mật khẩu<input class="in" id="li-p" type="password" autocomplete="current-password" required></label>
+      <label><span data-i18n="pw">Mật khẩu</span><input class="in" id="li-p" type="password" autocomplete="current-password" required></label>
       <div class="err" id="li-err"></div>
       <button class="btn" type="submit" id="li-btn" data-i18n="login">Đăng nhập</button>
       <button class="btn ghost sm" type="button" id="go-forgot" data-i18n="forgot_q">Quên mật khẩu?</button>
@@ -654,31 +667,31 @@ window.BR_CONFIG = {
     <form id="f-reg" style="display:grid;gap:12px" hidden>
       <label><span data-i18n="username">Tên đăng nhập</span><input class="in" id="rg-u" autocomplete="username" required minlength="3" maxlength="24" pattern="[A-Za-z0-9_]+" title="3–24 ký tự: chữ, số và dấu _"></label>
       <label>Email<input class="in" id="rg-e" type="email" autocomplete="email" required></label>
-      <label>Mật khẩu (ít nhất 8 ký tự)<input class="in" id="rg-p" type="password" autocomplete="new-password" required minlength="8"></label>
-      <label>Nhập lại mật khẩu<input class="in" id="rg-p2" type="password" autocomplete="new-password" required minlength="8"></label>
+      <label><span data-i18n="pw8">Mật khẩu (ít nhất 8 ký tự)</span><input class="in" id="rg-p" type="password" autocomplete="new-password" required minlength="8"></label>
+      <label><span data-i18n="pw2">Nhập lại mật khẩu</span><input class="in" id="rg-p2" type="password" autocomplete="new-password" required minlength="8"></label>
       <div class="err" id="rg-err"></div>
       <button class="btn" type="submit" id="rg-btn" data-i18n="create_acc">Tạo tài khoản</button>
     </form>
     <form id="f-forgot" style="display:grid;gap:12px" hidden>
-      <h3>Khôi phục mật khẩu</h3>
+      <h3 data-i18n="fg_title">Khôi phục mật khẩu</h3>
       <div id="fg-step1" style="display:grid;gap:12px">
-        <label>Email đã đăng ký<input class="in" id="fg-e" type="email" required></label>
-        <button class="btn" type="button" id="fg-send">Gửi mã về email</button>
+        <label><span data-i18n="fg_email">Email đã đăng ký</span><input class="in" id="fg-e" type="email" required></label>
+        <button class="btn" type="button" id="fg-send" data-i18n="fg_send">Gửi mã về email</button>
       </div>
       <div id="fg-step2" style="display:grid;gap:12px" hidden>
-        <div class="note">Đã gửi mã 6 số tới <b id="fg-to"></b>. Kiểm tra cả thư mục Spam. Mã có hiệu lực 1 giờ.</div>
-        <label>Mã xác nhận<input class="in" id="fg-c" inputmode="numeric" maxlength="6" autocomplete="one-time-code"></label>
-        <label>Mật khẩu mới (ít nhất 8 ký tự)<input class="in" id="fg-p" type="password" minlength="8" autocomplete="new-password"></label>
-        <button class="btn" type="button" id="fg-ok">Đặt lại mật khẩu</button>
+        <div class="note"><span data-i18n="fg_sent">Đã gửi mã 6 số tới</span> <b id="fg-to"></b>. <span data-i18n="fg_spam">Kiểm tra cả thư mục Spam. Mã có hiệu lực 1 giờ.</span></div>
+        <label><span data-i18n="fg_code">Mã xác nhận</span><input class="in" id="fg-c" inputmode="numeric" maxlength="6" autocomplete="one-time-code"></label>
+        <label><span data-i18n="pw_new8">Mật khẩu mới (ít nhất 8 ký tự)</span><input class="in" id="fg-p" type="password" minlength="8" autocomplete="new-password"></label>
+        <button class="btn" type="button" id="fg-ok" data-i18n="fg_ok">Đặt lại mật khẩu</button>
       </div>
       <div class="err" id="fg-err"></div>
-      <button class="btn ghost sm" type="button" id="fg-back">Quay lại đăng nhập</button>
+      <button class="btn ghost sm" type="button" id="fg-back" data-i18n="fg_back">Quay lại đăng nhập</button>
     </form>
     <form id="f-newpw" style="display:grid;gap:12px" hidden>
-      <h3>Đặt mật khẩu mới</h3>
-      <label>Mật khẩu mới (ít nhất 8 ký tự)<input class="in" id="np-p" type="password" minlength="8" required autocomplete="new-password"></label>
+      <h3 data-i18n="np_title">Đặt mật khẩu mới</h3>
+      <label><span data-i18n="pw_new8">Mật khẩu mới (ít nhất 8 ký tự)</span><input class="in" id="np-p" type="password" minlength="8" required autocomplete="new-password"></label>
       <div class="err" id="np-err"></div>
-      <button class="btn" type="submit">Lưu mật khẩu</button>
+      <button class="btn" type="submit" data-i18n="np_save">Lưu mật khẩu</button>
     </form>
     <button class="btn ghost sm" id="auth-close" data-i18n="close">Đóng</button>
   </div>
@@ -701,16 +714,16 @@ window.BR_CONFIG = {
       <div class="qrwrap">
         <div class="qr" id="tp-qr"></div>
         <div class="kv">
-          <div><span>Ngân hàng</span><b id="tp-bank"></b></div>
-          <div><span>Số tài khoản</span><b id="tp-acc"></b><button data-copy="tp-acc">Chép</button></div>
-          <div><span>Chủ tài khoản</span><b id="tp-name"></b></div>
-          <div><span>Số tiền</span><b id="tp-money" class="hl"></b><button data-copy="tp-money-raw">Chép</button></div>
-          <div><span>Nội dung (bắt buộc)</span><b id="tp-memo" class="hl"></b><button data-copy="tp-memo">Chép</button></div>
+          <div><span data-i18n="kv_bank">Ngân hàng</span><b id="tp-bank"></b></div>
+          <div><span data-i18n="kv_acc">Số tài khoản</span><b id="tp-acc"></b><button data-copy="tp-acc" data-i18n="copy_btn">Chép</button></div>
+          <div><span data-i18n="kv_name">Chủ tài khoản</span><b id="tp-name"></b></div>
+          <div><span data-i18n="kv_amt">Số tiền</span><b id="tp-money" class="hl"></b><button data-copy="tp-money-raw" data-i18n="copy_btn">Chép</button></div>
+          <div><span data-i18n="kv_memo">Nội dung (bắt buộc)</span><b id="tp-memo" class="hl"></b><button data-copy="tp-memo" data-i18n="copy_btn">Chép</button></div>
           <span id="tp-money-raw" hidden></span>
         </div>
       </div>
-      <div class="wait" id="tp-wait"><span class="sp"></span><span id="tp-wait-t">Đang chờ ngân hàng báo có…</span></div>
-      <div class="note">Chuyển <b>đúng số tiền</b> và <b>đúng nội dung</b> để được cộng tự động trong 1–2 phút. Sai nội dung thì liên hệ hỗ trợ kèm ảnh chụp giao dịch.</div>
+      <div class="wait" id="tp-wait"><span class="sp"></span><span id="tp-wait-t">…</span></div>
+      <div class="note" data-i18n-html="bank_note">Chuyển <b>đúng số tiền</b> và <b>đúng nội dung</b> để được cộng tự động trong 1–2 phút. Sai nội dung thì liên hệ hỗ trợ kèm ảnh chụp giao dịch.</div>
       <div class="acts"><button class="btn ghost" id="tp-back" data-i18n="change_amount">Đổi số tiền</button></div>
     </div>
     <div id="tp-crypto" hidden style="display:grid;gap:14px">
@@ -719,15 +732,15 @@ window.BR_CONFIG = {
         <div class="qr" id="cr-qr"></div>
         <div class="kv">
           <div><span data-i18n="cr_coin">Loại coin</span><b id="cr-type"></b></div>
-          <div><span id="cr-send-label">Số tiền cần gửi</span><b id="cr-amt" class="hl"></b><button data-copy="cr-amt-raw">Chép</button></div>
+          <div><span id="cr-send-label">Số tiền cần gửi</span><b id="cr-amt" class="hl"></b><button data-copy="cr-amt-raw" data-i18n="copy_btn">Chép</button></div>
           <div><span data-i18n="cr_network" id="cr-net-label">Mạng lưới</span><b id="cr-net"></b></div>
-          <div><span data-i18n="cr_addr">Địa chỉ ví</span><b id="cr-addr" style="font-size:11px"></b><button data-copy="cr-addr">Chép</button></div>
+          <div><span data-i18n="cr_addr">Địa chỉ ví</span><b id="cr-addr" style="font-size:11px"></b><button data-copy="cr-addr" data-i18n="copy_btn">Chép</button></div>
           <span id="cr-amt-raw" hidden></span>
         </div>
       </div>
-      <div class="wait" id="cr-wait"><span class="sp"></span><span id="cr-wait-t">Đang chờ xác nhận trên blockchain…</span></div>
+      <div class="wait" id="cr-wait"><span class="sp"></span><span id="cr-wait-t" data-i18n="cr_wait">Đang chờ xác nhận trên blockchain…</span></div>
       <div id="cr-prog" style="display:grid;gap:6px">
-        <div style="display:flex;justify-content:space-between;font-size:13px;color:#cfe0ff"><span id="cr-stage">Đang chờ bạn gửi coin…</span><b id="cr-pct">10%</b></div>
+        <div style="display:flex;justify-content:space-between;font-size:13px;color:#cfe0ff"><span id="cr-stage">…</span><b id="cr-pct">10%</b></div>
         <div style="height:9px;background:#152038;border-radius:99px;overflow:hidden"><div id="cr-bar" style="height:100%;width:10%;background:linear-gradient(90deg,#2f7bff,#3fe0ff);border-radius:99px;transition:width .6s ease"></div></div>
       </div>
       <div class="note" id="cr-note"></div>
@@ -741,13 +754,54 @@ window.BR_CONFIG = {
 <div class="modal" id="thanks" hidden>
   <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="th-title">
     <canvas class="thanks-medal" id="th-medal" width="168" height="168" aria-hidden="true"></canvas>
-    <h3 id="th-title" style="text-align:center">Mua thành công!</h3>
+    <h3 id="th-title" style="text-align:center"></h3>
     <div id="th-sum" style="text-align:center;color:var(--muted);font-size:14px"></div>
     <pre id="th-info" style="margin:0;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:12px;font-family:var(--mono);font-size:12px;white-space:pre-wrap;word-break:break-word;color:var(--cyan)"></pre>
-    <div class="acts"><button class="btn gold" id="th-copy" type="button">📋 Copy</button><button class="btn okb" id="th-dl" type="button" hidden>⬇ Tải file .txt</button></div>
+    <div class="acts"><button class="btn gold" id="th-copy" type="button">📋 Copy</button><button class="btn okb" id="th-dl" type="button" hidden>⬇ .txt</button></div>
     <div class="note" id="th-note" style="text-align:center"></div>
     <div class="contacts" id="th-contacts"></div>
     <div class="acts"><button class="btn ghost" id="th-orders" data-i18n="view_orders">Xem đơn hàng</button><button class="btn" id="th-close" data-i18n="close">Đóng</button></div>
+  </div>
+</div>
+
+<!-- VPS CỦA TÔI -->
+<div class="modal" id="vmach" hidden>
+  <div class="dlg wide" role="dialog" aria-modal="true" aria-labelledby="vm-title">
+    <h3 id="vm-title" data-i18n="vps_mine">Máy VPS của tôi</h3>
+    <div class="note" id="vm-note" data-i18n="vps_note">Danh sách máy VPS bạn đang thuê. Gần hết hạn hãy bấm Gia hạn để cộng thêm thời gian; không dùng nữa thì bấm Huỷ.</div>
+    <div class="olist" id="vm-list"></div>
+    <button class="btn ghost sm" id="vm-close" data-i18n="close">Đóng</button>
+  </div>
+</div>
+
+<!-- GIA HẠN VPS -->
+<div class="modal" id="renewdlg" hidden>
+  <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="rn-title">
+    <h3 id="rn-title" data-i18n="renew_title">Gia hạn VPS</h3>
+    <div id="rn-name" style="color:var(--muted);font-size:14px"></div>
+    <div style="font-size:13px;color:var(--muted)" data-i18n="rent_period">Chọn thời gian gia hạn</div>
+    <div class="amts plans" id="rn-plans"></div>
+    <div class="sum"><span data-i18n="new_expiry">Hạn mới</span><b id="rn-newexp" style="font-size:15px;color:var(--gold-hi)"></b></div>
+    <div class="sum"><span data-i18n="total">Tổng thanh toán</span><b id="rn-total"></b></div>
+    <div class="sum"><span data-i18n="cur_bal">Số dư hiện tại</span><span id="rn-bal" style="font-family:var(--mono)"></span></div>
+    <div class="err" id="rn-err"></div>
+    <div class="acts"><button class="btn ghost" id="rn-cancel" data-i18n="cancel">Huỷ</button><button class="btn" id="rn-ok" data-i18n="pay">Thanh toán</button></div>
+  </div>
+</div>
+
+<!-- ADMIN: SỬA MÁY VPS -->
+<div class="modal" id="vmdlg" hidden>
+  <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="vmd-title">
+    <h3 id="vmd-title">Sửa máy VPS</h3>
+    <div class="hint" id="vmd-info"></div>
+    <label>Tên máy<input class="in" id="vmd-name"></label>
+    <label>Hạn sử dụng<input class="in" id="vmd-exp" type="datetime-local"></label>
+    <div class="amts" style="grid-template-columns:repeat(4,1fr)">
+      <button type="button" data-add="7">+7 ngày</button><button type="button" data-add="15">+15</button><button type="button" data-add="30">+30</button><button type="button" data-add="-7">-7</button>
+    </div>
+    <div class="hint" id="vmd-add" style="min-height:1em"></div>
+    <div class="err" id="vmd-err"></div>
+    <div class="acts" style="flex-wrap:wrap"><button class="btn danger" id="vmd-del">Xoá máy</button><button class="btn ghost" id="vmd-cancel">Đóng</button><button class="btn" id="vmd-save">Lưu</button></div>
   </div>
 </div>
 
@@ -797,6 +851,11 @@ window.BR_CONFIG = {
       <label>Đặt số dư chính xác (VND)<input class="in" id="cd-balance" type="number" step="1000"></label>
       <label>Đặt lại mật khẩu mới <span class="hint">(để trống nếu không đổi)</span><input class="in" id="cd-pass" type="text" placeholder="Mật khẩu mới ≥ 6 ký tự" autocomplete="new-password"></label>
     </div>
+    <div style="margin-top:6px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <b style="font-size:14px">🖥 Máy VPS của khách</b><span class="hint" id="cd-vps-n"></span>
+      <button class="btn ghost sm" type="button" id="cd-vps-add" style="margin-left:auto">➕ Tạo máy cho khách này</button>
+    </div>
+    <div id="cd-vps" style="display:grid;gap:8px;max-height:230px;overflow:auto"></div>
     <div class="err" id="cd-err"></div>
     <div class="acts" style="flex-wrap:wrap;gap:8px"><button class="btn danger" id="cd-delete">Xoá khách</button><button class="btn ghost" id="cd-lock">Khoá tài khoản</button><button class="btn ghost" id="cd-cancel">Đóng</button><button class="btn" id="cd-save">Lưu thay đổi</button></div>
   </div>
@@ -807,7 +866,7 @@ window.BR_CONFIG = {
   <div class="dpanel" role="dialog" aria-modal="true" aria-labelledby="d-title">
     <div class="dhead"><h2 id="d-title">Bảng <span>quản trị</span></h2><button class="btn ghost sm" id="adm-refresh">Tải lại</button><button class="btn ghost sm" id="adm-logout">Đăng xuất</button><button class="btn ghost sm" id="admin-close">Đóng</button></div>
     <div class="tabs" id="adm-tabs">
-      <button class="on" data-tab="prod">Sản phẩm</button><button data-tab="cust">Khách hàng</button><button data-tab="tx">Nạp tiền</button><button data-tab="ord">Đơn hàng <span class="badge" id="ord-badge" hidden></span></button><button data-tab="bank">Ngân hàng</button><button data-tab="site">Nội dung trang</button>
+      <button class="on" data-tab="prod">Sản phẩm</button><button data-tab="cust">Khách hàng</button><button data-tab="tx">Nạp tiền</button><button data-tab="ord">Đơn hàng <span class="badge" id="ord-badge" hidden></span></button><button data-tab="vps">Máy VPS <span class="badge" id="vps-badge" hidden></span></button><button data-tab="bank">Ngân hàng</button><button data-tab="site">Nội dung trang</button>
     </div>
     <div class="dbody" id="pane-prod">
       <form class="f" id="pf">
@@ -848,6 +907,19 @@ window.BR_CONFIG = {
     <div class="dbody" id="pane-ord" hidden>
       <div class="tbl"><table><thead><tr><th>Thời gian</th><th>Khách</th><th>Sản phẩm</th><th>SL</th><th>Tổng</th><th>Trạng thái</th><th></th></tr></thead><tbody id="otbl"></tbody></table></div>
     </div>
+    <div class="dbody" id="pane-vps" hidden>
+      <div class="tiles"><div><b id="vk-total">0</b><span>Máy đang chạy</span></div><div><b id="vk-soon">0</b><span>Sắp hết hạn (≤3 ngày)</span></div><div><b id="vk-exp">0</b><span>Đã hết hạn</span></div></div>
+      <form class="f" id="vcf"><h3>Tạo máy cho khách (thủ công)</h3>
+        <label>Tên đăng nhập khách<input id="vc-user" placeholder="vd: minhkhoa" autocomplete="off"></label>
+        <label>Tên máy / tên VPS<input id="vc-name" placeholder="vd: BR-VPS-01"></label>
+        <label>Số ngày<input id="vc-days" type="number" min="1" value="30"></label>
+        <label>Tên sản phẩm hiển thị<input id="vc-prod" placeholder="VPS GPU ROBLOX" value="VPS GPU ROBLOX"></label>
+        <div class="acts full"><button class="btn" type="submit" id="vc-save">+ Tạo máy</button></div>
+        <div class="err full" id="vc-err"></div>
+      </form>
+      <input class="search" id="vq" placeholder="Tìm theo tên máy hoặc tên khách…" style="width:100%">
+      <div class="tbl"><table><thead><tr><th>Khách</th><th>Máy</th><th>Sản phẩm</th><th>Hết hạn</th><th>Còn</th><th></th></tr></thead><tbody id="vtbl"></tbody></table></div>
+    </div>
     <div class="dbody" id="pane-bank" hidden>
       <form class="f" id="bf">
         <h3>Tài khoản nhận tiền</h3>
@@ -886,6 +958,16 @@ window.BR_CONFIG = {
         <h3>Discord ở trang chính</h3>
         <label class="full">Link server Discord hiện ở trang chủ<input id="sf-joinDc" maxlength="200" placeholder="https://discord.gg/..."></label>
         <label class="full">Giới thiệu ở chân trang<textarea id="sf-about" maxlength="300"></textarea></label>
+        <h3>Bản tiếng Anh (khách chọn EN sẽ thấy)</h3>
+        <label class="full">Dòng nhỏ phía trên (EN)<input id="sf-eyebrow_en" maxlength="80"></label>
+        <label>Tiêu đề chữ trắng (EN)<input id="sf-h1a_en" maxlength="80"></label>
+        <label>Tiêu đề chữ nổi bật (EN)<input id="sf-h1b_en" maxlength="40"></label>
+        <label class="full">Mô tả (EN)<textarea id="sf-desc_en" maxlength="400"></textarea></label>
+        <label class="full">Thông báo 1 (EN)<input id="sf-n1_en" maxlength="160"></label>
+        <label class="full">Thông báo 2 (EN)<input id="sf-n2_en" maxlength="160"></label>
+        <label class="full">Thông báo 3 (EN)<input id="sf-n3_en" maxlength="160"></label>
+        <label class="full">Giới thiệu chân trang (EN)<textarea id="sf-about_en" maxlength="300"></textarea></label>
+        <label class="full">Chính sách (EN)<textarea id="sf-policy_en" maxlength="3000" rows="5"></textarea></label>
         <label class="full">Chính sách (bảo hành, hoàn tiền)<textarea id="sf-policy" maxlength="3000" rows="6"></textarea></label>
         <div class="acts full"><button class="btn" type="submit" id="sf-save">Lưu nội dung</button></div>
       </form>
@@ -1420,26 +1502,39 @@ const DEF_SITE = {
   zalo: "", email: "", discord: "", rate: 25000, linkDc: "", linkTg: "", linkZl: "", afterBuy: true, joinDc: "",
   about: "Chuyên Clone Roblox và VPS GPU giá rẻ, giao tự động, hỗ trợ 24/7.",
   policy: "Bảo hành đăng nhập trong 24 giờ kể từ lúc mua. Lỗi do shop sẽ được đổi hàng hoặc hoàn tiền vào số dư.\nTài khoản bị khoá do người mua vi phạm điều khoản của game không được bảo hành.",
-  bankBin: "970422", bankAcc: "", bankName: "", prefix: "BR", minTop: 10000
+  bankBin: "970422", bankAcc: "", bankName: "", prefix: "BR", minTop: 10000,
+  eyebrow_en: "Roblox clones · GPU VPS · Instant delivery 24/7", h1a_en: "Cheap clones. Powerful VPS.", h1b_en: "Instant delivery.",
+  desc_en: "Roblox clone accounts from fresh to aged, plus RTX GPU VPS for AFK farming and multi-tab grinding. Pay and get your details instantly in Orders — no waiting for an admin.",
+  n1_en: "READ THE POLICY before buying to know the warranty and refund terms.", n2_en: "DISCORD: new stock alerts, giveaways and restock updates.", n3_en: "CONTACT: Zalo / Facebook / Email at the bottom of the page.",
+  about_en: "Cheap Roblox clones and GPU VPS, automatic delivery, 24/7 support.",
+  policy_en: "Login warranty for 24 hours after purchase. Issues caused by the shop are replaced or refunded to your balance.\nAccounts banned because the buyer broke the game's terms are not covered."
 };
+const ST = k => (LANG === "en" && SITE[k + "_en"]) ? SITE[k + "_en"] : SITE[k];
 const ERR = {
   INSUFFICIENT_BALANCE: "Số dư không đủ.", OUT_OF_STOCK: "Kho không còn đủ số lượng bạn chọn.", LOCKED: "Tài khoản đã bị khoá. Liên hệ hỗ trợ.",
   NOT_LOGGED_IN: "Hãy đăng nhập trước.", MIN_AMOUNT: "Số tiền thấp hơn mức nạp tối thiểu.", TOO_MANY: "Bạn có quá nhiều lệnh nạp đang chờ. Thử lại sau ít phút.",
   BAD_QTY: "Số lượng không hợp lệ.", EMPTY: "Hãy dán thông tin cần giao.", BAD_PLAN: "Gói thời gian này không còn bán. Chọn gói khác.", NO_PRODUCT: "Sản phẩm không còn tồn tại.", NOT_ADMIN: "Bạn không có quyền admin.", SELF: "Không thể tự khoá/xoá tài khoản của mình.",
   WEAK_PASS: "Mật khẩu mới phải ≥ 6 ký tự.", IS_ADMIN: "Không thể xoá tài khoản admin.", "duplicate key": "Tên đăng nhập hoặc email này đã có người dùng."
 };
-const errMsg = e => { const m = String(e && (e.message || e.error_description || e)); for (const k in ERR) if (m.includes(k)) return ERR[k]; return m || "Có lỗi, thử lại sau."; };
+const ERR_EN = {
+  INSUFFICIENT_BALANCE: "Not enough balance.", OUT_OF_STOCK: "Not enough stock for the quantity you chose.", LOCKED: "This account is locked. Contact support.",
+  NOT_LOGGED_IN: "Please log in first.", MIN_AMOUNT: "Amount is below the minimum top-up.", TOO_MANY: "You have too many pending top-ups. Try again in a few minutes.",
+  BAD_QTY: "Invalid quantity.", BAD_PLAN: "This rental plan is no longer available. Choose another.", NO_PRODUCT: "This product no longer exists.",
+  "duplicate key": "This username or email is already taken."
+};
+ERR.NO_MACHINE = "Không tìm thấy máy VPS."; ERR_EN && (ERR_EN.NO_MACHINE = "VPS machine not found.");
+const errMsg = e => { const m = String(e && (e.message || e.error_description || e)); const D = LANG === "en" ? { ...ERR, ...ERR_EN } : ERR; for (const k in D) if (m.includes(k)) return D[k]; return m || L("Có lỗi, thử lại sau.", "Something went wrong, try again."); };
 
 let SITE = { ...DEF_SITE }, P = [], cur = "VND", cat = "all", sel = null, selDays = null, editId = null;
 let session = null, profile = null, curTop = null, pollT = null, stockFor = null, pfImage = "", pfFile = null;
-let ADM = { users: [], topups: [], orders: [] };
+let ADM = { users: [], topups: [], orders: [], vps: [] };
 
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const rate = () => +SITE.rate || 25000;
 const fmt = v => cur === "VND" ? Math.round(v).toLocaleString("vi-VN") + "đ" : "$" + (v / rate()).toFixed(2);
 const vnd = v => Math.round(+v || 0).toLocaleString("vi-VN") + "đ";
 const catName = id => (CATS.find(c => c.id === id) || { name: id }).name;
-const ago = t => { const s = (Date.now() - new Date(t).getTime()) / 1000; if (s < 60) return "vừa xong"; if (s < 3600) return Math.floor(s / 60) + " phút trước"; if (s < 86400) return Math.floor(s / 3600) + " giờ trước"; return new Date(t).toLocaleString("vi-VN"); };
+const ago = t => { const s = (Date.now() - new Date(t).getTime()) / 1000, en = (typeof LANG !== "undefined" && LANG === "en"); if (s < 60) return en ? "just now" : "vừa xong"; if (s < 3600) return Math.floor(s / 60) + (en ? " min ago" : " phút trước"); if (s < 86400) return Math.floor(s / 3600) + (en ? " h ago" : " giờ trước"); return new Date(t).toLocaleString(en ? "en-GB" : "vi-VN"); };
 const show = (id, on = true) => { $(id).hidden = !on; };
 /* ---------- song ngữ VI/EN ---------- */
 let LANG = "en"; try { const _sv = localStorage.getItem("br_lang"); if (_sv) LANG = _sv === "vi" ? "vi" : "en"; } catch (e) {}
@@ -1457,17 +1552,23 @@ const EN = {
   view_orders:"View orders", orders_title:"Your orders & transactions",
   buy_now:"Buy now", sold_out:"Sold out", left:"Left", from:"from", plan:"Plan", days:"days",
   login_to_buy:"Log in to buy", topup:"Top up", pay:"Pay", not_logged:"Not logged in",
+  pw:"Password", pw8:"Password (at least 8 characters)", pw2:"Repeat password", fg_title:"Reset password", fg_email:"Registered email", fg_send:"Send code to email", fg_sent:"A 6-digit code was sent to", fg_spam:"Check your Spam folder too. The code is valid for 1 hour.", fg_code:"Verification code", pw_new8:"New password (at least 8 characters)", fg_ok:"Reset password", fg_back:"Back to log in", np_title:"Set a new password", np_save:"Save password", kv_bank:"Bank", kv_acc:"Account number", kv_name:"Account holder", kv_amt:"Amount", kv_memo:"Transfer note (required)", copy_btn:"Copy", bank_note:"Transfer the <b>exact amount</b> with the <b>exact note</b> to be credited automatically in 1–2 minutes. Wrong note? Contact support with a screenshot.", vps_how:"How to receive your VPS", vps_v5_s:"Enter a PIN so the shop can connect", vps_sync_s:"Message the shop · send UltraViewer", vps_pin:"FarmV5 PIN (required)", vps_pin_ph:"Enter your FarmV5 PIN", ltc_s:"From $1 · automatic", dc_t:"Join the BLUEROBLOX Discord", dc_s:"New stock alerts, giveaways, restocks and fast support", dc_b:"Join now",
+  nav_vps:"My VPS", vps_mine:"My VPS machines", vps_note:"The VPS machines you are renting. Near expiry, tap Renew to add time; tap Cancel if you no longer need it.", renew_title:"Renew VPS", new_expiry:"New expiry", renew:"Renew", vps_cancel:"Cancel", vps_expired:"Expired", vps_left:"left", vps_day:"d",
   cat_all:"All", thanks_ok:"Success!", order_ok:"Order placed!", m_bank:"🏦 Bank", m_usdt:"🪙 Crypto", cr_type:"Type", cr_coin:"Coin type", cr_network:"Network", will_credit:"will be credited", cr_send:"USDT to send", cr_addr:"Wallet address", pay_crypto_s:"Auto TRC20", make_usdt:"Create USDT payment", min_amt:"Minimum is ", cr_wait:"Waiting for blockchain confirmation…", received:"Received ", credited:"Balance credited.", topup_ok:"Top-up success +", cr_note:"Send the <b>exact USDT amount</b> on the <b>TRC20 network</b> to the address above. Credited automatically after network confirmation (a few minutes). Wrong network may lose funds."
 };
 const t = (vi, key) => (LANG === "en" && EN[key]) ? EN[key] : vi;
+const L = (vi, en) => LANG === "en" ? en : vi;
+/* đơn vị tiền mặc định theo ngôn ngữ (EN → USD, VI → VND), nhớ lựa chọn của khách */
+try { const _c = localStorage.getItem("br_cur"); cur = _c ? (_c === "USD" ? "USD" : "VND") : (LANG === "en" ? "USD" : "VND"); } catch (e) {}
 function applyStatic() {
   document.querySelectorAll("[data-i18n]").forEach(el => { if (!el._vi) el._vi = el.textContent; el.textContent = LANG === "en" ? (EN[el.dataset.i18n] || el._vi) : el._vi; });
+  document.querySelectorAll("[data-i18n-html]").forEach(el => { if (el._vih == null) el._vih = el.innerHTML; el.innerHTML = LANG === "en" ? (EN[el.dataset.i18nHtml] || el._vih) : el._vih; });
   document.querySelectorAll("[data-ph]").forEach(el => { if (!el._viph) el._viph = el.getAttribute("placeholder") || ""; el.setAttribute("placeholder", LANG === "en" ? (EN[el.dataset.ph] || el._viph) : el._viph); });
   document.documentElement.lang = LANG;
 }
 function setLang(l) { LANG = l === "en" ? "en" : "vi"; try { localStorage.setItem("br_lang", LANG); } catch (e) {}
   $("lang-vi").classList.toggle("on", LANG === "vi"); $("lang-en").classList.toggle("on", LANG === "en");
-  applyStatic(); renderCats(); renderGrid(); renderUser(); if (sel) upd(); try { i18nCrypto(); } catch (e) {} }
+  applyStatic(); renderSite(); renderCats(); renderGrid(); renderUser(); if (sel) { renderPlans(); upd(); setVpsMethod(vpsMethod); } try { i18nCrypto(); } catch (e) {} }
 $("lang-vi").onclick = () => setLang("vi"); $("lang-en").onclick = () => setLang("en");
 const plansOf = p => (Array.isArray(p.plans) ? p.plans : []).filter(x => +x.days > 0 && +x.price >= 0).sort((a, b) => a.days - b.days);
 const minPrice = p => { const pl = plansOf(p); return pl.length ? Math.min(...pl.map(x => +x.price)) : +p.price; };
@@ -1486,7 +1587,7 @@ function vietqr(bin, acc, amount, memo) {
 
 /* ---------- tải dữ liệu ---------- */
 async function loadSettings() { const { data } = await sb.from("settings").select("data").eq("id", 1).maybeSingle(); SITE = { ...DEF_SITE, ...((data && data.data) || {}) }; renderSite(); renderGrid(); }
-async function loadProducts() { const { data, error } = await sb.from("product_list").select("*").order("sort"); if (error) { $("grid").innerHTML = `<div class="empty">Không tải được sản phẩm. Tải lại trang để thử lại.</div>`; return; } P = data || []; renderCats(); renderGrid(); if (isAdmin()) renderTable(); }
+async function loadProducts() { const { data, error } = await sb.from("product_list").select("*").order("sort"); if (error) { $("grid").innerHTML = `<div class="empty">${L("Không tải được sản phẩm. Tải lại trang để thử lại.", "Could not load products. Reload the page to try again.")}</div>`; return; } P = data || []; renderCats(); renderGrid(); if (isAdmin()) renderTable(); }
 async function loadProfile() { if (!session) { profile = null; return; } const { data } = await sb.from("profiles").select("*").eq("id", session.user.id).maybeSingle(); profile = data || null; }
 
 /* ---------- trang khách ---------- */
@@ -1500,23 +1601,23 @@ function drawThumb(cv, seed, h) {
 }
 const seedOf = id => [...String(id)].reduce((a, c) => a + c.charCodeAt(0), 0);
 function renderSite() {
-  $("h-eyebrow").textContent = String(SITE.eyebrow || "").replace(/^\s*\/\/\s*/, "");
-  $("h-title").innerHTML = esc(SITE.h1a) + " <em>" + esc(SITE.h1b) + "</em>";
-  $("h-desc").textContent = SITE.desc;
+  $("h-eyebrow").textContent = String(ST("eyebrow") || "").replace(/^\s*\/\/\s*/, "");
+  $("h-title").innerHTML = esc(ST("h1a")) + " <em>" + esc(ST("h1b")) + "</em>";
+  $("h-desc").textContent = ST("desc");
   $("st-a").textContent = SITE.sta; $("st-b").textContent = SITE.stb;
-  $("notices").innerHTML = [SITE.n1, SITE.n2, SITE.n3].filter(Boolean).map(n => { const m = String(n).match(/^([^:]{1,30}:|[A-ZÀ-Ỹ\s]{4,}(?=\s))/u); return m ? `<div><b style="color:var(--gold)">${esc(m[0])}</b>${esc(n.slice(m[0].length))}</div>` : `<div>${esc(n)}</div>`; }).join("");
-  $("ft-about").textContent = SITE.about; $("policy-text").textContent = SITE.policy;
+  $("notices").innerHTML = [ST("n1"), ST("n2"), ST("n3")].filter(Boolean).map(n => { const m = String(n).match(/^([^:]{1,30}:|[A-ZÀ-Ỹ\s]{4,}(?=\s))/u); return m ? `<div><b style="color:var(--gold)">${esc(m[0])}</b>${esc(n.slice(m[0].length))}</div>` : `<div>${esc(n)}</div>`; }).join("");
+  $("ft-about").textContent = ST("about"); $("policy-text").textContent = ST("policy");
   $("ct-zalo").textContent = SITE.zalo ? "Zalo: " + SITE.zalo : ""; $("ct-email").textContent = SITE.email ? "Email: " + SITE.email : ""; $("ct-discord").textContent = SITE.discord ? "Discord: " + SITE.discord : "";
   const jd = SITE.joinDc && /^https?:\/\//i.test(SITE.joinDc); $("join-wrap").hidden = !jd; if (jd) $("join-band").href = SITE.joinDc;
   $("year").textContent = new Date().getFullYear();
 }
-function renderCats() { $("cats").innerHTML = CATS.map(c => { const n = c.id === "all" ? P.length : P.filter(p => p.cat === c.id).length; return `<button data-c="${c.id}" class="${c.id === cat ? "on" : ""}">${c.name}<small>${n}</small></button>`; }).join(""); }
+function renderCats() { $("cats").innerHTML = CATS.map(c => { const n = c.id === "all" ? P.length : P.filter(p => p.cat === c.id).length; return `<button data-c="${c.id}" class="${c.id === cat ? "on" : ""}">${c.id === "all" ? t("Tất cả", "cat_all") : c.name}<small>${n}</small></button>`; }).join(""); }
 function renderGrid() {
   const q = $("q").value.trim().toLowerCase(), so = $("sort").value;
   let l = P.filter(p => (cat === "all" || p.cat === cat) && String(p.name).toLowerCase().includes(q));
   if (so === "asc") l.sort((a, b) => minPrice(a) - minPrice(b)); else if (so === "desc") l.sort((a, b) => minPrice(b) - minPrice(a)); else l.sort((a, b) => (b.hot ? 1 : 0) - (a.hot ? 1 : 0) || a.sort - b.sort);
   $("cat-title").textContent = cat === "all" ? t("Tất cả sản phẩm","all_products") : catName(cat);
-  if (!l.length) { $("grid").innerHTML = `<div class="empty">${P.length ? "Không có sản phẩm khớp “" + esc(q) + "”." : "Chưa có sản phẩm nào."}</div>`; return; }
+  if (!l.length) { $("grid").innerHTML = `<div class="empty">${P.length ? L("Không có sản phẩm khớp “", "No products match “") + esc(q) + "”." : L("Chưa có sản phẩm nào.", "No products yet.")}</div>`; return; }
   $("grid").innerHTML = l.map(p => {
     const s = +p.stock || 0, st = s === 0 ? ["out", t("Hết hàng","sold_out")] : s < 15 ? ["low", t("Còn","left") + " " + s] : ["ok", t("Còn","left") + " " + s];
     return `<article class="card"><div class="thumb">${p.image ? `<img class="thumb-img" src="${esc(p.image)}" alt="" loading="lazy">` : `<canvas data-id="${esc(p.id)}" data-c="${esc(p.thumb || p.cat)}"></canvas>`}<span class="tag">${esc(catName(p.cat).toUpperCase())}</span>${p.hot ? '<span class="hot">HOT</span>' : ""}</div>
@@ -1531,10 +1632,12 @@ function renderUser() {
   const u = profile;
   show("guest-acts", !u); show("user-acts", !!u);
   if (u) { $("bal").textContent = fmt(u.balance); $("who-name").textContent = u.username; $("who-av").textContent = u.username[0].toUpperCase(); }
+  show("nav-vps", !!u);
   show("admin-open", isAdmin());
   if (!isAdmin()) show("drawer", false);
+  if (u) checkVpsExpiry();
 }
-function setCur(c) { cur = c; $("cur-vnd").classList.toggle("on", c === "VND"); $("cur-usd").classList.toggle("on", c === "USD"); renderGrid(); renderUser(); if (sel) upd(); }
+function setCur(c) { cur = c; try { localStorage.setItem("br_cur", c); } catch (e) {} $("cur-vnd").classList.toggle("on", c === "VND"); $("cur-usd").classList.toggle("on", c === "USD"); renderGrid(); renderUser(); if (sel) upd(); }
 
 /* ---------- mua hàng ---------- */
 const selP = () => P.find(p => p.id === sel);
@@ -1542,14 +1645,14 @@ const unitPrice = p => { const pl = plansOf(p); if (!pl.length) return +p.price;
 function renderPlans() {
   const p = selP(), pl = p ? plansOf(p) : [];
   show("m-plans-box", pl.length > 0);
-  $("m-plans").innerHTML = pl.map(x => `<button type="button" data-d="${x.days}" class="${+x.days === +selDays ? "on" : ""}"><b>${x.days} ngày</b><small>${fmt(+x.price)}</small></button>`).join("");
+  $("m-plans").innerHTML = pl.map(x => `<button type="button" data-d="${x.days}" class="${+x.days === +selDays ? "on" : ""}"><b>${x.days} ${L("ngày", "days")}</b><small>${fmt(+x.price)}</small></button>`).join("");
 }
 $("m-plans").onclick = e => { const b = e.target.closest("button"); if (!b) return; selDays = +b.dataset.d; renderPlans(); upd(); };
 function upd() {
   const p = selP(); if (!p) return; const tot = unitPrice(p) * Math.max(1, +$("m-qty").value || 1);
   $("m-total").textContent = fmt(tot);
   const u = profile; $("m-bal").textContent = u ? fmt(u.balance) : t("Chưa đăng nhập","not_logged");
-  $("m-err").textContent = u && u.balance < tot ? "Số dư không đủ. Cần nạp thêm " + fmt(tot - u.balance) + "." : "";
+  $("m-err").textContent = u && u.balance < tot ? L("Số dư không đủ. Cần nạp thêm ", "Not enough balance. Top up ") + fmt(tot - u.balance) + "." : "";
   $("m-ok").textContent = !u ? t("Đăng nhập để mua","login_to_buy") : u.balance < tot ? t("Nạp tiền","topup") : t("Thanh toán","pay");
 }
 /* VPS: chọn cách nhận — FarmV5 (khách nhập mã PIN) hoặc FarmSync (khách nhắn shop + gửi UltraViewer) */
@@ -1560,8 +1663,10 @@ function setVpsMethod(m) {
   vpsMethod = m; document.querySelectorAll("#m-vps-opts button").forEach(b => b.classList.toggle("on", b.dataset.m === m));
   show("m-pin-wrap", m === "farmv5");
   $("m-vps-note").innerHTML = m === "farmv5"
-    ? "Shop dùng <b>mã PIN</b> này để kết nối và cài <b>FarmV5</b> cho bạn. Sau khi thanh toán, bấm <b>Copy</b> tin nhắn và gửi cho shop — shop chỉ bắt đầu làm khi nhận được <b>mã thanh toán</b>."
-    : "Sau khi thanh toán, bấm <b>Copy</b> tin nhắn gửi shop, rồi gửi kèm <b>ID + mật khẩu UltraViewer</b> để shop vào cài <b>FarmSync</b>. Shop chỉ bắt đầu làm khi nhận được <b>mã thanh toán</b>.";
+    ? L("Shop dùng <b>mã PIN</b> này để kết nối và cài <b>FarmV5</b> cho bạn. Sau khi thanh toán, bấm <b>Copy</b> tin nhắn và gửi cho shop — shop chỉ bắt đầu làm khi nhận được <b>mã thanh toán</b>.",
+        "The shop uses this <b>PIN</b> to connect and set up <b>FarmV5</b> for you. After paying, tap <b>Copy</b> and send the message to the shop — work starts only after the shop receives your <b>payment code</b>.")
+    : L("Sau khi thanh toán, bấm <b>Copy</b> tin nhắn gửi shop, rồi gửi kèm <b>ID + mật khẩu UltraViewer</b> để shop vào cài <b>FarmSync</b>. Shop chỉ bắt đầu làm khi nhận được <b>mã thanh toán</b>.",
+        "After paying, tap <b>Copy</b> and send the message to the shop, then send your <b>UltraViewer ID + password</b> so the shop can set up <b>FarmSync</b>. Work starts only after the shop receives your <b>payment code</b>.");
 }
 $("m-pin").oninput = () => upd();
 $("m-vps-opts").onclick = e => { const b = e.target.closest("button"); if (b) { setVpsMethod(b.dataset.m); $("m-err").textContent = ""; } };
@@ -1572,7 +1677,7 @@ function closeBuy() { show("modal", false); sel = null; }
 async function doBuy() {
   const p = selP(); if (!p) return;
   if (!profile) { closeBuy(); openAuth("login"); return; }
-  if (isVps(p) && vpsMethod === "farmv5" && !$("m-pin").value.trim()) { $("m-err").textContent = "Nhập mã PIN FarmV5 trước khi thanh toán."; $("m-pin").focus(); return; }
+  if (isVps(p) && vpsMethod === "farmv5" && !$("m-pin").value.trim()) { $("m-err").textContent = L("Nhập mã PIN FarmV5 trước khi thanh toán.", "Enter your FarmV5 PIN before paying."); $("m-pin").focus(); return; }
   const vpsInfo = isVps(p) ? { m: vpsMethod, pin: $("m-pin").value.trim() } : null;
   const q = Math.max(1, Math.min(+p.stock || 1, Math.floor(+$("m-qty").value || 1))), tot = unitPrice(p) * q;
   if (profile.balance < tot) { closeBuy(); openTopup(Math.max(+SITE.minTop || 10000, Math.ceil((tot - profile.balance) / 1000) * 1000)); return; }
@@ -1595,51 +1700,51 @@ function authTab(t) {
 function openAuth(t) { authTab(t); show("auth"); setTimeout(() => { const f = { reg: "rg-u", login: "li-e", forgot: "fg-e", newpw: "np-p" }[t]; if (f) $(f).focus(); }, 30); }
 $("f-reg").onsubmit = e => { e.preventDefault(); busy($("rg-btn"), async () => {
   const u = $("rg-u").value.trim(), em = $("rg-e").value.trim(), pw = $("rg-p").value;
-  if (pw !== $("rg-p2").value) { $("rg-err").textContent = "Hai mật khẩu không khớp."; return; }
+  if (pw !== $("rg-p2").value) { $("rg-err").textContent = L("Hai mật khẩu không khớp.", "Passwords do not match."); return; }
   const { data: ok } = await sb.rpc("username_available", { p_username: u });
-  if (ok === false) { $("rg-err").textContent = "Tên đăng nhập đã có người dùng."; return; }
+  if (ok === false) { $("rg-err").textContent = L("Tên đăng nhập đã có người dùng.", "This username is taken."); return; }
   const { data, error } = await sb.auth.signUp({ email: em, password: pw, options: { data: { username: u }, emailRedirectTo: location.origin } });
-  if (error) { $("rg-err").textContent = /registered/i.test(error.message) ? "Email này đã đăng ký. Dùng Quên mật khẩu nếu bạn không nhớ." : errMsg(error); return; }
+  if (error) { $("rg-err").textContent = /registered/i.test(error.message) ? L("Email này đã đăng ký. Dùng Quên mật khẩu nếu bạn không nhớ.", "This email is already registered. Use Forgot password if needed.") : errMsg(error); return; }
   $("f-reg").reset();
-  if (!data.session) { authTab("login"); $("li-e").value = em; $("li-err").textContent = ""; toast("Đã tạo tài khoản. Mở email để xác nhận rồi đăng nhập."); }
-  else { show("auth", false); toast("Tạo tài khoản thành công. Chào " + u + "!"); }
+  if (!data.session) { authTab("login"); $("li-e").value = em; $("li-err").textContent = ""; toast(L("Đã tạo tài khoản. Mở email để xác nhận rồi đăng nhập.", "Account created. Confirm your email, then log in.")); }
+  else { show("auth", false); toast(L("Tạo tài khoản thành công. Chào ", "Account created. Welcome ") + u + "!"); }
 }); };
 $("f-login").onsubmit = e => { e.preventDefault(); busy($("li-btn"), async () => {
   const { error } = await sb.auth.signInWithPassword({ email: $("li-e").value.trim(), password: $("li-p").value });
-  if (error) { $("li-err").textContent = /confirm/i.test(error.message) ? "Email chưa được xác nhận. Kiểm tra hộp thư của bạn." : "Sai email hoặc mật khẩu."; return; }
+  if (error) { $("li-err").textContent = /confirm/i.test(error.message) ? L("Email chưa được xác nhận. Kiểm tra hộp thư của bạn.", "Email not confirmed yet. Check your inbox.") : L("Sai email hoặc mật khẩu.", "Wrong email or password."); return; }
   await loadProfile();
-  if (profile && profile.locked) { await sb.auth.signOut(); $("li-err").textContent = ERR.LOCKED; return; }
+  if (profile && profile.locked) { await sb.auth.signOut(); $("li-err").textContent = errMsg("LOCKED"); return; }
   $("f-login").reset(); show("auth", false); renderUser();
-  if (isAdmin()) openAdmin(); else toast("Đăng nhập thành công.");
+  if (isAdmin()) openAdmin(); else toast(L("Đăng nhập thành công.", "Logged in."));
 }); };
 let fgEmail = "";
 $("fg-send").onclick = () => busy($("fg-send"), async () => {
   fgEmail = $("fg-e").value.trim(); $("fg-err").textContent = "";
-  if (!fgEmail.includes("@")) { $("fg-err").textContent = "Nhập email đã đăng ký."; return; }
+  if (!fgEmail.includes("@")) { $("fg-err").textContent = L("Nhập email đã đăng ký.", "Enter your registered email."); return; }
   const { error } = await sb.auth.resetPasswordForEmail(fgEmail, { redirectTo: location.origin });
-  if (error) { $("fg-err").textContent = /rate|seconds/i.test(error.message) ? "Bạn vừa yêu cầu mã. Chờ 1 phút rồi thử lại." : errMsg(error); return; }
+  if (error) { $("fg-err").textContent = /rate|seconds/i.test(error.message) ? L("Bạn vừa yêu cầu mã. Chờ 1 phút rồi thử lại.", "Code just sent. Wait 1 minute and try again.") : errMsg(error); return; }
   $("fg-to").textContent = fgEmail; show("fg-step1", false); show("fg-step2"); $("fg-c").focus();
 });
 $("fg-ok").onclick = () => busy($("fg-ok"), async () => {
   const token = $("fg-c").value.trim(), pw = $("fg-p").value;
-  if (pw.length < 8) { $("fg-err").textContent = "Mật khẩu mới cần ít nhất 8 ký tự."; return; }
+  if (pw.length < 8) { $("fg-err").textContent = L("Mật khẩu mới cần ít nhất 8 ký tự.", "New password needs at least 8 characters."); return; }
   const { error } = await sb.auth.verifyOtp({ email: fgEmail, token, type: "recovery" });
-  if (error) { $("fg-err").textContent = "Mã không đúng hoặc đã hết hạn."; return; }
+  if (error) { $("fg-err").textContent = L("Mã không đúng hoặc đã hết hạn.", "Wrong or expired code."); return; }
   const { error: e2 } = await sb.auth.updateUser({ password: pw });
   if (e2) { $("fg-err").textContent = errMsg(e2); return; }
-  show("fg-step1"); show("fg-step2", false); $("f-forgot").reset(); show("auth", false); toast("Đã đặt lại mật khẩu. Bạn đã được đăng nhập.");
+  show("fg-step1"); show("fg-step2", false); $("f-forgot").reset(); show("auth", false); toast(L("Đã đặt lại mật khẩu. Bạn đã được đăng nhập.", "Password reset. You are now logged in."));
 });
 $("f-newpw").onsubmit = async e => { e.preventDefault();
   const { error } = await sb.auth.updateUser({ password: $("np-p").value });
   if (error) { $("np-err").textContent = errMsg(error); return; }
-  show("auth", false); toast("Đã lưu mật khẩu mới.");
+  show("auth", false); toast(L("Đã lưu mật khẩu mới.", "New password saved."));
 };
 $("go-forgot").onclick = () => { authTab("forgot"); show("fg-step1"); show("fg-step2", false); };
 $("fg-back").onclick = () => authTab("login");
 $("at-login").onclick = () => authTab("login"); $("at-reg").onclick = () => authTab("reg");
 $("auth-close").onclick = () => show("auth", false);
 $("btn-login").onclick = () => openAuth("login"); $("btn-reg").onclick = () => openAuth("reg");
-async function logout() { await sb.auth.signOut(); profile = null; renderUser(); toast("Đã đăng xuất."); }
+async function logout() { await sb.auth.signOut(); profile = null; renderUser(); toast(L("Đã đăng xuất.", "Logged out.")); }
 $("btn-logout").onclick = logout;
 
 /* ---------- nạp tiền ---------- */
@@ -1678,7 +1783,7 @@ function i18nCrypto() {
   if (topMethod === "usdt" && $("tp-make")) $("tp-make").textContent = en ? ("Create " + coinName() + " payment") : ("T\u1ea1o thanh to\u00e1n " + coinName());
 }
 function openTopup(pre) {
-  if (!profile) { openAuth("login"); toast("Đăng nhập để nạp tiền.", 1); return; }
+  if (!profile) { openAuth("login"); toast(L("Đăng nhập để nạp tiền.", "Log in to top up."), 1); return; }
   topPre = +pre || 0;
   setTopMethod("bank"); show("topup");
 }
@@ -1697,7 +1802,7 @@ $("tp-make").onclick = () => busy($("tp-make"), async () => {
   if (topMethod === "usdt" && raw < coinMin()) { $("tp-err").textContent = LANG === "en" ? (coinName() + " minimum is $" + coinMin() + (cryptoCoin === "ltc" ? "." : ". For smaller amounts choose LTC or use the Bank tab.")) : (coinName() + " tối thiểu $" + coinMin() + (cryptoCoin === "ltc" ? "." : ". Nạp nhỏ/lẻ hơn: chọn LTC hoặc dùng tab Ngân hàng.")); return; }
   const a = topMethod === "usdt" ? Math.round(raw * rate()) : Math.round(raw), mn = +SITE.minTop || 10000;
   if (a < mn) { $("tp-err").textContent = t("Số tiền tối thiểu là ", "min_amt") + vnd(mn) + "."; return; }
-  if (topMethod === "bank" && !SITE.bankAcc) { $("tp-err").textContent = "Shop chưa cài tài khoản ngân hàng."; return; }
+  if (topMethod === "bank" && !SITE.bankAcc) { $("tp-err").textContent = L("Shop chưa cài tài khoản ngân hàng.", "Bank transfer is not set up yet."); return; }
   const { data, error } = await sb.rpc("create_topup", { p_amount: a });
   if (error) { $("tp-err").textContent = errMsg(error); return; }
   curTop = data;
@@ -1705,7 +1810,7 @@ $("tp-make").onclick = () => busy($("tp-make"), async () => {
     try {
       const r = await fetch("/api/crypto-create", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ order_id: data.memo, coin: cryptoCoin }) });
       const j = await r.json();
-      if (!r.ok || !j.pay_address) { $("tp-err").textContent = j.error || "Không tạo được thanh toán."; return; }
+      if (!r.ok || !j.pay_address) { $("tp-err").textContent = (LANG === "en" ? "Could not create the payment. Try again." : (j.error || "Không tạo được thanh toán.")); return; }
       const en = LANG === "en";
       const CO = cryptoCoin === "ltc"
         ? { name: "LTC", full: "Litecoin", net: "Litecoin", color: "#345d9d" }
@@ -1723,15 +1828,15 @@ $("tp-make").onclick = () => busy($("tp-make"), async () => {
       try { const qr = qrcode(0, "M"); qr.addData(j.pay_address); qr.make(); $("cr-qr").innerHTML = qr.createSvgTag(5, 0); } catch (e) { $("cr-qr").innerHTML = ""; }
       $("cr-wait").className = "wait"; $("cr-wait-t").textContent = t("Đang chờ xác nhận trên blockchain…", "cr_wait");
       show("tp-step1", false); show("tp-crypto"); pollCrypto(String(j.payment_id || ""));
-    } catch (e) { $("tp-err").textContent = "Lỗi kết nối, thử lại."; }
+    } catch (e) { $("tp-err").textContent = L("Lỗi kết nối, thử lại.", "Connection error, try again."); }
     return;
   }
   const bank = BANKS.find(b => b[0] === SITE.bankBin);
   $("tp-bank").textContent = bank ? bank[1] : SITE.bankBin; $("tp-acc").textContent = SITE.bankAcc; $("tp-name").textContent = SITE.bankName;
   $("tp-money").textContent = vnd(a); $("tp-money-raw").textContent = String(a); $("tp-memo").textContent = data.memo;
   try { const qr = qrcode(0, "M"); qr.addData(vietqr(SITE.bankBin, String(SITE.bankAcc).replace(/\D/g, ""), a, data.memo)); qr.make(); $("tp-qr").innerHTML = qr.createSvgTag(4, 0); }
-  catch (e) { $("tp-qr").innerHTML = '<div style="color:#333;font-size:12px;padding:12px">Không tạo được QR. Chuyển khoản theo thông tin bên cạnh.</div>'; }
-  $("tp-wait").className = "wait"; $("tp-wait-t").textContent = "Đang chờ ngân hàng báo có… Giữ đúng nội dung chuyển khoản.";
+  catch (e) { $("tp-qr").innerHTML = '<div style="color:#333;font-size:12px;padding:12px">' + L('Không tạo được QR. Chuyển khoản theo thông tin bên cạnh.', 'Could not create the QR. Transfer using the details shown.') + '</div>'; }
+  $("tp-wait").className = "wait"; $("tp-wait-t").textContent = L("Đang chờ ngân hàng báo có… Giữ đúng nội dung chuyển khoản.", "Waiting for the bank… Keep the exact transfer note.");
   show("tp-step1", false); show("tp-step2"); startPoll();
 });
 function startPoll(waitId, waitTxtId) {
@@ -1787,76 +1892,83 @@ $("tp-close").onclick = () => { clearInterval(pollT); show("topup", false); };
 $("pay-crypto") && ($("pay-crypto").onclick = () => { openTopup(); setTopMethod("usdt"); });
 document.querySelectorAll("[data-copy]").forEach(b => b.onclick = async () => {
   const t = $(b.dataset.copy).textContent;
-  try { await navigator.clipboard.writeText(t); b.textContent = "Đã chép"; setTimeout(() => b.textContent = "Chép", 1500); }
+  try { await navigator.clipboard.writeText(t); b.textContent = L("Đã chép", "Copied"); setTimeout(() => b.textContent = L("Chép", "Copy"), 1500); }
   catch (e) { const r = document.createRange(); r.selectNodeContents($(b.dataset.copy === "tp-money-raw" ? "tp-money" : b.dataset.copy)); getSelection().removeAllRanges(); getSelection().addRange(r); }
 });
 
 /* ---------- cảm ơn sau khi mua ---------- */
 function contactsHTML() {
   const list = [["dc", "Discord", "🎮", SITE.linkDc], ["tg", "Telegram", "✈️", SITE.linkTg], ["zl", "Zalo", "💬", SITE.linkZl]].filter(x => x[3] && /^https?:\/\//i.test(x[3]));
-  return list.map(x => `<a class="${x[0]}" href="${esc(x[3])}" target="_blank" rel="noopener"><span class="ci">${x[2]}</span>Nhắn qua ${x[1]}<small>mở ${x[0] === "zl" ? "Zalo" : x[1]}</small></a>`).join("");
+  return list.map(x => `<a class="${x[0]}" href="${esc(x[3])}" target="_blank" rel="noopener"><span class="ci">${x[2]}</span>${L("Nhắn qua", "Message on")} ${x[1]}<small>${L("mở", "open")} ${x[0] === "zl" ? "Zalo" : x[1]}</small></a>`).join("");
 }
 const safeName = s => String(s || "file").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Za-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "file";
 function downloadTxt(filename, text) {
   try { const blob = new Blob([text], { type: "text/plain;charset=utf-8" }); const a = document.createElement("a");
     a.href = URL.createObjectURL(blob); a.download = filename; document.body.appendChild(a); a.click();
     setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000); }
-  catch (e) { toast("Trình duyệt chặn tải file. Hãy copy thủ công.", 1); }
+  catch (e) { toast(L("Trình duyệt chặn tải file. Hãy copy thủ công.", "Download blocked by the browser. Copy manually."), 1); }
 }
 let thMsg = "", thDl = null;
 function openThanks(ord, p, q, tot, vpsInfo) {
-  const label = `${p.name}${plansOf(p).length ? " · " + selDays + " ngày" : ""}`;
+  const label = `${p.name}${plansOf(p).length ? " · " + selDays + " " + L("ngày", "days") : ""}`;
   $("th-sum").textContent = `${label} × ${q} · ${fmt(tot)}`;
   const auto = ord && ord.status === "done" && ord.items;
   if (auto) {
     // giao tự động: hiện tài khoản + nút tải .txt
     const n = ord.items.split("\n").filter(l => l.trim()).length;
     thMsg = ord.items; thDl = { name: `BLUEROBLOX-${safeName(p.name)}-${Date.now()}.txt`, text: ord.items };
-    $("th-title").textContent = "Mua thành công!";
-    $("th-info").textContent = `✓ Đã giao ${n} tài khoản`;
-    $("th-copy").textContent = "📋 Copy tất cả"; show("th-dl");
-    $("th-note").innerHTML = "Bấm <b>Tải file .txt</b> để lưu về máy. Xem lại bất cứ lúc nào trong mục <b>Đơn hàng</b>.";
+    $("th-title").textContent = L("Mua thành công!", "Purchase complete!");
+    $("th-info").textContent = L(`✓ Đã giao ${n} tài khoản`, `✓ ${n} account(s) delivered`);
+    $("th-copy").textContent = L("📋 Copy tất cả", "📋 Copy all"); $("th-dl").textContent = L("⬇ Tải file .txt", "⬇ Download .txt"); show("th-dl");
+    $("th-note").innerHTML = L("Bấm <b>Tải file .txt</b> để lưu về máy. Xem lại bất cứ lúc nào trong mục <b>Đơn hàng</b>.", "Tap <b>Download .txt</b> to save it. You can view it any time in <b>Orders</b>.");
     $("th-contacts").innerHTML = ""; show("thanks"); return;
   }
   // giao thủ công: dẫn tới kênh liên hệ
   const c = contactsHTML();
-  thMsg = `[BLUEROBLOX] Mình vừa mua hàng, cần nhận:\n• Sản phẩm: ${label} × ${q}\n• Đã thanh toán: ${fmt(tot)}\n• Khách: ${profile ? profile.username : ""}${ord && ord.id ? "\n• Mã đơn: " + ord.id : ""}`;
+  thMsg = L(`[BLUEROBLOX] Mình vừa mua hàng, cần nhận:\n• Sản phẩm: ${label} × ${q}\n• Đã thanh toán: ${fmt(tot)}\n• Khách: ${profile ? profile.username : ""}${ord && ord.id ? "\n• Mã đơn: " + ord.id : ""}`,
+    `[BLUEROBLOX] I just bought, please deliver:\n• Product: ${label} × ${q}\n• Paid: ${fmt(tot)}\n• Account: ${profile ? profile.username : ""}${ord && ord.id ? "\n• Order ID: " + ord.id : ""}`);
   thDl = null; show("th-dl", false);
   if (vpsInfo) {
     const code = payCode(ord), t0 = new Date(), pad = n => String(n).padStart(2, "0");
-    const dt = d => `${pad(d.getHours())}:${pad(d.getMinutes())} ngày ${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
+    const dt = d => `${pad(d.getHours())}:${pad(d.getMinutes())} ${L("ngày", "on")} ${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
     const days = plansOf(p).length ? +selDays : 0, exp = days ? new Date(t0.getTime() + days * 864e5) : null;
     const paid = fmt(tot) + (cur === "USD" ? " (" + vnd(tot) + ")" : "");
-    thMsg = `[BLUEROBLOX] ĐÃ THANH TOÁN THÀNH CÔNG — NHỜ SHOP CÀI VPS\n• Mã thanh toán: ${code || "(xem trong Đơn hàng)"}\n• Sản phẩm: ${label}\n• Số lượng VPS: ${q}\n• Đã thanh toán: ${paid}\n• Tài khoản: ${profile ? profile.username : ""}\n` +
-      (vpsInfo.m === "farmv5" ? `• Cách nhận: FarmV5\n• Mã PIN FarmV5: ${vpsInfo.pin}` : `• Cách nhận: FarmSync\n• Mình sẽ gửi ID + mật khẩu UltraViewer ngay sau tin nhắn này`) +
-      `\n• Thời gian mua: ${dt(t0)}` + (exp ? `\n• Thuê: ${days} ngày → Hạn sử dụng: ${dt(exp)}` : "") + `${ord && ord.id ? "\n• Mã đơn: " + ord.id : ""}`;
+    thMsg = LANG === "en"
+      ? `[BLUEROBLOX] PAYMENT SUCCESSFUL — PLEASE SET UP MY VPS\n• Payment code: ${code || "(see Orders)"}\n• Product: ${label}\n• VPS quantity: ${q}\n• Paid: ${paid}\n• Account: ${profile ? profile.username : ""}\n` +
+        (vpsInfo.m === "farmv5" ? `• Method: FarmV5\n• FarmV5 PIN: ${vpsInfo.pin}` : `• Method: FarmSync\n• I will send my UltraViewer ID + password right after this message`) +
+        `\n• Purchased: ${dt(t0)}` + (exp ? `\n• Rental: ${days} days → Expires: ${dt(exp)}` : "") + `${ord && ord.id ? "\n• Order ID: " + ord.id : ""}`
+      : `[BLUEROBLOX] ĐÃ THANH TOÁN THÀNH CÔNG — NHỜ SHOP CÀI VPS\n• Mã thanh toán: ${code || "(xem trong Đơn hàng)"}\n• Sản phẩm: ${label}\n• Số lượng VPS: ${q}\n• Đã thanh toán: ${paid}\n• Tài khoản: ${profile ? profile.username : ""}\n` +
+        (vpsInfo.m === "farmv5" ? `• Cách nhận: FarmV5\n• Mã PIN FarmV5: ${vpsInfo.pin}` : `• Cách nhận: FarmSync\n• Mình sẽ gửi ID + mật khẩu UltraViewer ngay sau tin nhắn này`) +
+        `\n• Thời gian mua: ${dt(t0)}` + (exp ? `\n• Thuê: ${days} ngày → Hạn sử dụng: ${dt(exp)}` : "") + `${ord && ord.id ? "\n• Mã đơn: " + ord.id : ""}`;
     try { if (ord && ord.id) localStorage.setItem("br_vmsg_" + ord.id, thMsg); } catch (e) {}
-    $("th-title").textContent = "Thanh toán thành công!";
-    $("th-sum").innerHTML = `${esc(label)} × ${q} · ${fmt(tot)}<br>Mã thanh toán: <b style="color:var(--gold-hi);font-family:var(--mono);font-size:16px">${esc(code)}</b>` + (exp ? `<br>Hạn sử dụng: <b style="color:var(--gold-hi)">${dt(exp)}</b>` : "");
-    $("th-info").textContent = thMsg; $("th-copy").textContent = "📋 Copy tin nhắn gửi shop";
+    $("th-title").textContent = L("Thanh toán thành công!", "Payment successful!");
+    $("th-sum").innerHTML = `${esc(label)} × ${q} · ${fmt(tot)}<br>${L("Mã thanh toán", "Payment code")}: <b style="color:var(--gold-hi);font-family:var(--mono);font-size:16px">${esc(code)}</b>` + (exp ? `<br>${L("Hạn sử dụng", "Expires")}: <b style="color:var(--gold-hi)">${dt(exp)}</b>` : "");
+    $("th-info").textContent = thMsg; $("th-copy").textContent = L("📋 Copy tin nhắn gửi shop", "📋 Copy message for the shop");
     $("th-note").innerHTML = vpsInfo.m === "farmv5"
-      ? "Bước 1: bấm <b>Copy tin nhắn</b>. Bước 2: bấm một kênh bên dưới, <b>dán và gửi</b> cho shop. Shop nhận tin có <b>mã thanh toán + mã PIN</b> sẽ bắt đầu cài FarmV5."
-      : "Bước 1: bấm <b>Copy tin nhắn</b>. Bước 2: bấm một kênh bên dưới, <b>dán và gửi</b> cho shop, rồi gửi tiếp <b>ID + mật khẩu UltraViewer</b>. Shop sẽ vào cài FarmSync.";
+      ? L("Bước 1: bấm <b>Copy tin nhắn</b>. Bước 2: bấm một kênh bên dưới, <b>dán và gửi</b> cho shop. Shop nhận tin có <b>mã thanh toán + mã PIN</b> sẽ bắt đầu cài FarmV5.",
+          "Step 1: tap <b>Copy message</b>. Step 2: tap a channel below, <b>paste and send</b> it to the shop. Setup of FarmV5 starts once the shop gets your <b>payment code + PIN</b>.")
+      : L("Bước 1: bấm <b>Copy tin nhắn</b>. Bước 2: bấm một kênh bên dưới, <b>dán và gửi</b> cho shop, rồi gửi tiếp <b>ID + mật khẩu UltraViewer</b>. Shop sẽ vào cài FarmSync.",
+          "Step 1: tap <b>Copy message</b>. Step 2: tap a channel below, <b>paste and send</b> it to the shop, then send your <b>UltraViewer ID + password</b>. The shop will set up FarmSync.");
     $("th-contacts").innerHTML = c || (SITE.zalo ? `<div class="note" style="text-align:center">Zalo shop: <b>${esc(SITE.zalo)}</b></div>` : "");
     show("thanks"); return;
   }
-  if (!SITE.afterBuy || !c) { toast("Đặt hàng thành công. Xem mục Đơn hàng."); openOrders(); return; }
-  $("th-title").textContent = "Đặt hàng thành công!";
-  $("th-info").textContent = thMsg; $("th-copy").textContent = "📋 Copy thông tin đơn";
-  $("th-note").innerHTML = "Bấm <b>Copy</b>, rồi bấm một kênh bên dưới và <b>dán + gửi</b> cho shop để nhận hàng.";
+  if (!SITE.afterBuy || !c) { toast(L("Đặt hàng thành công. Xem mục Đơn hàng.", "Order placed. See Orders.")); openOrders(); return; }
+  $("th-title").textContent = L("Đặt hàng thành công!", "Order placed!");
+  $("th-info").textContent = thMsg; $("th-copy").textContent = L("📋 Copy thông tin đơn", "📋 Copy order details");
+  $("th-note").innerHTML = L("Bấm <b>Copy</b>, rồi bấm một kênh bên dưới và <b>dán + gửi</b> cho shop để nhận hàng.", "Tap <b>Copy</b>, then tap a channel below and <b>paste + send</b> it to the shop to receive your order.");
   $("th-contacts").innerHTML = c; show("thanks");
 }
 $("th-dl").onclick = () => { if (thDl) downloadTxt(thDl.name, thDl.text); };
 $("th-copy").onclick = async () => {
   const base = $("th-copy").textContent;
-  try { await navigator.clipboard.writeText(thMsg); $("th-copy").textContent = "✓ Đã copy"; setTimeout(() => $("th-copy").textContent = base, 2000); }
-  catch (e) { const r = document.createRange(); r.selectNodeContents($("th-info")); getSelection().removeAllRanges(); getSelection().addRange(r); toast("Bôi đen sẵn rồi, bấm Ctrl+C để copy.", 0); }
+  try { await navigator.clipboard.writeText(thMsg); $("th-copy").textContent = L("✓ Đã copy", "✓ Copied"); setTimeout(() => $("th-copy").textContent = base, 2000); }
+  catch (e) { const r = document.createRange(); r.selectNodeContents($("th-info")); getSelection().removeAllRanges(); getSelection().addRange(r); toast(L("Bôi đen sẵn rồi, bấm Ctrl+C để copy.", "Selected — press Ctrl+C to copy."), 0); }
 };
 $("th-close").onclick = () => show("thanks", false);
 $("th-orders").onclick = () => { show("thanks", false); openOrders(); };
 
 /* ---------- đơn hàng của khách ---------- */
-const ordPill = s => s === "pending" ? '<span class="pill wt">Đang chuẩn bị</span>' : s === "refunded" ? '<span class="pill bad">Đã huỷ · hoàn tiền</span>' : '<span class="pill ok">Đã giao</span>';
+const ordPill = s => s === "pending" ? `<span class="pill wt">${L("Đang chuẩn bị", "Preparing")}</span>` : s === "refunded" ? `<span class="pill bad">${L("Đã huỷ · hoàn tiền", "Cancelled · refunded")}</span>` : `<span class="pill ok">${L("Đã giao", "Delivered")}</span>`;
 let minePending = null, mineT = null, myOrders = [];
 async function watchMine() {
   clearInterval(mineT); if (!profile) return;
@@ -1866,8 +1978,8 @@ async function watchMine() {
     const now = new Set((data || []).map(x => x.id));
     if (minePending) for (const id of minePending) if (!now.has(id)) {
       const { data: o } = await sb.from("orders").select("status,product_name").eq("id", id).maybeSingle();
-      if (o && o.status === "done") toast("Đơn " + o.product_name + " đã được giao! Mở mục Đơn hàng để xem.");
-      if (o && o.status === "refunded") toast("Đơn " + o.product_name + " đã huỷ, tiền đã hoàn vào số dư.", 1);
+      if (o && o.status === "done") toast(L("Đơn ", "Order ") + o.product_name + L(" đã được giao! Mở mục Đơn hàng để xem.", " delivered! Open Orders to view."));
+      if (o && o.status === "refunded") toast(L("Đơn ", "Order ") + o.product_name + L(" đã huỷ, tiền đã hoàn vào số dư.", " was cancelled and refunded to your balance."), 1);
       await loadProfile(); renderUser(); if (!$("orders").hidden) openOrders();
     }
     minePending = now; if (!now.size) clearInterval(mineT);
@@ -1876,7 +1988,7 @@ async function watchMine() {
 }
 async function openOrders() {
   if (!profile) { openAuth("login"); return; }
-  $("or-list").innerHTML = `<div class="empty">Đang tải…</div>`; show("orders");
+  $("or-list").innerHTML = `<div class="empty">${L("Đang tải…", "Loading…")}</div>`; show("orders");
   const [o, t] = await Promise.all([
     sb.from("orders").select("*").eq("user_id", profile.id).order("created_at", { ascending: false }).limit(100),
     sb.from("topups").select("*").eq("user_id", profile.id).order("created_at", { ascending: false }).limit(50)]);
@@ -1884,26 +1996,26 @@ async function openOrders() {
   const rows = [...(o.data || []).map(x => {
     const done = x.status === "done" && x.items, n = done ? x.items.split("\n").filter(l => l.trim()).length : 0;
     const body = done
-      ? `<div class="oacts"><span class="okt">✓ ${n} tài khoản</span><button class="btn okb sm" data-dl="${x.id}">⬇ Tải .txt</button><button class="btn ghost sm" data-cp="${x.id}">📋 Copy</button><button class="btn ghost sm" data-view="${x.id}">👁 Xem</button></div><pre id="opre-${x.id}" hidden>${esc(x.items)}</pre>`
+      ? `<div class="oacts"><span class="okt">✓ ${n} ${L("tài khoản", "account(s)")}</span><button class="btn okb sm" data-dl="${x.id}">⬇ ${L("Tải .txt", "Download .txt")}</button><button class="btn ghost sm" data-cp="${x.id}">📋 Copy</button><button class="btn ghost sm" data-view="${x.id}">👁 ${L("Xem", "View")}</button></div><pre id="opre-${x.id}" hidden>${esc(x.items)}</pre>`
       : (() => { let m = null; try { m = localStorage.getItem("br_vmsg_" + x.id); } catch (e) {}
-          return `<div class="hint">${esc(x.items || "")}</div>` + (m && x.status === "pending" ? `<div class="oacts"><span class="hint" style="margin-right:auto">Mã thanh toán: <b style="color:var(--gold-hi)">${esc(payCode(x))}</b></span><button class="btn sm" data-cpmsg="${x.id}">📋 Copy tin nhắn gửi shop</button></div>` : ""); })();
-    return { t: x.created_at, h: `<div class="oi"><div class="h"><b>${esc(x.product_name)} × ${x.qty}</b><span style="color:${x.status === "refunded" ? "var(--muted)" : "var(--bad)"};font-family:var(--mono)">${x.status === "refunded" ? "Đã hoàn" : "−" + vnd(x.total)}</span></div><div class="hint">${ago(x.created_at)} · ${ordPill(x.status)}</div>${body}</div>` };
+          return `<div class="hint">${esc(x.items || "")}</div>` + (m && x.status === "pending" ? `<div class="oacts"><span class="hint" style="margin-right:auto">${L("Mã thanh toán", "Payment code")}: <b style="color:var(--gold-hi)">${esc(payCode(x))}</b></span><button class="btn sm" data-cpmsg="${x.id}">📋 ${L("Copy tin nhắn gửi shop", "Copy message for the shop")}</button></div>` : ""); })();
+    return { t: x.created_at, h: `<div class="oi"><div class="h"><b>${esc(x.product_name)} × ${x.qty}</b><span style="color:${x.status === "refunded" ? "var(--muted)" : "var(--bad)"};font-family:var(--mono)">${x.status === "refunded" ? L("Đã hoàn", "Refunded") : "−" + fmt(x.total)}</span></div><div class="hint">${ago(x.created_at)} · ${ordPill(x.status)}</div>${body}</div>` };
   }),
-    ...(t.data || []).map(x => ({ t: x.created_at, h: `<div class="oi"><div class="h"><b>Nạp tiền · ${esc(x.memo)}</b><span style="color:${x.status === "done" ? "var(--ok)" : "var(--gold)"};font-family:var(--mono)">${x.status === "done" ? "+" : ""}${vnd(x.amount)}</span></div><div class="hint">${ago(x.created_at)} · ${x.status === "done" ? "Thành công" : "Đang chờ chuyển khoản"}</div></div>` }))]
+    ...(t.data || []).map(x => ({ t: x.created_at, h: `<div class="oi"><div class="h"><b>${L("Nạp tiền", "Top-up")} · ${esc(x.memo)}</b><span style="color:${x.status === "done" ? "var(--ok)" : "var(--gold)"};font-family:var(--mono)">${x.status === "done" ? "+" : ""}${fmt(x.amount)}</span></div><div class="hint">${ago(x.created_at)} · ${x.status === "done" ? L("Thành công", "Completed") : L("Đang chờ chuyển khoản", "Waiting for payment")}</div></div>` }))]
     .sort((a, b) => new Date(b.t) - new Date(a.t));
-  $("or-list").innerHTML = rows.length ? rows.map(r => r.h).join("") : `<div class="empty">Bạn chưa có đơn hàng hay lệnh nạp nào.</div>`;
+  $("or-list").innerHTML = rows.length ? rows.map(r => r.h).join("") : `<div class="empty">${L("Bạn chưa có đơn hàng hay lệnh nạp nào.", "You have no orders or top-ups yet.")}</div>`;
 }
 $("or-close").onclick = () => show("orders", false);
 $("or-list").onclick = async e => {
   const cm = e.target.closest("[data-cpmsg]");
   if (cm) { let m = ""; try { m = localStorage.getItem("br_vmsg_" + cm.dataset.cpmsg) || ""; } catch (er) {}
-    try { await navigator.clipboard.writeText(m); cm.textContent = "✓ Đã copy"; setTimeout(() => cm.textContent = "📋 Copy tin nhắn gửi shop", 1800); } catch (er) { toast("Không copy được, hãy mở lại đơn.", 1); } return; }
+    try { await navigator.clipboard.writeText(m); cm.textContent = L("✓ Đã copy", "✓ Copied"); setTimeout(() => cm.textContent = L("📋 Copy tin nhắn gửi shop", "📋 Copy message for the shop"), 1800); } catch (er) { toast(L("Không copy được, hãy mở lại đơn.", "Could not copy, reopen the order."), 1); } return; }
   const dl = e.target.closest("[data-dl]"), cp = e.target.closest("[data-cp]"), vw = e.target.closest("[data-view]");
   if (dl) { const o = myOrders.find(x => x.id === dl.dataset.dl); if (o && o.items) downloadTxt(`BLUEROBLOX-${safeName(o.product_name)}-${Date.now()}.txt`, o.items); }
   if (cp) { const o = myOrders.find(x => x.id === cp.dataset.cp); if (!o) return;
-    try { await navigator.clipboard.writeText(o.items); cp.textContent = "✓ Đã copy"; setTimeout(() => cp.textContent = "📋 Copy", 1800); }
-    catch (err) { const pre = $("opre-" + o.id); if (pre) { pre.hidden = false; const r = document.createRange(); r.selectNodeContents(pre); getSelection().removeAllRanges(); getSelection().addRange(r); } toast("Bôi đen sẵn, bấm Ctrl+C.", 0); } }
-  if (vw) { const pre = $("opre-" + vw.dataset.view); if (pre) { pre.hidden = !pre.hidden; vw.textContent = pre.hidden ? "👁 Xem" : "🙈 Ẩn"; } }
+    try { await navigator.clipboard.writeText(o.items); cp.textContent = L("✓ Đã copy", "✓ Copied"); setTimeout(() => cp.textContent = "📋 Copy", 1800); }
+    catch (err) { const pre = $("opre-" + o.id); if (pre) { pre.hidden = false; const r = document.createRange(); r.selectNodeContents(pre); getSelection().removeAllRanges(); getSelection().addRange(r); } toast(L("Bôi đen sẵn, bấm Ctrl+C.", "Selected — press Ctrl+C."), 0); } }
+  if (vw) { const pre = $("opre-" + vw.dataset.view); if (pre) { pre.hidden = !pre.hidden; vw.textContent = pre.hidden ? "👁 " + L("Xem", "View") : "🙈 " + L("Ẩn", "Hide"); } }
 };
 
 /* ---------- ADMIN ---------- */
@@ -1914,10 +2026,12 @@ async function loadAdmin() {
     sb.from("profiles").select("*").order("created_at", { ascending: false }).limit(1000),
     sb.from("topups").select("*").order("created_at", { ascending: false }).limit(100),
     sb.from("orders").select("*").order("created_at", { ascending: false }).limit(100)]);
+  const vm = await sb.from("vps_machines").select("*").order("expires_at");
+  ADM.vps = vm.data || [];
   const pend = await sb.from("orders").select("*").eq("status", "pending").order("created_at");
   const seen = new Set(), orders = [...(pend.data || []), ...(o.data || [])].filter(x => !seen.has(x.id) && seen.add(x.id));
-  ADM = { users: u.data || [], topups: t.data || [], orders };
-  renderTable(); renderCust(); renderTx(); renderOrd();
+  ADM = { users: u.data || [], topups: t.data || [], orders, vps: (ADM.vps || []) };
+  renderTable(); renderCust(); renderTx(); renderOrd(); renderVps();
 }
 const uname = id => { const u = ADM.users.find(x => x.id === id); return u ? u.username : "?"; };
 function renderTable() {
@@ -1951,20 +2065,27 @@ function renderOrd() {
   setBadge(ADM.orders.filter(o => o.status === "pending").length);
 }
 function setBadge(n) { for (const id of ["ord-badge", "adm-badge"]) { $(id).textContent = n; show(id, n > 0); } document.title = (n > 0 ? `(${n}) ` : "") + document.title.replace(/^\(\d+\) /, ""); }
-let delOrder = null, refundArm = false;
+let delOrder = null, refundArm = false, delVps = false;
 $("otbl").onclick = e => {
   const d = e.target.closest("[data-deliver]"), v = e.target.closest("[data-view]");
   const o = ADM.orders.find(x => x.id === (d || v || {}).dataset?.deliver || x.id === (v || {}).dataset?.view); if (!o) return;
   delOrder = o; refundArm = false; $("dl-refund").textContent = "Huỷ đơn & hoàn tiền";
+  const prod = P.find(x => x.id === o.product_id); delVps = prod ? !!prod.manual : (o.days != null);
   $("dl-info").textContent = `${uname(o.user_id)} · ${o.product_name} × ${o.qty} · ${vnd(o.total)} · ${ago(o.created_at)}`;
   const pending = o.status === "pending";
+  if (pending && delVps) $("dl-items").placeholder = `Mỗi dòng 1 tên máy (cần ${o.qty} máy). VD: BR-VPS-01`;
   $("dl-items").value = pending ? "" : o.items; $("dl-items").readOnly = !pending; $("dl-err").textContent = "";
-  $("dl-title").textContent = pending ? "Giao đơn hàng" : "Chi tiết đơn"; show("dl-save", pending); show("dl-refund", pending);
+  $("dl-title").textContent = pending ? (delVps ? "Giao VPS — nhập TÊN MÁY (mỗi dòng 1 máy)" : "Giao đơn hàng") : "Chi tiết đơn"; show("dl-save", pending); show("dl-refund", pending);
   show("deldlg"); if (pending) $("dl-items").focus();
 };
 $("dl-cancel").onclick = () => show("deldlg", false);
 $("dl-save").onclick = () => busy($("dl-save"), async () => {
   const items = $("dl-items").value; if (!items.trim()) { $("dl-err").textContent = ERR.EMPTY; return; }
+  if (delVps) {
+    const { data, error } = await sb.rpc("admin_assign_vps", { p_order: delOrder.id, p_names: items });
+    if (error) { $("dl-err").textContent = errMsg(error); return; }
+    show("deldlg", false); toast(data ? ("Đã giao " + data + " máy VPS cho khách.") : "Đơn này đã được xử lý trước đó."); await loadAdmin(); return;
+  }
   const { data, error } = await sb.rpc("admin_deliver_order", { p_order: delOrder.id, p_items: items });
   if (error) { $("dl-err").textContent = errMsg(error); return; }
   show("deldlg", false); toast(data ? "Đã giao cho khách." : "Đơn này đã được xử lý trước đó."); await loadAdmin();
@@ -1980,7 +2101,7 @@ async function pollPending() {
   const { count } = await sb.from("orders").select("id", { count: "exact", head: true }).eq("status", "pending");
   const prev = +($("adm-badge").textContent || 0);
   setBadge(count || 0);
-  if ((count || 0) > prev) toast(`Có ${count} đơn đang chờ giao.`);
+  if ((count || 0) > prev) toast(L(`Có ${count} đơn đang chờ giao.`, `${count} order(s) waiting to be delivered.`));
   if (!$("drawer").hidden && (count || 0) !== prev) loadAdmin();
 }
 setInterval(pollPending, 30000);
@@ -2015,8 +2136,25 @@ function openCust(id) {
   $("cd-lock").textContent = u.locked ? "Mở khoá" : "Khoá tài khoản";
   const self = u.id === profile.id || u.role === "admin";
   show("cd-delete", !self); show("cd-lock", u.id !== profile.id);
+  renderCustVps(id);
   show("custdlg");
 }
+function renderCustVps(uid) {
+  const list = (ADM.vps || []).filter(m => m.user_id === uid);
+  $("cd-vps-n").textContent = list.length ? `(${list.filter(m => m.status === "active").length} đang chạy)` : "(chưa có máy)";
+  $("cd-vps").innerHTML = list.length ? list.map(m => `<div class="vmi" style="padding:9px 11px"><div class="top"><div class="nm" style="font-size:14px">🖥 ${esc(m.machine_name)}<small>${new Date(m.expires_at).toLocaleString("vi-VN")}</small></div>${vpsPill(m)}</div>
+    <div class="acts"><button class="btn okb sm" data-cvext="${m.id}">+30 ngày</button><button class="btn ghost sm" data-cvedit="${m.id}">Sửa / Xoá</button></div></div>`).join("")
+    : `<div class="hint" style="padding:6px 0">Khách này chưa có máy VPS nào.</div>`;
+}
+$("cd-vps") && ($("cd-vps").onclick = async e => {
+  const ext = e.target.closest("[data-cvext]"), ed = e.target.closest("[data-cvedit]");
+  if (ext) { const { error } = await sb.rpc("admin_vps_extend", { p_machine: ext.dataset.cvext, p_days: 30 }); if (error) return toast(errMsg(error), 1); toast("Đã cộng 30 ngày."); await loadAdmin(); renderCustVps(custId); }
+  if (ed) openVmdlg(ed.dataset.cvedit);
+});
+$("cd-vps-add") && ($("cd-vps-add").onclick = () => {
+  const u = ADM.users.find(x => x.id === custId); if (!u) return;
+  show("custdlg", false); setTab("vps"); $("vc-user").value = u.username; $("vc-name").focus();
+});
 $("cd-cancel").onclick = () => show("custdlg", false);
 $("cd-save").onclick = () => busy($("cd-save"), async () => {
   const u = ADM.users.find(x => x.id === custId); if (!u) return;
@@ -2165,7 +2303,7 @@ async function saveSettings(patch, btn, msg) { await busy(btn, async () => {
 $("sf").onsubmit = e => { e.preventDefault(); const p = {}; for (const k of Object.keys(DEF_SITE)) { const el = $("sf-" + k); if (el) p[k] = el.type === "checkbox" ? el.checked : k === "rate" ? (+el.value || 25000) : el.value.trim(); } saveSettings(p, $("sf-save"), "Đã lưu nội dung trang."); };
 $("bf").onsubmit = e => { e.preventDefault(); const acc = $("bf-acc").value.replace(/\D/g, ""); if (acc.length < 6) return toast("Số tài khoản chưa đúng.", 1);
   saveSettings({ bankBin: $("bf-bin").value, bankAcc: acc, bankName: $("bf-name").value.trim().toUpperCase(), prefix: ($("bf-prefix").value.trim().toUpperCase().replace(/[^A-Z0-9]/g, "") || "BR"), minTop: Math.max(1000, +$("bf-min").value || 10000) }, $("bf-save"), "Đã lưu tài khoản ngân hàng."); };
-function setTab(t) { document.querySelectorAll("#adm-tabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === t)); ["prod", "cust", "tx", "ord", "bank", "site"].forEach(x => show("pane-" + x, x === t)); }
+function setTab(t) { document.querySelectorAll("#adm-tabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === t)); ["prod", "cust", "tx", "ord", "vps", "bank", "site"].forEach(x => show("pane-" + x, x === t)); if (t === "vps") renderVps(); }
 $("adm-tabs").onclick = e => { const b = e.target.closest("button"); if (!b) return; if (b.dataset.tab === "site" || b.dataset.tab === "bank") fillSite(); setTab(b.dataset.tab); };
 $("admin-open").onclick = openAdmin; $("admin-close").onclick = () => show("drawer", false);
 $("adm-refresh").onclick = () => busy($("adm-refresh"), async () => { await Promise.all([loadProducts(), loadSettings(), loadAdmin()]); toast("Đã tải lại."); });
@@ -2186,7 +2324,7 @@ document.querySelectorAll(".modal").forEach(m => m.addEventListener("click", e =
 document.addEventListener("keydown", e => { if (e.key === "Escape") { show("drawer", false); document.querySelectorAll(".modal").forEach(m => m.hidden = true); sel = null; clearInterval(pollT); } });
 
 /* ---------- khởi động ---------- */
-try { $("lang-vi").classList.toggle("on", LANG === "vi"); $("lang-en").classList.toggle("on", LANG === "en"); } catch(e){} applyStatic(); renderSite(); renderCats();
+try { $("lang-vi").classList.toggle("on", LANG === "vi"); $("lang-en").classList.toggle("on", LANG === "en"); $("cur-vnd").classList.toggle("on", cur === "VND"); $("cur-usd").classList.toggle("on", cur === "USD"); } catch(e){} applyStatic(); renderSite(); renderCats();
 sb.auth.onAuthStateChange((ev, s) => {
   session = s;
   setTimeout(async () => { await loadProfile(); renderUser(); if (ev === "PASSWORD_RECOVERY") openAuth("newpw"); if (profile) { minePending = null; watchMine(); pollPending(); } }, 0);
@@ -2361,6 +2499,161 @@ window.BRfxOn = true; // luôn bật chuyển động, không còn nút tắt
     requestAnimationFrame(loop);
   })(0);
 })();
+
+
+/* ================= MÁY VPS ================= */
+function vpsDaysLeft(exp) { return Math.ceil((new Date(exp).getTime() - Date.now()) / 86400000); }
+function vpsPill(m) {
+  if (m.status === "cancelled") return `<span class="vpill off">${L("Đã huỷ", "Cancelled")}</span>`;
+  const d = vpsDaysLeft(m.expires_at);
+  if (d < 0) return `<span class="vpill exp">${L("Đã hết hạn", "Expired")} ${-d}${L(" ngày", "d")}</span>`;
+  if (d <= 3) return `<span class="vpill soon">${L("Còn", "")} ${d} ${L("ngày", "d")}</span>`;
+  return `<span class="vpill ok">${L("Còn", "")} ${d} ${L("ngày", "d")}</span>`;
+}
+const vpsExp = m => new Date(m.expires_at).toLocaleString(LANG === "en" ? "en-GB" : "vi-VN");
+
+/* ----- phía khách ----- */
+let myMachines = [];
+async function openVmach() {
+  if (!profile) { openAuth("login"); return; }
+  $("vm-list").innerHTML = `<div class="empty">${L("Đang tải…", "Loading…")}</div>`; show("vmach");
+  const { data } = await sb.from("vps_machines").select("*").eq("user_id", profile.id).order("expires_at");
+  myMachines = (data || []);
+  const live = myMachines.filter(m => m.status !== "cancelled");
+  if (!live.length) { $("vm-list").innerHTML = `<div class="empty">${L("Bạn chưa có máy VPS nào.", "You have no VPS machines yet.")}</div>`; return; }
+  $("vm-list").innerHTML = live.map(m => `<div class="vmi"><div class="top"><div class="nm">🖥 ${esc(m.machine_name)}<small>${esc(m.product_name)}</small></div>${vpsPill(m)}</div>
+    <div class="exp">${L("Hết hạn", "Expires")}: ${vpsExp(m)}</div>
+    <div class="acts"><button class="btn sm" data-renew="${m.id}">🔄 ${L("Gia hạn", "Renew")}</button><button class="btn ghost sm" data-vcancel="${m.id}">${L("Huỷ bỏ", "Cancel")}</button></div></div>`).join("");
+}
+$("vm-close").onclick = () => show("vmach", false);
+$("nav-vps").onclick = () => openVmach();
+$("vm-list").onclick = e => {
+  const r = e.target.closest("[data-renew]"), c = e.target.closest("[data-vcancel]");
+  if (r) openRenew(r.dataset.renew);
+  if (c) vpsCancel(c.dataset.vcancel);
+};
+async function vpsCancel(id) {
+  if (!confirm(L("Huỷ bỏ máy này khỏi danh sách? Bạn sẽ không được nhắc gia hạn nữa.", "Remove this machine from your list? You won't be reminded to renew."))) return;
+  const { error } = await sb.rpc("cancel_vps", { p_machine: id });
+  if (error) { toast(errMsg(error), 1); return; }
+  toast(L("Đã huỷ máy.", "Machine cancelled.")); openVmach(); checkVpsExpiry();
+}
+
+/* ----- gia hạn ----- */
+let rnMachine = null, rnDays = null;
+function renewPlans(m) {
+  const prod = P.find(x => x.id === m.product_id), pl = prod ? plansOf(prod) : [];
+  if (pl.length) return pl;
+  return [{ days: m.plan_days || 30, price: m.renew_price || 0 }];
+}
+function openRenew(id) {
+  const m = myMachines.find(x => x.id === id); if (!m) return;
+  rnMachine = m; const pl = renewPlans(m);
+  rnDays = (pl.find(x => +x.days === +m.plan_days) || pl[0]).days;
+  $("rn-name").textContent = "🖥 " + m.machine_name + " · " + m.product_name;
+  $("rn-plans").innerHTML = pl.map(x => `<button type="button" data-d="${x.days}" class="${+x.days === +rnDays ? "on" : ""}"><b>${x.days} ${L("ngày", "days")}</b><small>${fmt(+x.price)}</small></button>`).join("");
+  renewUpd(); show("renewdlg");
+}
+function renewUpd() {
+  const m = rnMachine, pl = renewPlans(m), x = pl.find(p => +p.days === +rnDays) || pl[0];
+  const base = Math.max(Date.now(), new Date(m.expires_at).getTime());
+  const exp = new Date(base + rnDays * 86400000);
+  $("rn-newexp").textContent = exp.toLocaleString(LANG === "en" ? "en-GB" : "vi-VN");
+  $("rn-total").textContent = fmt(+x.price);
+  $("rn-bal").textContent = profile ? fmt(profile.balance) : "—";
+  $("rn-err").textContent = profile && profile.balance < +x.price ? L("Số dư không đủ. Cần nạp thêm ", "Not enough balance. Top up ") + fmt(+x.price - profile.balance) + "." : "";
+  $("rn-ok").textContent = profile && profile.balance < +x.price ? t("Nạp tiền", "topup") : t("Thanh toán", "pay");
+}
+$("rn-plans").onclick = e => { const b = e.target.closest("button"); if (!b) return; rnDays = +b.dataset.d; $("rn-plans").querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b)); renewUpd(); };
+$("rn-cancel").onclick = () => show("renewdlg", false);
+$("rn-ok").onclick = () => busy($("rn-ok"), async () => {
+  const pl = renewPlans(rnMachine), x = pl.find(p => +p.days === +rnDays) || pl[0];
+  if (profile.balance < +x.price) { show("renewdlg", false); openTopup(Math.max(+SITE.minTop || 10000, Math.ceil((+x.price - profile.balance) / 1000) * 1000)); return; }
+  const { error } = await sb.rpc("renew_vps", { p_machine: rnMachine.id, p_days: rnDays });
+  if (error) { $("rn-err").textContent = errMsg(error); return; }
+  show("renewdlg", false); await loadProfile(); renderUser();
+  toast(L("Gia hạn thành công!", "Renewed successfully!")); openVmach(); checkVpsExpiry();
+});
+
+/* ----- báo sắp/đã hết hạn ----- */
+let vpsNotified = false;
+async function checkVpsExpiry() {
+  if (!profile) return;
+  const { data } = await sb.from("vps_machines").select("id,expires_at,status").eq("user_id", profile.id).eq("status", "active");
+  const soon = (data || []).filter(m => vpsDaysLeft(m.expires_at) <= 3);
+  const badge = $("vps-nav-badge");
+  if (badge) { badge.textContent = soon.length || ""; show("vps-nav-badge", soon.length > 0); }
+  if (soon.length && !vpsNotified) {
+    vpsNotified = true;
+    toast(L(`Bạn có ${soon.length} máy VPS sắp/đã hết hạn — mở "VPS của tôi" để gia hạn.`, `${soon.length} VPS machine(s) expiring — open "My VPS" to renew.`), 1);
+  }
+}
+
+/* ================= ADMIN: máy VPS ================= */
+function renderVps() {
+  const box = $("vtbl"); if (!box) return;
+  const q = ($("vq") && $("vq").value.trim().toLowerCase()) || "";
+  const list = (ADM.vps || []).filter(m => {
+    if (!q) return true;
+    return m.machine_name.toLowerCase().includes(q) || uname(m.user_id).toLowerCase().includes(q);
+  });
+  const active = (ADM.vps || []).filter(m => m.status === "active");
+  if ($("vk-total")) $("vk-total").textContent = active.length;
+  if ($("vk-soon")) $("vk-soon").textContent = active.filter(m => { const d = vpsDaysLeft(m.expires_at); return d >= 0 && d <= 3; }).length;
+  if ($("vk-exp")) $("vk-exp").textContent = active.filter(m => vpsDaysLeft(m.expires_at) < 0).length;
+  const soon = active.filter(m => vpsDaysLeft(m.expires_at) <= 3).length;
+  if ($("vps-badge")) { $("vps-badge").textContent = soon || ""; show("vps-badge", soon > 0); }
+  box.innerHTML = list.length ? list.map(m => `<tr><td><b>${esc(uname(m.user_id))}</b></td><td>🖥 ${esc(m.machine_name)}</td><td>${esc(m.product_name)}</td>
+    <td class="num">${new Date(m.expires_at).toLocaleString("vi-VN")}</td><td>${vpsPill(m)}</td>
+    <td style="text-align:right;white-space:nowrap"><button class="btn okb sm" data-vext="${m.id}">+30</button> <button class="btn ghost sm" data-vedit="${m.id}">Sửa</button></td></tr>`).join("")
+    : `<tr><td colspan="6" style="color:var(--muted);text-align:center;padding:24px">Chưa có máy VPS nào.</td></tr>`;
+}
+if ($("vq")) $("vq").oninput = renderVps;
+$("vtbl") && ($("vtbl").onclick = async e => {
+  const ext = e.target.closest("[data-vext]"), ed = e.target.closest("[data-vedit]");
+  if (ext) { const { error } = await sb.rpc("admin_vps_extend", { p_machine: ext.dataset.vext, p_days: 30 }); if (error) return toast(errMsg(error), 1); toast("Đã cộng 30 ngày."); await loadAdmin(); }
+  if (ed) openVmdlg(ed.dataset.vedit);
+});
+let vmEdit = null;
+function openVmdlg(id) {
+  const m = (ADM.vps || []).find(x => x.id === id); if (!m) return;
+  vmEdit = m; $("vmd-info").textContent = `${uname(m.user_id)} · ${m.product_name}`;
+  $("vmd-name").value = m.machine_name;
+  const d = new Date(m.expires_at); d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  $("vmd-exp").value = d.toISOString().slice(0, 16);
+  $("vmd-add").textContent = ""; $("vmd-err").textContent = ""; show("vmdlg");
+}
+$("vmd-cancel").onclick = () => show("vmdlg", false);
+document.querySelector("#vmdlg .amts").onclick = e => {
+  const b = e.target.closest("[data-add]"); if (!b) return;
+  const cur = new Date($("vmd-exp").value || vmEdit.expires_at);
+  cur.setDate(cur.getDate() + (+b.dataset.add));
+  cur.setMinutes(cur.getMinutes() - cur.getTimezoneOffset());
+  $("vmd-exp").value = cur.toISOString().slice(0, 16);
+  $("vmd-add").textContent = "Hạn mới: " + new Date($("vmd-exp").value).toLocaleString("vi-VN");
+};
+$("vmd-save").onclick = () => busy($("vmd-save"), async () => {
+  const name = $("vmd-name").value.trim(), exp = $("vmd-exp").value ? new Date($("vmd-exp").value).toISOString() : null;
+  const { error } = await sb.rpc("admin_vps_set", { p_machine: vmEdit.id, p_name: name, p_expires: exp });
+  if (error) { $("vmd-err").textContent = errMsg(error); return; }
+  show("vmdlg", false); toast("Đã lưu máy."); await loadAdmin();
+});
+let vmDelArm = false;
+$("vmd-del").onclick = () => busy($("vmd-del"), async () => {
+  if (!vmDelArm) { vmDelArm = true; $("vmd-del").textContent = "Bấm lần nữa để xoá"; setTimeout(() => { vmDelArm = false; $("vmd-del").textContent = "Xoá máy"; }, 3000); return; }
+  vmDelArm = false; $("vmd-del").textContent = "Xoá máy";
+  const { error } = await sb.rpc("admin_vps_delete", { p_machine: vmEdit.id });
+  if (error) { $("vmd-err").textContent = errMsg(error); return; }
+  show("vmdlg", false); toast("Đã xoá máy."); await loadAdmin();
+});
+$("vcf") && ($("vcf").onsubmit = e => { e.preventDefault(); busy($("vc-save"), async () => {
+  const un = $("vc-user").value.trim().toLowerCase();
+  const u = ADM.users.find(x => x.username.toLowerCase() === un);
+  if (!u) { $("vc-err").textContent = "Không tìm thấy khách tên này."; return; }
+  const { error } = await sb.rpc("admin_vps_create", { p_user: u.id, p_name: $("vc-name").value.trim(), p_days: +$("vc-days").value || 30, p_product_name: $("vc-prod").value.trim() || "VPS" });
+  if (error) { $("vc-err").textContent = errMsg(error); return; }
+  $("vcf").reset(); $("vc-days").value = 30; $("vc-prod").value = "VPS GPU ROBLOX"; toast("Đã tạo máy cho khách."); await loadAdmin();
+}); });
 
 </script>
 </body>

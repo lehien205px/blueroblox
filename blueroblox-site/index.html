@@ -866,9 +866,15 @@ window.BR_CONFIG = {
   <div class="dpanel" role="dialog" aria-modal="true" aria-labelledby="d-title">
     <div class="dhead"><h2 id="d-title">Bảng <span>quản trị</span></h2><button class="btn ghost sm" id="adm-refresh">Tải lại</button><button class="btn ghost sm" id="adm-logout">Đăng xuất</button><button class="btn ghost sm" id="admin-close">Đóng</button></div>
     <div class="tabs" id="adm-tabs">
-      <button class="on" data-tab="prod">Sản phẩm</button><button data-tab="cust">Khách hàng</button><button data-tab="tx">Nạp tiền</button><button data-tab="ord">Đơn hàng <span class="badge" id="ord-badge" hidden></span></button><button data-tab="vps">Máy VPS <span class="badge" id="vps-badge" hidden></span></button><button data-tab="bank">Ngân hàng</button><button data-tab="site">Nội dung trang</button>
+      <button class="on" data-tab="stats">📊 Thống kê</button><button data-tab="prod">Sản phẩm</button><button data-tab="cust">Khách hàng</button><button data-tab="tx">Nạp tiền</button><button data-tab="ord">Đơn hàng <span class="badge" id="ord-badge" hidden></span></button><button data-tab="vps">Máy VPS <span class="badge" id="vps-badge" hidden></span></button><button data-tab="bank">Ngân hàng</button><button data-tab="site">Nội dung trang</button>
     </div>
-    <div class="dbody" id="pane-prod">
+    <div class="dbody" id="pane-stats" hidden>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><h3 style="margin:0">Tổng quan cửa hàng</h3><span class="hint" id="st-time"></span><button class="btn ghost sm" id="st-reload" style="margin-left:auto">Tải lại</button></div>
+      <div class="tiles" style="grid-template-columns:repeat(4,1fr)" id="st-tiles"></div>
+      <h3 style="margin:6px 0 0">Top sản phẩm bán chạy</h3>
+      <div class="tbl"><table><thead><tr><th>Sản phẩm</th><th>Lượt bán</th><th>Doanh thu</th></tr></thead><tbody id="st-top"></tbody></table></div>
+    </div>
+    <div class="dbody" id="pane-prod" hidden>
       <form class="f" id="pf">
         <h3 id="pf-title">Thêm sản phẩm</h3>
         <label class="full">Tên sản phẩm<input id="pf-n" required maxlength="120" placeholder="VD: Clone aged 90 ngày"></label>
@@ -2019,7 +2025,7 @@ $("or-list").onclick = async e => {
 };
 
 /* ---------- ADMIN ---------- */
-async function openAdmin() { if (!isAdmin()) return; fillSite(); resetForm(); show("drawer"); await loadAdmin(); }
+async function openAdmin() { if (!isAdmin()) return; fillSite(); resetForm(); setTab("stats"); show("drawer"); await loadAdmin(); loadStats(); }
 async function loadAdmin() {
   if (!isAdmin()) return;
   const [u, t, o] = await Promise.all([
@@ -2303,7 +2309,7 @@ async function saveSettings(patch, btn, msg) { await busy(btn, async () => {
 $("sf").onsubmit = e => { e.preventDefault(); const p = {}; for (const k of Object.keys(DEF_SITE)) { const el = $("sf-" + k); if (el) p[k] = el.type === "checkbox" ? el.checked : k === "rate" ? (+el.value || 25000) : el.value.trim(); } saveSettings(p, $("sf-save"), "Đã lưu nội dung trang."); };
 $("bf").onsubmit = e => { e.preventDefault(); const acc = $("bf-acc").value.replace(/\D/g, ""); if (acc.length < 6) return toast("Số tài khoản chưa đúng.", 1);
   saveSettings({ bankBin: $("bf-bin").value, bankAcc: acc, bankName: $("bf-name").value.trim().toUpperCase(), prefix: ($("bf-prefix").value.trim().toUpperCase().replace(/[^A-Z0-9]/g, "") || "BR"), minTop: Math.max(1000, +$("bf-min").value || 10000) }, $("bf-save"), "Đã lưu tài khoản ngân hàng."); };
-function setTab(t) { document.querySelectorAll("#adm-tabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === t)); ["prod", "cust", "tx", "ord", "vps", "bank", "site"].forEach(x => show("pane-" + x, x === t)); if (t === "vps") renderVps(); }
+function setTab(t) { document.querySelectorAll("#adm-tabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === t)); ["stats", "prod", "cust", "tx", "ord", "vps", "bank", "site"].forEach(x => show("pane-" + x, x === t)); if (t === "vps") renderVps(); if (t === "stats") loadStats(); }
 $("adm-tabs").onclick = e => { const b = e.target.closest("button"); if (!b) return; if (b.dataset.tab === "site" || b.dataset.tab === "bank") fillSite(); setTab(b.dataset.tab); };
 $("admin-open").onclick = openAdmin; $("admin-close").onclick = () => show("drawer", false);
 $("adm-refresh").onclick = () => busy($("adm-refresh"), async () => { await Promise.all([loadProducts(), loadSettings(), loadAdmin()]); toast("Đã tải lại."); });
@@ -2654,6 +2660,38 @@ $("vcf") && ($("vcf").onsubmit = e => { e.preventDefault(); busy($("vc-save"), a
   if (error) { $("vc-err").textContent = errMsg(error); return; }
   $("vcf").reset(); $("vc-days").value = 30; $("vc-prod").value = "VPS GPU ROBLOX"; toast("Đã tạo máy cho khách."); await loadAdmin();
 }); });
+
+
+/* ================= THỐNG KÊ ADMIN ================= */
+async function loadStats() {
+  if (!isAdmin()) return;
+  const box = $("st-tiles"); if (!box) return;
+  box.innerHTML = `<div class="hint">Đang tải số liệu…</div>`;
+  const { data: s, error } = await sb.rpc("admin_stats");
+  if (error || !s) { box.innerHTML = `<div class="hint">Chưa tải được (hãy chạy file stats.sql trong Supabase).</div>`; return; }
+  $("st-time").textContent = "Cập nhật: " + (s.generated_at || "");
+  const tile = (b, lab, hot) => `<div${hot ? ' style="border-color:rgba(233,192,99,.4)"' : ""}><b${hot ? ' style="color:var(--gold-hi)"' : ""}>${b}</b><span>${lab}</span></div>`;
+  box.innerHTML = [
+    tile(vnd(s.revenue_total), "Tổng doanh thu", 1),
+    tile(vnd(s.revenue_today), "Doanh thu hôm nay"),
+    tile(vnd(s.revenue_month), "Doanh thu tháng này"),
+    tile(vnd(s.topup_total), "Tổng đã nạp"),
+    tile((+s.clone_qty).toLocaleString("vi-VN"), "Clone đã bán"),
+    tile(vnd(s.clone_revenue), "DT clone"),
+    tile((+s.vps_orders).toLocaleString("vi-VN"), "Lượt bán VPS"),
+    tile(vnd(s.vps_revenue), "DT VPS"),
+    tile((+s.vps_active).toLocaleString("vi-VN"), "Máy VPS đang chạy"),
+    tile((+s.vps_expiring).toLocaleString("vi-VN"), "VPS sắp hết hạn"),
+    tile((+s.vps_expired).toLocaleString("vi-VN"), "VPS đã hết hạn"),
+    tile((+s.customers).toLocaleString("vi-VN"), "Khách đăng ký"),
+    tile(vnd(s.balance_total), "Tổng số dư khách"),
+    tile((+s.orders_done).toLocaleString("vi-VN"), "Tổng đơn đã bán"),
+  ].join("");
+  $("st-top").innerHTML = (s.top_products || []).length
+    ? s.top_products.map(t => `<tr><td>${esc(t.name)}</td><td class="num">${(+t.orders).toLocaleString("vi-VN")}</td><td class="num">${vnd(t.revenue)}</td></tr>`).join("")
+    : `<tr><td colspan="3" style="text-align:center;color:var(--muted);padding:16px">Chưa có đơn nào.</td></tr>`;
+}
+$("st-reload") && ($("st-reload").onclick = loadStats);
 
 </script>
 </body>

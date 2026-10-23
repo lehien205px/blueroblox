@@ -1003,6 +1003,7 @@ window.BR_CONFIG = {
       </div>
 
       <div class="bizpane" id="biz-fin" hidden>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><h3 style="margin:0">Báo cáo tài chính</h3><button class="btn ghost sm" type="button" id="tg-test" style="margin-left:auto">📨 Test bot Telegram</button><span class="hint" id="tg-test-r"></span></div>
         <div class="tiles" id="bzf-report" style="grid-template-columns:repeat(4,1fr)"></div>
         <div class="f" style="grid-template-columns:1fr 1fr"><h3>Nợ gốc & đã trả</h3>
           <label>Nợ gốc ban đầu (VND)<input id="bzc-debt" type="number" step="1000"></label>
@@ -2194,16 +2195,16 @@ $("dl-save").onclick = () => busy($("dl-save"), async () => {
     if (lines.length !== (+delOrder.qty || 1) && !confirm(`Đơn mua ${delOrder.qty} máy nhưng bạn nhập ${lines.length} tên. Vẫn tạo ${lines.length} máy?`)) return;
     const { data, error } = await sb.rpc("admin_assign_vps", { p_order: delOrder.id, p_names: items });
     if (error) { $("dl-err").textContent = errMsg(error); return; }
-    show("deldlg", false); toast(data ? ("Đã tạo " + data + " máy VPS cho khách.") : "Đơn đã xử lý."); await loadAdmin(); return;
+    show("deldlg", false); toast(data ? ("Đã tạo " + data + " máy VPS cho khách.") : "Đơn đã xử lý."); notifyTg("📦 Đã giao VPS cho " + uname(delOrder.user_id) + " (" + delOrder.product_name + ")"); await loadAdmin(); return;
   }
   if (delOrder.status !== "pending") {
     const { error } = await sb.rpc("admin_edit_order", { p_order: delOrder.id, p_items: items });
     if (error) { $("dl-err").textContent = errMsg(error); return; }
-    show("deldlg", false); toast("Đã lưu chỉnh sửa đơn."); await loadAdmin(); return;
+    show("deldlg", false); toast("Đã lưu chỉnh sửa đơn."); notifyTg("✏️ Đã sửa đơn của " + uname(delOrder.user_id) + " (" + delOrder.product_name + ")"); await loadAdmin(); return;
   }
   const { data, error } = await sb.rpc("admin_deliver_order", { p_order: delOrder.id, p_items: items });
   if (error) { $("dl-err").textContent = errMsg(error); return; }
-  show("deldlg", false); toast(data ? "Đã giao cho khách." : "Đơn này đã được xử lý trước đó."); await loadAdmin();
+  show("deldlg", false); toast(data ? "Đã giao cho khách." : "Đơn này đã được xử lý trước đó."); if (data) notifyTg("📦 Đã giao đơn cho " + uname(delOrder.user_id) + " (" + delOrder.product_name + ")"); await loadAdmin();
 });
 $("dl-refund").onclick = () => busy($("dl-refund"), async () => {
   if (!refundArm) { refundArm = true; $("dl-refund").textContent = "Bấm lần nữa để hoàn tiền"; setTimeout(() => { refundArm = false; $("dl-refund").textContent = "Huỷ đơn & hoàn tiền"; }, 3000); return; }
@@ -2842,12 +2843,12 @@ async function bizSave(table, obj, resetFn) {
   if (id) { delete obj.id; res = await sb.from(table).update(obj).eq("id", id); }
   else { delete obj.id; res = await sb.from(table).insert(obj); }
   if (res.error) { toast(errMsg(res.error), 1); return; }
-  toast("Đã lưu."); resetFn && resetFn(); await loadBiz();
+  toast("Đã lưu."); notifyTg("🖥️ [Nội bộ] Vừa cập nhật dữ liệu: " + table.replace("biz_","")); resetFn && resetFn(); await loadBiz();
 }
 async function bizDel(table, id) {
   if (!confirm("Xoá mục này? Không khôi phục được.")) return;
   const { error } = await sb.from(table).delete().eq("id", id);
-  if (error) { toast(errMsg(error), 1); return; } toast("Đã xoá."); await loadBiz();
+  if (error) { toast(errMsg(error), 1); return; } toast("Đã xoá."); notifyTg("🗑️ [Nội bộ] Vừa xoá 1 mục: " + table.replace("biz_","")); await loadBiz();
 }
 $("biz-tabs") && ($("biz-tabs").onclick = e => { const b = e.target.closest("button"); if (!b) return;
   $("biz-tabs").querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b));
@@ -2967,6 +2968,21 @@ $("bzc-save") && ($("bzc-save").onclick = async () => {
 $("bzd-f") && ($("bzd-f").onsubmit = e => { e.preventDefault();
   bizSave("biz_debts", { amount: bzNum("bzd-amount"), descr: $("bzd-descr").value.trim(), at: $("bzd-at").value || new Date().toISOString().slice(0,10) }, () => { ["bzd-amount","bzd-descr","bzd-at"].forEach(i => $(i).value = ""); }); });
 $("bzd-tbl") && ($("bzd-tbl").onclick = e => { const del = e.target.closest("[data-bzd-del]"); if (del) bizDel("biz_debts", del.dataset.bzdDel); });
+
+
+/* ---- báo Telegram cho admin khi có thay đổi ---- */
+function notifyTg(text) {
+  try { fetch("/api/notify-admin", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) }).catch(() => {}); } catch (e) {}
+}
+$("tg-test") && ($("tg-test").onclick = async () => {
+  $("tg-test-r").textContent = "Đang gửi…";
+  try {
+    const r = await fetch("/api/notify-admin", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: "🔔 <b>TEST BOT BLUEROBLOX</b>\nBot Telegram hoạt động tốt! " + new Date().toLocaleString("vi-VN") }) });
+    const j = await r.json();
+    if (j.ok) { $("tg-test-r").innerHTML = "<b style='color:var(--ok)'>✓ Đã gửi — kiểm tra Telegram</b>"; toast("Đã gửi tin test về Telegram."); }
+    else { $("tg-test-r").innerHTML = "<b style='color:var(--bad)'>✗ Chưa gửi được</b>: " + esc(j.reason || ""); toast("Chưa gửi được: " + (j.reason || "kiểm tra TELEGRAM_* trên Vercel"), 1); }
+  } catch (e) { $("tg-test-r").textContent = "Lỗi kết nối."; }
+});
 
 </script>
 </body>

@@ -1,12 +1,16 @@
 // Tạo yêu cầu thanh toán USDT qua NOWPayments.
 // Frontend gọi: POST /api/crypto-create  body { order_id }  (order_id = memo của lệnh nạp đã tạo)
 // Biến môi trường Vercel: NOWPAYMENTS_API_KEY, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, (SITE_URL)
-const { sb, body } = require("./_lib");
+const { sb, body, rateLimit } = require("./_lib");
 const SITE = process.env.SITE_URL || "https://www.blueroblox.shop";
 const PAY_CURRENCY = process.env.CRYPTO_PAY_CURRENCY || "usdttrc20"; // USDT mạng TRC20
 
 module.exports = async (req, res) => {
   if (req.method !== "POST") return res.status(405).json({ error: "method" });
+  // Chống spam: mỗi IP tối đa 8 lần tạo thanh toán / phút
+  if (!(await rateLimit(req, "crypto-create", 8, 60))) {
+    return res.status(429).json({ error: "Bạn thao tác quá nhanh. Chờ một chút rồi thử lại." });
+  }
   const key = process.env.NOWPAYMENTS_API_KEY;
   if (!key) return res.status(500).json({ error: "NOWPAYMENTS_API_KEY chưa cấu hình" });
 

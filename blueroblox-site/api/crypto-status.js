@@ -1,8 +1,14 @@
 // Hỏi trạng thái 1 lệnh thanh toán crypto từ NOWPayments (để hiện tiến trình % cho khách).
 // Frontend gọi: POST /api/crypto-status  body { payment_id }
 // Biến môi trường: NOWPAYMENTS_API_KEY
+const { rateLimit } = require("./_lib");
+
 module.exports = async (req, res) => {
   if (req.method !== "POST") return res.status(405).json({ error: "method" });
+  // Chống spam: mỗi IP tối đa 40 lần hỏi trạng thái / phút (web tự hỏi mỗi 8 giây)
+  if (!(await rateLimit(req, "crypto-status", 40, 60))) {
+    return res.status(200).json({ payment_status: "waiting" });
+  }
   const key = process.env.NOWPAYMENTS_API_KEY;
   if (!key) return res.status(500).json({ error: "no key" });
   const data = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});

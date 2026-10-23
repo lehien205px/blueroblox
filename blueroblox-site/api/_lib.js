@@ -12,6 +12,21 @@ async function sb(path, opt = {}) {
 const rpc = (fn, args) => sb(`/rest/v1/rpc/${fn}`, { method: "POST", body: JSON.stringify(args) });
 const userOf = async id => (await sb(`/rest/v1/profiles?select=username,email&id=eq.${encodeURIComponent(id)}`))[0] || {};
 
+// IP thật của khách (Vercel đặt trong x-forwarded-for / x-real-ip)
+function clientIp(req) {
+  const h = req.headers || {};
+  const xff = String(h["x-forwarded-for"] || "").split(",")[0].trim();
+  return xff || h["x-real-ip"] || h["cf-connecting-ip"] || "unknown";
+}
+// Giới hạn tần suất theo IP: trả về true nếu ĐƯỢC phép, false nếu vượt hạn mức.
+// Lỗi kết nối DB → không chặn (tránh tự khoá web khi DB chập chờn).
+async function rateLimit(req, action, limit, windowSec) {
+  try {
+    const ok = await rpc("rl_hit", { p_key: `${action}:${clientIp(req)}`, p_limit: limit, p_window: windowSec });
+    return ok === true;
+  } catch (e) { return true; }
+}
+
 const esc = s => String(s ?? "").replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
 const vnd = n => Math.round(+n || 0).toLocaleString("vi-VN") + "đ";
 const body = req => typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
@@ -36,4 +51,4 @@ async function mail(to, subject, html) {
   return r.json();
 }
 
-module.exports = { sb, rpc, userOf, esc, vnd, body, tg, tgTo, mail };
+module.exports = { sb, rpc, userOf, esc, vnd, body, tg, tgTo, mail, clientIp, rateLimit };

@@ -819,6 +819,9 @@ window.BR_CONFIG = {
   <div class="dlg wide" role="dialog" aria-modal="true" aria-labelledby="sk-title">
     <h3 id="sk-title">Nhập kho</h3>
     <div class="hint" id="sk-name"></div>
+    <label class="full">🏷️ Nhập kho của bên nào <span class="hint">(nguồn/nhà cung cấp — chỉ admin thấy, khách KHÔNG thấy)</span>
+      <input class="in" id="sk-source" maxlength="60" placeholder="VD: Bên A, shop Tèo, tự reg…" autocomplete="off"></label>
+    <div class="hint" id="sk-srcinfo" style="display:none"></div>
     <label class="full">Chọn file .txt (mỗi dòng 1 tài khoản) — không giới hạn dung lượng, chọn được nhiều file cùng lúc
       <input class="in" id="sk-file" type="file" accept=".txt,text/plain" multiple></label>
     <label>Hoặc dán thêm vào đây (mỗi dòng là 1 tài khoản giao cho khách, VD: <code>user|pass</code>)
@@ -2274,7 +2277,8 @@ function skCount() {
   $("sk-count").innerHTML = n.toLocaleString("vi-VN") + " tài khoản" + (skFile.length ? ` <span style="color:var(--muted)">(${skFile.length.toLocaleString("vi-VN")} dòng từ ${skNames.length} file: ${esc(skNames.slice(0, 3).join(", "))}${skNames.length > 3 ? "…" : ""})</span> <button class="btn ghost sm" type="button" id="sk-unfile">Bỏ file</button>` : "");
   const u = $("sk-unfile"); if (u) u.onclick = () => { skFile = []; skNames = []; $("sk-file").value = ""; skCount(); };
 }
-function openStock(id) { stockFor = id; const p = P.find(x => x.id === id); $("sk-name").textContent = p.name + " · đang còn " + (+p.stock || 0).toLocaleString("vi-VN") + " tài khoản"; $("sk-lines").value = ""; $("sk-file").value = ""; skFile = []; skNames = []; skCount(); $("sk-err").textContent = ""; show("stockdlg"); }
+async function loadStockSrc(id) { try { const { data } = await sb.rpc("admin_stock_by_source", { p_product: id }); const el = $("sk-srcinfo"); if (!el) return; if (data && data.length) { el.style.display = "block"; el.innerHTML = "Tồn theo nguồn: " + data.map(s => `<b>${esc(s.source)}</b>: ${(+s.n).toLocaleString("vi-VN")}`).join(" · "); } else el.style.display = "none"; } catch (e) {} }
+function openStock(id) { stockFor = id; $("sk-source") && ($("sk-source").value = ""); loadStockSrc(id); const p = P.find(x => x.id === id); $("sk-name").textContent = p.name + " · đang còn " + (+p.stock || 0).toLocaleString("vi-VN") + " tài khoản"; $("sk-lines").value = ""; $("sk-file").value = ""; skFile = []; skNames = []; skCount(); $("sk-err").textContent = ""; show("stockdlg"); }
 $("sk-file").onchange = async () => {
   const fs = [...($("sk-file").files || [])]; if (!fs.length) return;
   $("sk-err").textContent = ""; $("sk-count").textContent = "Đang đọc file…";
@@ -2295,7 +2299,7 @@ $("sk-save").onclick = () => busy($("sk-save"), async () => {
   for (let i = 0; i < all.length; i += SK_CHUNK) {
     const part = all.slice(i, i + SK_CHUNK);
     let error = null;
-    for (let k = 0; k < 3; k++) { ({ error } = await sb.rpc("admin_add_stock", { p_product: stockFor, p_lines: part.join("\n") })); if (!error) break; await new Promise(r => setTimeout(r, 1500)); }
+    for (let k = 0; k < 3; k++) { ({ error } = await sb.rpc("admin_add_stock", { p_product: stockFor, p_lines: part.join("\n"), p_source: ($("sk-source") && $("sk-source").value.trim()) || null })); if (!error) break; await new Promise(r => setTimeout(r, 1500)); }
     if (error) {
       $("sk-err").textContent = `Dừng ở dòng ${(i + 1).toLocaleString("vi-VN")}: ${errMsg(error)}. Đã thêm ${done.toLocaleString("vi-VN")} dòng — phần còn lại đã giữ trong ô, bấm "Thêm vào kho" để tiếp tục.`;
       skFile = all.slice(i); skNames = ["phần còn lại"]; $("sk-lines").value = ""; skCount(); await loadProducts(); return;

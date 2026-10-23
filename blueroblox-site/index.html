@@ -842,6 +842,19 @@ window.BR_CONFIG = {
   <div class="dlg wide" role="dialog" aria-modal="true" aria-labelledby="dl-title">
     <h3 id="dl-title">Giao đơn hàng</h3>
     <div class="hint" id="dl-info"></div>
+    <div id="dl-srcwrap" hidden style="margin:8px 0;padding:10px;border:1px solid rgba(120,150,210,.25);border-radius:12px;background:rgba(10,16,38,.5)">
+      <div class="hint" style="margin-bottom:6px">Loại máy giao (để tính lời — chỉ admin thấy, khách KHÔNG thấy):</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button type="button" class="btn sm on" id="dl-src-home">🏠 Máy nhà (tự xưởng)</button>
+        <button type="button" class="btn ghost sm" id="dl-src-rent">🌐 Máy thuê bên khác</button>
+      </div>
+      <div id="dl-rentbox" hidden style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:10px">
+        <label style="font-size:13px">Thuê của ai<input class="in" id="dl-vendor" placeholder="VD: Bên B, shop X…" autocomplete="off"></label>
+        <label style="font-size:13px">Giá LẤY / máy (VND)<input class="in" id="dl-vcost" type="number" step="1000" placeholder="0"></label>
+        <label style="font-size:13px">Giá BÁN khách / máy (VND)<input class="in" id="dl-cprice" type="number" step="1000" placeholder="0"></label>
+      </div>
+      <div class="hint" id="dl-profit" style="margin-top:8px"></div>
+    </div>
     <label id="dl-orig-wrap" hidden style="color:#9fb0d0">📄 Dữ liệu CŨ (chỉ để xem, không sửa)
       <textarea class="in" id="dl-orig" rows="5" readonly style="font-family:var(--mono);font-size:13px;background:rgba(6,10,28,.75);opacity:.85"></textarea></label>
     <label id="dl-new-lb">Thông tin giao cho khách, mỗi dòng 1 sản phẩm (VD: <code>IP:port|user|pass</code>). Đơn có gói ngày sẽ tự thêm ngày hết hạn.
@@ -2169,7 +2182,7 @@ function renderOrd() {
   setBadge(ADM.orders.filter(o => o.status === "pending").length);
 }
 function setBadge(n) { for (const id of ["ord-badge", "adm-badge"]) { $(id).textContent = n; show(id, n > 0); } document.title = (n > 0 ? `(${n}) ` : "") + document.title.replace(/^\(\d+\) /, ""); }
-let delOrder = null, refundArm = false, delVps = false, delAssign = false;
+let delOrder = null, refundArm = false, delVps = false, delAssign = false, delSrc = "home";
 $("otbl").onclick = e => {
   const d = e.target.closest("[data-deliver]"), v = e.target.closest("[data-view]");
   const o = ADM.orders.find(x => x.id === (d || v || {}).dataset?.deliver || x.id === (v || {}).dataset?.view); if (!o) return;
@@ -2188,9 +2201,41 @@ $("otbl").onclick = e => {
   $("dl-title").textContent = delAssign ? `Giao VPS — nhập TÊN MÁY (cần ${o.qty} máy)` : (o.status === "pending" ? "Giao đơn hàng" : "Sửa đơn đã giao");
   $("dl-save").textContent = delAssign ? "Giao cho khách" : (o.status === "pending" ? "Giao cho khách" : "💾 Lưu chỉnh sửa");
   show("dl-save", editable); show("dl-refund", o.status === "pending"); show("dl-vpsbar", delAssign);
-  if (delAssign) dlCount();
+  show("dl-srcwrap", delAssign);
+  if (delAssign) { setDelSrc("home"); const unit = Math.round((+o.total || 0) / Math.max(+o.qty || 1, 1)); $("dl-cprice").value = unit || ""; $("dl-vcost").value = ""; $("dl-vendor").value = ""; dlProfit(); dlCount(); }
   show("deldlg"); if (editable) $("dl-items").focus();
 };
+function setDelSrc(s) { delSrc = s; $("dl-src-home").classList.toggle("on", s === "home"); $("dl-src-home").classList.toggle("ghost", s !== "home"); $("dl-src-rent").classList.toggle("on", s === "rent"); $("dl-src-rent").classList.toggle("ghost", s !== "rent"); show("dl-rentbox", s === "rent"); dlProfit(); }
+function dlProfit() {
+  if (!delOrder) return; const qty = +delOrder.qty || 1;
+  if (delSrc === "rent") {
+    const vc = +($("dl-vcost").value) || 0, cp = +($("dl-cprice").value) || 0, loi = (cp - vc) * qty;
+    $("dl-profit").innerHTML = `Thuê ngoài: lấy <b>${vnd(vc)}</b>/máy · bán <b>${vnd(cp)}</b>/máy × ${qty} máy → <b style="color:${loi >= 0 ? "var(--ok)" : "var(--bad)"}">lời ${vnd(loi)}</b> (đã trừ tiền thuê). Sẽ ghi vào "Xưởng ngoài".`;
+  } else {
+    $("dl-profit").innerHTML = `Máy nhà: doanh thu <b>${vnd(delOrder.total)}</b> cho ${qty} máy. Sẽ ghi vào "Dàn máy nhà" (web tự tính điện/khấu hao/lãi).`;
+  }
+}
+$("dl-src-home") && ($("dl-src-home").onclick = () => setDelSrc("home"));
+$("dl-src-rent") && ($("dl-src-rent").onclick = () => setDelSrc("rent"));
+["dl-vcost", "dl-cprice", "dl-vendor"].forEach(id => $(id) && $(id).addEventListener("input", dlProfit));
+// Ghi máy đã giao vào kho nội bộ biz_sync để báo cáo lời tự cập nhật (đồng bộ cả phần mềm).
+async function bizRecordDelivered(o, names) {
+  try {
+    const qty = +o.qty || 1, days = +o.days || 0, code = (names.split("\n").map(s => s.trim()).filter(Boolean)[0] || o.product_name) + (qty > 1 ? ` +${qty - 1}` : "");
+    const exp = toolExpire(days), today = toolToday(), cust = uname(o.user_id);
+    if (delSrc === "rent") {
+      const vc = +($("dl-vcost").value) || 0, cp = +($("dl-cprice").value) || Math.round((+o.total || 0) / qty);
+      const arr = (await bizGetBlob("sub_rents", [])).slice();
+      arr.unshift({ vendor: $("dl-vendor").value.trim() || "Bên ngoài", code, qty, cust, contact: "", days, vendor_cost: vc, client_price: cp, price: cp * qty, created_date: today, expire: exp, note: "Từ đơn web #" + String(o.id).slice(0, 8) });
+      await bizPutBlob("sub_rents", arr);
+      notifyTg(`🌐 VPS thuê ngoài: ${$("dl-vendor").value.trim() || "?"} · lấy ${vnd(vc)}/máy, bán ${vnd(cp)}/máy × ${qty} → lời ${vnd((cp - vc) * qty)}`);
+    } else {
+      const arr = (await bizGetBlob("servers", [])).slice();
+      arr.unshift({ zone: "VPS", code, qty, cust, contact: "", ultra_id: "", ultra_pass: "", unit_price: Math.round((+o.total || 0) / qty), price: +o.total || 0, days, created_date: today, expire: exp, note: "Từ đơn web #" + String(o.id).slice(0, 8) });
+      await bizPutBlob("servers", arr);
+    }
+  } catch (e) { /* không chặn việc giao nếu ghi nội bộ lỗi */ }
+}
 $("dl-cancel").onclick = () => show("deldlg", false);
 $("dl-save").onclick = () => busy($("dl-save"), async () => {
   const items = $("dl-items").value; if (!items.trim()) { $("dl-err").textContent = ERR.EMPTY; return; }
@@ -2199,6 +2244,7 @@ $("dl-save").onclick = () => busy($("dl-save"), async () => {
     if (lines.length !== (+delOrder.qty || 1) && !confirm(`Đơn mua ${delOrder.qty} máy nhưng bạn nhập ${lines.length} tên. Vẫn tạo ${lines.length} máy?`)) return;
     const { data, error } = await sb.rpc("admin_assign_vps", { p_order: delOrder.id, p_names: items });
     if (error) { $("dl-err").textContent = errMsg(error); return; }
+    if (data) await bizRecordDelivered(delOrder, items);
     show("deldlg", false); toast(data ? ("Đã tạo " + data + " máy VPS cho khách.") : "Đơn đã xử lý."); notifyTg("📦 Đã giao VPS cho " + uname(delOrder.user_id) + " (" + delOrder.product_name + ")"); await loadAdmin(); return;
   }
   if (delOrder.status !== "pending") {

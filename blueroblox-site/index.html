@@ -2083,11 +2083,13 @@ $("otbl").onclick = e => {
   const prod = P.find(x => x.id === o.product_id); delVps = prod ? !!prod.manual : (o.days != null);
   const hasMach = (ADM.vps || []).some(m => m.order_id === o.id);
   delAssign = delVps && !hasMach;                      // tạo máy được: đơn chờ, hoặc đơn đã giao mà chưa có máy
-  const editable = o.status === "pending" || delAssign;
+  const isEdit = !delAssign && o.status !== "pending";  // đơn đã giao → cho sửa nội dung
+  const editable = o.status === "pending" || delAssign || isEdit;
   $("dl-info").textContent = `${uname(o.user_id)} · ${o.product_name} × ${o.qty} · ${vnd(o.total)} · ${ago(o.created_at)}`;
   $("dl-items").placeholder = delAssign ? `Mỗi dòng 1 tên máy — hoặc dán "54-118-10-254-665" rồi bấm Tách nhanh (cần ${o.qty} máy)` : "";
-  $("dl-items").value = editable ? "" : o.items; $("dl-items").readOnly = !editable; $("dl-err").textContent = "";
-  $("dl-title").textContent = delAssign ? `Giao VPS — nhập TÊN MÁY (cần ${o.qty} máy)` : (o.status === "pending" ? "Giao đơn hàng" : "Chi tiết đơn");
+  $("dl-items").value = (o.status === "pending" || delAssign) ? "" : o.items; $("dl-items").readOnly = !editable; $("dl-err").textContent = "";
+  $("dl-title").textContent = delAssign ? `Giao VPS — nhập TÊN MÁY (cần ${o.qty} máy)` : (o.status === "pending" ? "Giao đơn hàng" : "Sửa đơn đã giao");
+  $("dl-save").textContent = delAssign ? "Giao cho khách" : (o.status === "pending" ? "Giao cho khách" : "💾 Lưu chỉnh sửa");
   show("dl-save", editable); show("dl-refund", o.status === "pending"); show("dl-vpsbar", delAssign);
   if (delAssign) dlCount();
   show("deldlg"); if (editable) $("dl-items").focus();
@@ -2101,6 +2103,11 @@ $("dl-save").onclick = () => busy($("dl-save"), async () => {
     const { data, error } = await sb.rpc("admin_assign_vps", { p_order: delOrder.id, p_names: items });
     if (error) { $("dl-err").textContent = errMsg(error); return; }
     show("deldlg", false); toast(data ? ("Đã tạo " + data + " máy VPS cho khách.") : "Đơn đã xử lý."); await loadAdmin(); return;
+  }
+  if (delOrder.status !== "pending") {
+    const { error } = await sb.rpc("admin_edit_order", { p_order: delOrder.id, p_items: items });
+    if (error) { $("dl-err").textContent = errMsg(error); return; }
+    show("deldlg", false); toast("Đã lưu chỉnh sửa đơn."); await loadAdmin(); return;
   }
   const { data, error } = await sb.rpc("admin_deliver_order", { p_order: delOrder.id, p_items: items });
   if (error) { $("dl-err").textContent = errMsg(error); return; }

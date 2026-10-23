@@ -59,6 +59,14 @@ module.exports = async (req, res) => {
     if (!r.ok || !p.pay_address) {
       return res.status(400).json({ error: p.message || "NOWPayments từ chối. Có thể số tiền quá nhỏ — hãy nạp nhiều hơn hoặc dùng tab Ngân hàng." });
     }
+    // Ghi loại coin + số USD vào lệnh nạp để admin phân biệt (bank vs USDT/LTC)
+    try {
+      await sb(`/rest/v1/topups?memo=eq.${encodeURIComponent(order_id)}`, {
+        method: "PATCH",
+        headers: { Prefer: "return=minimal" },
+        body: JSON.stringify({ coin: payCur, usd }),
+      });
+    } catch (e) { /* không chặn thanh toán nếu ghi phụ lỗi */ }
     return res.status(200).json({
       payment_id: p.payment_id,
       pay_address: p.pay_address,

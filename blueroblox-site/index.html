@@ -837,7 +837,9 @@ window.BR_CONFIG = {
   <div class="dlg wide" role="dialog" aria-modal="true" aria-labelledby="dl-title">
     <h3 id="dl-title">Giao đơn hàng</h3>
     <div class="hint" id="dl-info"></div>
-    <label>Thông tin giao cho khách, mỗi dòng 1 sản phẩm (VD: <code>IP:port|user|pass</code>). Đơn có gói ngày sẽ tự thêm ngày hết hạn.
+    <label id="dl-orig-wrap" hidden style="color:#9fb0d0">📄 Dữ liệu CŨ (chỉ để xem, không sửa)
+      <textarea class="in" id="dl-orig" rows="5" readonly style="font-family:var(--mono);font-size:13px;background:rgba(6,10,28,.75);opacity:.85"></textarea></label>
+    <label id="dl-new-lb">Thông tin giao cho khách, mỗi dòng 1 sản phẩm (VD: <code>IP:port|user|pass</code>). Đơn có gói ngày sẽ tự thêm ngày hết hạn.
       <textarea class="in" id="dl-items" rows="8" style="font-family:var(--mono);font-size:13px"></textarea></label>
     <div id="dl-vpsbar" hidden style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:-6px">
       <button class="btn ghost sm" type="button" id="dl-split">✂️ Tách nhanh (theo dấu - hoặc ,)</button>
@@ -2091,6 +2093,9 @@ $("otbl").onclick = e => {
   $("dl-info").textContent = `${uname(o.user_id)} · ${o.product_name} × ${o.qty} · ${vnd(o.total)} · ${ago(o.created_at)}`;
   $("dl-items").placeholder = delAssign ? `Mỗi dòng 1 tên máy — hoặc dán "54-118-10-254-665" rồi bấm Tách nhanh (cần ${o.qty} máy)` : "";
   $("dl-items").value = (o.status === "pending" || delAssign) ? "" : o.items; $("dl-items").readOnly = !editable; $("dl-err").textContent = "";
+  show("dl-orig-wrap", isEdit);
+  if (isEdit) $("dl-orig").value = o.items || "";
+  $("dl-new-lb").firstChild.textContent = isEdit ? "✏️ Dữ liệu MỚI (sửa ở đây) — sửa xong bấm Lưu" : "Thông tin giao cho khách, mỗi dòng 1 sản phẩm (VD: ";
   $("dl-title").textContent = delAssign ? `Giao VPS — nhập TÊN MÁY (cần ${o.qty} máy)` : (o.status === "pending" ? "Giao đơn hàng" : "Sửa đơn đã giao");
   $("dl-save").textContent = delAssign ? "Giao cho khách" : (o.status === "pending" ? "Giao cho khách" : "💾 Lưu chỉnh sửa");
   show("dl-save", editable); show("dl-refund", o.status === "pending"); show("dl-vpsbar", delAssign);

@@ -610,6 +610,21 @@ h1 em::after{background:linear-gradient(90deg,rgba(143,208,255,0),#8fd0ff 15%,#f
 #cpl-dur{grid-template-columns:repeat(4,1fr)}
 .dbody{grid-auto-rows:max-content}
 
+/* ===== Thông báo + nội quy khi mở web ===== */
+#noticedlg{z-index:150}
+.ntdlg{max-width:600px}
+.ntdlg h3{font-size:20px;margin-bottom:10px}
+.ntbody{color:#d5def7;line-height:1.65;font-size:14.5px;max-height:38dvh;overflow:auto}
+.ntbody p,.ntrules p{margin:0 0 8px}
+.ntbody ul,.ntrules ul{margin:0 0 8px;padding-left:20px}
+.ntbody li,.ntrules li{margin:3px 0}
+#nt-rules-box h4{font-size:15px;margin:14px 0 8px}
+.ntrules{max-height:34dvh;overflow:auto;padding:12px 14px;border:1px solid var(--line2);border-radius:12px;background:rgba(6,10,28,.55);font-size:13.5px;line-height:1.6;color:#c8d3f2}
+.ntagree{display:flex!important;flex-direction:row!important;gap:10px;align-items:center;margin-top:12px;padding:10px 12px;border-radius:12px;border:1px solid var(--line2);cursor:pointer;font-weight:600}
+.ntagree input{width:18px!important;height:18px;margin:0;padding:0;accent-color:var(--blue);flex:none}
+.ntagree.on{border-color:var(--ok);background:rgba(60,224,176,.08)}
+#nt-ok[disabled]{opacity:.45;cursor:not-allowed}
+
 </style>
 <script>
 // Đã điền sẵn cho blueroblox.shop
@@ -1185,6 +1200,16 @@ window.BR_CONFIG = {
       <div class="note">Tài khoản này phải trùng với tài khoản bạn đã thêm vào SePay, thì tiền vào mới được cộng tự động.</div>
     </div>
     <div class="dbody" id="pane-site" hidden>
+      <form class="f" id="nf">
+        <h3>📢 Thông báo &amp; nội quy khi khách mở web</h3>
+        <label class="mtrow full"><span class="sw"><input type="checkbox" id="nf-on"><i></i></span><span><b>Bật bảng thông báo</b><small>Khách mở web sẽ thấy bảng thông báo này.</small></span></label>
+        <label class="full">Tiêu đề<input id="nf-title" maxlength="100" placeholder="VD: 🎉 Thông báo mới từ BLUEROBLOX"></label>
+        <label class="full">Nội dung thông báo<textarea id="nf-body" rows="6" maxlength="3000" placeholder="Viết thông báo… Xuống dòng thoải mái. Dòng bắt đầu bằng - sẽ thành gạch đầu dòng, **chữ** để in đậm."></textarea></label>
+        <label class="mtrow full"><span class="sw"><input type="checkbox" id="nf-rules-on"><i></i></span><span><b>Nội quy bắt buộc</b><small>Khách phải tích “Tôi đã đọc và đồng ý” mới dùng được web.</small></span></label>
+        <label class="full">Nội dung nội quy<textarea id="nf-rules" rows="8" maxlength="6000" placeholder="- Không dùng máy để lừa đảo, spam, hack…&#10;- Không hoàn tiền khi đã giao hàng…"></textarea></label>
+        <label class="full">Khi nào hiện lại cho khách<select class="in" id="nf-mode"><option value="new">Chỉ khi có nội dung mới (khuyên dùng)</option><option value="daily">Mỗi ngày 1 lần</option><option value="always">Mỗi lần khách mở web</option></select></label>
+        <div class="acts full"><button class="btn ghost" type="button" id="nf-preview">👁 Xem thử</button><button class="btn" type="submit">Lưu thông báo</button><span class="hint" id="nf-msg"></span></div>
+      </form>
       <form class="f" id="sf">
         <h3>Phần đầu trang</h3>
         <label class="full">Dòng nhỏ phía trên<input id="sf-eyebrow" maxlength="80"></label>
@@ -1294,6 +1319,18 @@ window.BR_CONFIG = {
     <div class="note" style="margin-top:10px">Máy bị khoá sẽ <b>tắt ngay</b>, khách không mở, điều khiển hay gia hạn được. Dữ liệu vẫn giữ. Hết thời hạn máy tự mở khoá và bật lại.</div>
     <div class="err" id="cpl-err"></div>
     <div class="acts"><button class="btn ghost" type="button" id="cpl-cancel">Huỷ</button><button class="btn danger" type="button" id="cpl-ok">Khoá máy</button></div>
+  </div>
+</div>
+<div class="modal" id="noticedlg" hidden>
+  <div class="dlg wide ntdlg" role="dialog" aria-modal="true" aria-labelledby="nt-title">
+    <h3 id="nt-title"></h3>
+    <div class="ntbody" id="nt-body"></div>
+    <div id="nt-rules-box">
+      <h4>📜 Nội quy sử dụng</h4>
+      <div class="ntrules" id="nt-rules" tabindex="0"></div>
+      <label class="ntagree"><input type="checkbox" id="nt-agree"> <span>Tôi đã đọc và đồng ý với nội quy</span></label>
+    </div>
+    <div class="acts"><button class="btn" type="button" id="nt-ok">Đã hiểu</button></div>
   </div>
 </div>
 <div class="maintov" id="maintov" hidden>
@@ -1918,7 +1955,7 @@ function vietqr(bin, acc, amount, memo) {
 }
 
 /* ---------- tải dữ liệu ---------- */
-async function loadSettings() { const { data } = await sb.from("settings").select("data").eq("id", 1).maybeSingle(); SITE = { ...DEF_SITE, ...((data && data.data) || {}) }; renderSite(); renderGrid(); }
+async function loadSettings() { const { data } = await sb.from("settings").select("data").eq("id", 1).maybeSingle(); SITE = { ...DEF_SITE, ...((data && data.data) || {}) }; window.__siteLoaded = true; renderSite(); renderGrid(); }
 async function loadProducts() { const { data, error } = await sb.from("product_list").select("*").order("sort"); if (error) { $("grid").innerHTML = `<div class="empty">${L("Không tải được sản phẩm. Tải lại trang để thử lại.", "Could not load products. Reload the page to try again.")}</div>`; return; } P = data || []; renderCats(); renderGrid(); if (isAdmin()) renderTable(); }
 async function loadProfile() { if (!session) { profile = null; return; } const { data } = await sb.from("profiles").select("*").eq("id", session.user.id).maybeSingle(); profile = data || null; }
 
@@ -3866,6 +3903,78 @@ $("cpa-nodes") && $("cpa-nodes").addEventListener("click", async e => {
   const { data, error } = await sb.rpc("admin_cloud_delete", { p_node: n.id }); if (error) return v6Err(error);
   toast(`Đang xoá ${data || 0} máy trên ${n.name}…`); reloadCpa();
 });
+
+
+/* ===================== THÔNG BÁO + NỘI QUY KHI MỞ WEB ===================== */
+function ntFormat(s) {   // chữ thường → HTML an toàn: xuống dòng, "- " thành gạch đầu dòng, **đậm**
+  const out = []; let ul = false;
+  for (const raw of String(s || "").split(/\r?\n/)) {
+    const line = raw.trim();
+    const inl = t => esc(t).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
+    if (/^[-•*]\s+/.test(line)) { if (!ul) { out.push("<ul>"); ul = true; } out.push("<li>" + inl(line.replace(/^[-•*]\s+/, "")) + "</li>"); continue; }
+    if (ul) { out.push("</ul>"); ul = false; }
+    if (line) out.push("<p>" + inl(line) + "</p>");
+  }
+  if (ul) out.push("</ul>");
+  return out.join("");
+}
+const NT_KEY = "br_notice_seen";
+function ntSeen() { try { return JSON.parse(localStorage.getItem(NT_KEY) || "{}"); } catch (e) { return {}; } }
+function ntShouldShow() {
+  if (!SITE.notice_on && !SITE.rules_on) return false;
+  const s = ntSeen(), ver = SITE.notice_ver || 0, mode = SITE.notice_mode || "new";
+  if (s.v !== ver) return true;                                   // nội dung mới → luôn hiện
+  if (mode === "always") { try { return !sessionStorage.getItem(NT_KEY); } catch (e) { return true; } }
+  if (mode === "daily") return Date.now() - (s.t || 0) > 86400000;
+  return false;
+}
+let ntOpen = false, ntForce = false;
+function showNotice(preview) {
+  if (!preview && (!window.__siteLoaded || isAdmin() || !$("maintov").hidden || !ntShouldShow())) return;
+  const rules = !!SITE.rules_on && !!(SITE.rules_body || "").trim(), note = !!SITE.notice_on;
+  $("nt-title").textContent = (note && SITE.notice_title) || (rules ? "📜 Nội quy sử dụng" : "📢 Thông báo");
+  $("nt-body").innerHTML = note ? ntFormat(SITE.notice_body) : ""; show("nt-body", note && !!(SITE.notice_body || "").trim());
+  show("nt-rules-box", rules); $("nt-rules").innerHTML = rules ? ntFormat(SITE.rules_body) : "";
+  $("nt-agree").checked = false; $("nt-agree").closest(".ntagree").classList.remove("on");
+  $("nt-ok").textContent = rules ? "Đồng ý & tiếp tục" : "Đã hiểu"; $("nt-ok").disabled = rules;
+  ntOpen = true; ntForce = rules && !preview; show("noticedlg");
+  setTimeout(() => (rules ? $("nt-agree") : $("nt-ok")).focus(), 60);
+}
+$("nt-agree") && ($("nt-agree").onchange = e => { $("nt-ok").disabled = !e.target.checked; e.target.closest(".ntagree").classList.toggle("on", e.target.checked); });
+$("nt-ok") && ($("nt-ok").onclick = () => {
+  if ($("nt-ok").disabled) return;
+  try { localStorage.setItem(NT_KEY, JSON.stringify({ v: SITE.notice_ver || 0, t: Date.now(), agreed: !!SITE.rules_on })); sessionStorage.setItem(NT_KEY, "1"); } catch (e) {}
+  ntOpen = false; ntForce = false; show("noticedlg", false);
+});
+// Nội quy bắt buộc: không cho đóng bằng bấm ra ngoài hoặc phím Esc
+$("noticedlg") && $("noticedlg").addEventListener("click", e => { if (e.target === $("noticedlg") && ntForce) e.stopImmediatePropagation(); }, true);
+window.addEventListener("keydown", e => { if (e.key === "Escape" && ntOpen && ntForce) { e.stopImmediatePropagation(); e.preventDefault(); } }, true);
+{ const _rs3 = renderSite; let tried = false;
+  renderSite = function () { const r = _rs3.apply(this, arguments); if (window.__siteLoaded && !tried) { tried = true; setTimeout(() => showNotice(false), 700); } return r; }; }
+
+/* ---- Admin: soạn thông báo ---- */
+function fillNotice() {
+  if (!$("nf-on")) return;
+  $("nf-on").checked = !!SITE.notice_on; $("nf-title").value = SITE.notice_title || ""; $("nf-body").value = SITE.notice_body || "";
+  $("nf-rules-on").checked = !!SITE.rules_on; $("nf-rules").value = SITE.rules_body || ""; $("nf-mode").value = SITE.notice_mode || "new";
+  $("nf-msg").textContent = SITE.notice_ver ? "Lần sửa cuối: " + new Date(+SITE.notice_ver).toLocaleString("vi-VN") : "";
+}
+{ const _fs = fillSite; fillSite = function () { const r = _fs.apply(this, arguments); try { fillNotice(); } catch (e) {} return r; }; }
+function nfPatch() {
+  return { notice_on: $("nf-on").checked, notice_title: $("nf-title").value.trim(), notice_body: $("nf-body").value.trim(),
+    rules_on: $("nf-rules-on").checked, rules_body: $("nf-rules").value.trim(), notice_mode: $("nf-mode").value };
+}
+$("nf") && ($("nf").onsubmit = async e => {
+  e.preventDefault();
+  const p = nfPatch();
+  if (p.notice_on && !p.notice_body && !p.notice_title) return toast("Hãy viết tiêu đề hoặc nội dung thông báo.", 1);
+  if (p.rules_on && !p.rules_body) return toast("Hãy viết nội dung nội quy.", 1);
+  const changed = ["notice_on", "notice_title", "notice_body", "rules_on", "rules_body"].some(k => (SITE[k] || "") !== (p[k] || ""));
+  if (changed) p.notice_ver = Date.now();            // nội dung mới → khách sẽ thấy lại
+  await saveSettings(p, e.submitter || $("nf").querySelector("[type=submit]"), changed ? "Đã lưu — khách sẽ thấy thông báo mới khi mở web." : "Đã lưu.");
+  fillNotice();
+});
+$("nf-preview") && ($("nf-preview").onclick = () => { const keep = { ...SITE }; Object.assign(SITE, nfPatch()); showNotice(true); SITE = keep; });
 
 </script>
 </body>

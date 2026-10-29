@@ -5,7 +5,7 @@
 #   SUPABASE_SERVICE_KEY=eyJ...            (service_role key — bí mật)
 #   PUBLIC_BASE=https://xxxx.trycloudflare.com   (link ws-scrcpy ra internet)
 # Chạy:  python3 ~/cloudphoned.py           (vòng lặp mỗi 15s)
-import json, os, sys, time, subprocess, urllib.request, urllib.parse, datetime
+import json, os, sys, time, subprocess, urllib.request, urllib.parse, datetime, socket, shutil
 GRACE_MIN = 30          # hết hạn quá 30 phút không gia hạn → xoá máy + dữ liệu
 
 HOME = os.path.expanduser("~")
@@ -32,6 +32,10 @@ SB = CFG["SUPABASE_URL"].rstrip("/")
 KEY = CFG["SUPABASE_SERVICE_KEY"]
 BASE = CFG["PUBLIC_BASE"].rstrip("/")
 H = {"apikey": KEY, "Authorization": "Bearer " + KEY, "Content-Type": "application/json"}
+NODE_ID = CFG.get("NODE_ID") or socket.gethostname()           # mỗi server 1 tên riêng
+NOTIFY_URL = CFG.get("NOTIFY_URL", "https://blueroblox.shop/api/notify-admin")
+LIMIT_PCT = 85
+DATA_ROOT = os.path.join(HOME, "redroid")
 
 def sb(method, path, body=None, extra=None):
     url = SB + "/rest/v1/" + path
@@ -86,16 +90,127 @@ def do_create(row):
                   "--days", str(row["days"]), "--res", row.get("res") or "720x1280",
                   "--fps", str(row.get("fps") or 30)])
     if r.returncode == 2:   # HẾT HÀNG (quá 85%)
-        patch(row["id"], {"status": "error", "error": "HẾT HÀNG — máy chủ đã đầy (85%)."}); return
+        refund(row, "Máy chủ đã đầy, chưa tạo được máy"); notify(f"⚠️ <b>Đơn ĐT đám mây bị hoàn tiền</b> vì {NODE_ID} đã đầy 85%."); return
     if r.returncode != 0:
-        patch(row["id"], {"status": "error", "error": (r.stdout + r.stderr)[:400]}); return
+        log_err = (r.stdout + r.stderr)[-300:]
+        print("   ✗", log_err)
+        refund(row, "Tạo máy lỗi, vui lòng thử lại"); notify(f"⚠️ <b>Tạo máy lỗi</b> trên {NODE_ID} (đã hoàn tiền khách):\n<code>{log_err[-200:]}</code>"); return
     ps = phone_state(name)
     if not ps:
-        patch(row["id"], {"status": "error", "error": "Tạo xong nhưng không đọc được trạng thái."}); return
+        refund(row, "Tạo máy lỗi, vui lòng thử lại"); return
     patch(row["id"], {"status": "active", "container": name, "port": ps["port"],
                       "node": "home", "stream_url": stream_url(ps["port"]),
                       "expires_at": parse_dt(ps["expires"]).isoformat(), "error": None})
     print(f"   ✓ active, cổng {ps['port']}")
+
+def refund(row, msg):
+    """Tạo máy lỗi → hoàn lại tiền khách đã trả (hàm SQL cloudphone_refund)."""
+    try:
+        sb("POST", "rpc/cloudphone_refund", {"p_id": row["id"], "p_err": msg})
+    except Exception as e:
+        print("   lỗi hoàn tiền:", e)
+        patch(row["id"], {"status": "error", "error": msg + " — liên hệ admin để hoàn tiền."})
+
+def notify(text):
+    try:
+        req = urllib.request.Request(NOTIFY_URL, data=json.dumps({"text": text}).encode(), method="POST",
+                                     headers={"Content-Type": "application/json", "User-Agent": "cloudphoned"})
+        urllib.request.urlopen(req, timeout=10).read()
+    except Exception as e:
+        print("   không gửi được Telegram:", e)
+
+# ---------------- Bảo trì ----------------
+_maint = {"t": 0, "on": False, "off_at": None}
+def maint_state():
+    """Đang bảo trì (ĐT đám mây hoặc toàn web)? + lúc tắt bảo trì gần nhất."""
+    if time.time() - _maint["t"] < 30: return _maint
+    try:
+        pr = (sb("GET", "cloudphone_pricing?id=eq.1&select=maintenance,maint_off_at") or [{}])[0]
+        site = ((sb("GET", "settings?id=eq.1&select=data") or [{}])[0].get("data") or {})
+        offs = [parse_dt(x) for x in (pr.get("maint_off_at"), site.get("maint_off_at")) if x]
+        _maint.update(t=time.time(), on=bool(pr.get("maintenance")) or bool(site.get("maint")), off_at=max(offs) if offs else None)
+    except Exception as e:
+        print("lỗi đọc bảo trì:", e)
+    return _maint
+
+# ---------------- Báo cáo tài nguyên máy chủ ----------------
+_cpu_prev = None
+def cpu_pct():
+    global _cpu_prev
+    with open("/proc/stat") as f: v = [int(x) for x in f.readline().split()[1:]]
+    idle, tot = v[3] + (v[4] if len(v) > 4 else 0), sum(v)
+    p = None
+    if _cpu_prev and tot > _cpu_prev[0]:
+        p = round(100 * (1 - (idle - _cpu_prev[1]) / (tot - _cpu_prev[0])), 1)
+    _cpu_prev = (tot, idle)
+    return p
+
+def meminfo():
+    m = {}
+    for line in open("/proc/meminfo"):
+        k, v = line.split(":", 1); m[k] = int(v.split()[0])
+    return m.get("MemTotal", 0) / 1048576, m.get("MemAvailable", 0) / 1048576
+
+def gpus():
+    try:
+        r = subprocess.run(["nvidia-smi", "--query-gpu=name,utilization.gpu,memory.used,memory.total,temperature.gpu",
+                            "--format=csv,noheader,nounits"], capture_output=True, text=True, timeout=10)
+        out = []
+        for line in r.stdout.strip().splitlines():
+            n, u, mu, mt, tp = [x.strip() for x in line.split(",")]
+            num = lambda x: float(x) if x.replace(".", "", 1).isdigit() else None
+            out.append({"name": n, "util": num(u), "mem_used": num(mu), "mem_total": num(mt), "temp": num(tp)})
+        return out
+    except Exception:
+        return []
+
+def disk(path):
+    try:
+        d = shutil.disk_usage(path); return {"used": round(d.used / 1073741824, 1), "total": round(d.total / 1073741824, 1)}
+    except Exception:
+        return None
+
+def cpu_temp():
+    best = None
+    for p in ("/sys/class/hwmon",):
+        try:
+            for h in os.listdir(p):
+                for f in os.listdir(os.path.join(p, h)):
+                    if f.startswith("temp") and f.endswith("_input"):
+                        v = int(open(os.path.join(p, h, f)).read()) / 1000
+                        if 0 < v < 130: best = max(best or 0, v)
+        except Exception:
+            pass
+    return best
+
+_alert = {"full": None}
+def heartbeat():
+    try:
+        st = json.load(open(PHONES_JSON)).get("phones", [])
+    except Exception:
+        st = []
+    ram_t, ram_avail = meminfo(); cpu_t = os.cpu_count() or 1
+    a_ram = sum(float(p.get("ram", 0)) for p in st); a_cpu = sum(float(p.get("cpu", 0)) for p in st)
+    c_ram, c_cpu = ram_t * LIMIT_PCT / 100, cpu_t * LIMIT_PCT / 100
+    try:
+        running = len([l for l in subprocess.run(["docker", "ps", "--format", "{{.Names}}"], capture_output=True, text=True, timeout=15).stdout.split() if l.startswith("cp_")])
+    except Exception:
+        running = None
+    try: up_h = round(float(open("/proc/uptime").read().split()[0]) / 3600, 1)
+    except Exception: up_h = None
+    metrics = {"cpu_pct": cpu_pct(), "load": [round(x, 2) for x in os.getloadavg()], "cpu_temp": cpu_temp(),
+               "ram_used": round(ram_t - ram_avail, 1), "gpus": gpus(), "disk_data": disk(DATA_ROOT), "disk_root": disk("/"),
+               "running": running, "uptime_h": up_h}
+    body = {"id": NODE_ID, "cpu_total": cpu_t, "ram_total": round(ram_t, 1), "cap_cpu": round(c_cpu, 1), "cap_ram": round(c_ram, 1),
+            "alloc_cpu": a_cpu, "alloc_ram": a_ram, "phones": len(st), "limit_pct": LIMIT_PCT, "metrics": metrics,
+            "updated_at": now().isoformat()}
+    sb("POST", "cloud_nodes", body, {"Prefer": "resolution=merge-duplicates,return=minimal"})
+    # Báo Telegram 1 lần khi chạm ngưỡng 85% (và khi có chỗ trở lại)
+    full = a_ram >= c_ram - 1 or a_cpu >= c_cpu - 1
+    if _alert["full"] is not None and full != _alert["full"]:
+        notify(f"🚨 <b>{NODE_ID} đã đạt {LIMIT_PCT}%</b> — RAM cấp {a_ram:.0f}/{ram_t:.0f}GB, CPU cấp {a_cpu:.0f}/{cpu_t} luồng. Khách sẽ thấy HẾT HÀNG."
+               if full else f"✅ <b>{NODE_ID}</b> đã có chỗ trống trở lại (RAM cấp {a_ram:.0f}/{ram_t:.0f}GB).")
+    _alert["full"] = full
 
 def do_cancel(row):
     name = row.get("container") or cname(row)
@@ -123,7 +238,10 @@ def do_expiry(row):
     exp = parse_dt(ps["expires"]) if ps else (parse_dt(row["expires_at"]) if row.get("expires_at") else None)
     if not exp: return
     t = now()
-    if t > exp + datetime.timedelta(minutes=GRACE_MIN):
+    m = maint_state()
+    if m["on"]: return                       # đang bảo trì: không tạm dừng / không xoá máy khách
+    start = max(exp, m["off_at"]) if m["off_at"] else exp   # hết hạn lúc bảo trì → 30 phút tính từ lúc tắt bảo trì
+    if t > start + datetime.timedelta(minutes=GRACE_MIN):
         print(f"[xoá hết hạn] {name}")
         if ps: phonectl(["delete", name])
         patch(row["id"], {"status": "cancelled", "error": f"Hết hạn quá {GRACE_MIN} phút không gia hạn — máy và dữ liệu đã bị xoá."})
@@ -147,6 +265,8 @@ def tick():
         except Exception as e: print("lỗi hết hạn:", e)
 
 if __name__ == "__main__":
+    try: sys.stdout.reconfigure(line_buffering=True)   # in log ngay để xem bằng journalctl
+    except Exception: pass
     print(f"cloudphoned chạy — đọc {SB} mỗi {POLL}s. Ctrl+C để dừng.")
     n = 0
     while True:
@@ -154,5 +274,8 @@ if __name__ == "__main__":
         except Exception as e: print("lỗi vòng lặp:", e)
         try: phonectl(["connect-all"])      # mỗi 15 giây: máy nào rớt kết nối thì nối lại (tránh màn xám)
         except Exception as e: print("lỗi connect-all:", e)
+        if n % 2 == 0:                      # ~30 giây: báo cáo CPU/RAM/card/ổ cứng lên trang admin
+            try: heartbeat()
+            except Exception as e: print("lỗi báo cáo tài nguyên:", e)
         n += 1
         time.sleep(POLL)

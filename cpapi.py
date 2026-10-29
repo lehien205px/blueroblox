@@ -91,6 +91,25 @@ def fps_limits():
         return 10, 120
 
 
+_mcache = {"t": 0, "v": {"maint": False}}
+def maint():
+    """Trạng thái bảo trì (đọc lại mỗi 20 giây)."""
+    if time.time() - _mcache["t"] > 20:
+        try:
+            req = urllib.request.Request(SB + "/rest/v1/rpc/cloudphone_status", data=b"{}", method="POST",
+                                         headers={"apikey": KEY, "Authorization": "Bearer " + KEY, "Content-Type": "application/json"})
+            with urllib.request.urlopen(req, timeout=10) as r: _mcache["v"] = json.loads(r.read().decode() or "{}")
+        except Exception:
+            pass
+        _mcache["t"] = time.time()
+    return _mcache["v"]
+
+
+def maint_text():
+    m = maint()
+    return "Hệ thống đang bảo trì" + (": " + m["maint_msg"] if m.get("maint_msg") else "") + ". Vui lòng quay lại sau."
+
+
 _ucache, _pcache = {}, {}
 _busy = set()          # máy đang khởi động lại / đổi cấu hình
 
@@ -398,6 +417,8 @@ class H(BaseHTTPRequestHandler):
             return self.send_json(200, {k: j[k] for k in ("state", "msg", "title")})
 
         if len(parts) != 2: return self.send_json(404, {"error": "Không có chức năng này."})
+        under = bool(maint().get("maint")) and not me["admin"]
+        if under and parts[1] != "info": return self.send_json(503, {"error": maint_text(), "maint": True})
         pid, act = parts
         p = phone_of(me, pid)
         if not p: return self.send_json(404, {"error": "Không tìm thấy máy của bạn."})
@@ -406,7 +427,8 @@ class H(BaseHTTPRequestHandler):
             st = out(adb(port, ["get-state"], 15)) if port and p["status"] == "active" else ""
             return self.send_json(200, {"name": p["name"], "ram": p["ram"], "cpu": p["cpu"], "res": p.get("res"),
                                         "status": p["status"], "expires_at": p.get("expires_at"), "online": st == "device",
-                                        "fps": p.get("fps") or 30, "fps_range": fps_limits(), "busy": pid in _busy})
+                                        "fps": p.get("fps") or 30, "fps_range": fps_limits(), "busy": pid in _busy,
+                                        "maint": under, "maint_msg": maint_text() if under else None})
         if p["status"] != "active" or not port:
             return self.send_json(409, {"error": "Máy chưa chạy (đang tạo, tạm dừng hoặc đã huỷ)."})
 
@@ -557,6 +579,7 @@ class H(BaseHTTPRequestHandler):
             if origin and origin != SELF_ORIGIN: return self.deny(403, "Nguồn không được phép.")
             if not auth: return self.deny(401, "Hãy mở máy từ trang blueroblox.shop.")
             if not auth.get("a"):
+                if maint().get("maint"): return self.deny(503, "Đang bảo trì.")
                 if q.get("action") != "proxy-adb" or q.get("remote") != "tcp:8886": return self.deny(403, "Không được phép.")
                 m = re.match(r"^127\.0\.0\.1:(\d{4,5})$", q.get("udid", ""))
                 if not m or auth.get("u") not in port_owners(int(m.group(1))): return self.deny(403, "Đây không phải máy của bạn.")

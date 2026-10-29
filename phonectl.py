@@ -107,6 +107,33 @@ TUNE = ("settings put global window_animation_scale 0.5; settings put global tra
 def tune(name):
     """Cho máy mượt hơn: giảm hiệu ứng chuyển cảnh, cài APK không phải chờ quét, màn hình không tự tắt."""
     sh(["docker", "exec", name, "/system/bin/sh", "-c", TUNE])
+PRE_DIR = os.path.expanduser("~/apk-cai-san")   # bỏ file .apk vào đây → mọi máy mới tự cài sẵn (VD: trình duyệt Chrome/Firefox)
+def preinstall(name, port, force=False):
+    """Cài các APK trong ~/apk-cai-san vào máy (mỗi APK chỉ cài 1 lần / máy, lưu dấu trong /data của máy)."""
+    try: apks = sorted(f for f in os.listdir(PRE_DIR) if f.lower().endswith(".apk"))
+    except OSError: return
+    for f in apks:
+        mark = "/data/local/tmp/.cp_pre_" + re.sub(r"[^\w.-]", "_", f)
+        if not force and sh(["docker", "exec", name, "/system/bin/sh", "-c", f"test -f {mark} && echo y"]).stdout.strip() == "y":
+            continue
+        tmp = "/tmp/pre_" + re.sub(r"[^\w.-]", "_", f)
+        if not tmp.endswith(".apk"): tmp += ".apk"
+        sh(["docker", "cp", os.path.join(PRE_DIR, f), f"{WSNAME}:{tmp}"])
+        r = sh(["docker", "exec", WSNAME, "adb", "-s", f"127.0.0.1:{port}", "install", "-r", "-g", tmp])
+        sh(["docker", "exec", WSNAME, "rm", "-f", tmp])
+        if "Success" in (r.stdout or ""):
+            sh(["docker", "exec", name, "/system/bin/sh", "-c", f"touch {mark}"]); print(f"   + Đã cài sẵn {f} cho {name}")
+        else: print(f"   ! Cài {f} cho {name} lỗi: {((r.stdout or '') + (r.stderr or ''))[-200:]}")
+
+def cmd_preinstall(a):
+    """Cài APK trong ~/apk-cai-san cho máy đang chạy: phonectl.py preinstall TÊN_MÁY  hoặc  --all"""
+    st = load()
+    for p in st["phones"]:
+        if a.all or p["name"] == a.name:
+            if sh(["docker", "exec", WSNAME, "adb", "-s", f"127.0.0.1:{p['port']}", "get-state"]).stdout.strip() != "device":
+                adb_connect(p["port"])
+            preinstall(p["name"], p["port"], a.force)
+
 def wait_boot(name, port):
     """Chờ Android khởi động xong rồi mới kết nối (kết nối sớm → màn đen)."""
     t0 = time.time()
@@ -119,7 +146,8 @@ def wait_boot(name, port):
     for _ in range(5):
         adb_connect(port)
         r = sh(["docker", "exec", WSNAME, "adb", "-s", f"127.0.0.1:{port}", "get-state"])
-        if (r.stdout or "").strip() == "device": return True
+        if (r.stdout or "").strip() == "device":
+            preinstall(name, port); return True
         time.sleep(4)
     return False
 def fmt(dt): return dt.strftime("%d/%m/%Y %H:%M")
@@ -286,6 +314,7 @@ def main():
     w = sub.add_parser("waitboot"); w.add_argument("name"); w.set_defaults(f=cmd_waitboot)
     g = sub.add_parser("reconfig"); g.add_argument("name"); g.add_argument("--fps", type=int, default=0); g.add_argument("--res", default=""); g.set_defaults(f=cmd_reconfig)
     sub.add_parser("capacity").set_defaults(f=cmd_capacity)
+    pi = sub.add_parser("preinstall"); pi.add_argument("name", nargs="?", default=""); pi.add_argument("--all", action="store_true"); pi.add_argument("--force", action="store_true"); pi.set_defaults(f=cmd_preinstall)
     a = ap.parse_args()
     if not getattr(a, "cmd", None): ap.print_help(); sys.exit(0)
     a.f(a)

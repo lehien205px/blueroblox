@@ -553,7 +553,7 @@ window.BR_CONFIG = {
   <div class="wrap">
     <a class="logo" href="/" aria-label="BlueRoblox"><span class="mark"></span><span class="wm"><b><em>Blue</em>Roblox</b><small>Clone Roblox &amp; VPS GPU</small></span></a>
     <nav>
-      <a class="on" href="/"><svg class="ic" viewBox="0 0 24 24"><path d="M3 11l9-8 9 8M5 10v10h14V10"/></svg><span data-i18n="nav_home">Trang chủ</span></a><a href="#shop"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3h2l2.6 13h10L21 7H6"/><circle cx="9" cy="20" r="1.5"/><circle cx="18" cy="20" r="1.5"/></svg><span data-i18n="nav_shop">Sản phẩm</span></a><a id="nav-topup"><svg class="ic" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.4"/></svg><span data-i18n="nav_topup">Nạp tiền</span></a><a id="nav-orders"><svg class="ic" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg><span data-i18n="nav_orders">Đơn hàng</span></a><a id="nav-vps" hidden><svg class="ic" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg><span data-i18n="nav_vps">VPS của tôi</span> <span class="badge" id="vps-nav-badge" hidden></span></a><a href="#policy"><svg class="ic" viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6l8-3z"/><path d="M9 12l2 2 4-4"/></svg><span data-i18n="nav_policy">Chính sách</span></a>
+      <a class="on" href="/"><svg class="ic" viewBox="0 0 24 24"><path d="M3 11l9-8 9 8M5 10v10h14V10"/></svg><span data-i18n="nav_home">Trang chủ</span></a><a href="#shop"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3h2l2.6 13h10L21 7H6"/><circle cx="9" cy="20" r="1.5"/><circle cx="18" cy="20" r="1.5"/></svg><span data-i18n="nav_shop">Sản phẩm</span></a><a id="nav-topup"><svg class="ic" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.4"/></svg><span data-i18n="nav_topup">Nạp tiền</span></a><a id="nav-orders"><svg class="ic" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg><span data-i18n="nav_orders">Đơn hàng</span></a><a id="nav-vps" hidden><svg class="ic" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg><span data-i18n="nav_vps">VPS của tôi</span> <span class="badge" id="vps-nav-badge" hidden></span></a><a id="nav-cloud" hidden><svg class="ic" viewBox="0 0 24 24"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M10 18h4"/></svg><span>📱 ĐT đám mây</span> <span class="badge" id="cp-nav-badge" hidden></span></a><a href="#policy"><svg class="ic" viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6l8-3z"/><path d="M9 12l2 2 4-4"/></svg><span data-i18n="nav_policy">Chính sách</span></a>
     </nav>
     <div class="acct">
       <div class="seg" id="lang-seg" role="group" aria-label="Language"><button id="lang-vi" class="on">VI</button><button id="lang-en">EN</button></div>
@@ -1755,6 +1755,7 @@ function renderUser() {
   show("guest-acts", !u); show("user-acts", !!u);
   if (u) { $("bal").textContent = fmt(u.balance); $("who-name").textContent = u.username; $("who-av").textContent = u.username[0].toUpperCase(); }
   show("nav-vps", !!u);
+  show("nav-cloud", !!u);
   show("admin-open", isAdmin());
   if (!isAdmin()) show("drawer", false);
   if (u) checkVpsExpiry();
@@ -3040,6 +3041,135 @@ $("tg-test") && ($("tg-test").onclick = async () => {
   } catch (e) { $("tg-test-r").textContent = "Lỗi kết nối."; }
 });
 
+
+/* ===================== ĐIỆN THOẠI ĐÁM MÂY (khách) ===================== */
+const CP_RAM = [2, 3, 4, 6, 8, 12, 16], CP_CPU = [2, 4, 6, 8], CP_DAYS = [7, 15, 30, 60, 90];
+const CP_RES = [["720x1280", "Dọc thường (HD)"], ["1080x1920", "Dọc nét (FHD)"], ["1080x2340", "Dọc dài (FHD+)"], ["1280x720", "Ngang (HD)"]];
+let CPpricing = null, cpSel = { ram: 2, cpu: 2, days: 7, res: "720x1280" }, myCloud = [], cpPollT = null;
+function cpDaysLeft(exp) { if (!exp) return null; return Math.ceil((new Date(exp).getTime() - Date.now()) / 86400000); }
+function cpPill(p) {
+  const m = { pending: ["wt", "⏳ Đang tạo…"], active: ["ok", "● Đang chạy"], error: ["bad", "⚠ " + (p.error ? "Lỗi" : "Lỗi")], expired: ["bad", "Hết hạn"], cancelling: ["wt", "Đang huỷ…"], cancelled: ["", "Đã huỷ"] };
+  const s = m[p.status] || ["", p.status]; return `<span class="pill ${s[0]}">${esc(s[1])}</span>`;
+}
+async function openCloud() {
+  if (!profile) { openAuth("login"); return; }
+  $("cp-list").innerHTML = `<div class="empty">${L("Đang tải…", "Loading…")}</div>`; show("cpdlg");
+  const { data } = await sb.from("cloud_phones").select("*").eq("user_id", profile.id).order("created_at", { ascending: false });
+  myCloud = (data || []).filter(p => p.status !== "cancelled");
+  renderCloud();
+  clearTimeout(cpPollT);
+  if (myCloud.some(p => ["pending", "cancelling"].includes(p.status))) cpPollT = setTimeout(() => { if (!$("cpdlg").hidden) openCloud(); }, 5000);
+}
+function renderCloud() {
+  if (!myCloud.length) { $("cp-list").innerHTML = `<div class="empty">${L('Bạn chưa thuê máy nào. Bấm "+ Thuê máy mới" để bắt đầu.', 'No cloud phones yet.')}</div>`; return; }
+  $("cp-list").innerHTML = myCloud.map(p => {
+    const dl = cpDaysLeft(p.expires_at), left = dl == null ? "" : (dl >= 0 ? "còn " + dl + "n" : "HẾT HẠN");
+    const canCtrl = p.status === "active" && p.stream_url;
+    return `<div class="vmi"><div class="top"><div class="nm">📱 ${esc(p.name)}<small>${p.ram}GB · ${p.cpu} nhân · ${esc(p.res || "")}</small></div>${cpPill(p)}</div>
+      ${p.expires_at ? `<div class="exp">${L("Hết hạn", "Expires")}: ${new Date(p.expires_at).toLocaleString(LANG === "en" ? "en-GB" : "vi-VN")}${left ? " · " + left : ""}</div>` : ""}
+      ${p.status === "error" && p.error ? `<div class="exp" style="color:var(--bad)">${esc(p.error)}</div>` : ""}
+      <div class="acts">
+        ${canCtrl ? `<a class="btn sm" href="${esc(p.stream_url)}" target="_blank" rel="noopener">▶ Điều khiển</a>` : `<button class="btn sm" disabled>${p.status === "pending" ? "Đang tạo…" : "Chưa sẵn sàng"}</button>`}
+        <button class="btn ghost sm" data-cprenew="${p.id}">🔄 Gia hạn</button>
+        <button class="btn ghost sm" data-cprename="${p.id}">✏️ Đổi tên</button>
+        <button class="btn danger sm" data-cpcancel="${p.id}">🗑️ Huỷ</button>
+      </div></div>`;
+  }).join("");
+}
+$("cp-close") && ($("cp-close").onclick = () => { clearTimeout(cpPollT); show("cpdlg", false); });
+$("nav-cloud") && ($("nav-cloud").onclick = openCloud);
+$("cp-new") && ($("cp-new").onclick = openCpOrder);
+$("cp-list") && ($("cp-list").onclick = e => {
+  const rn = e.target.closest("[data-cprenew]"), rm = e.target.closest("[data-cprename]"), cc = e.target.closest("[data-cpcancel]");
+  if (rn) cpRenew(rn.dataset.cprenew);
+  if (rm) cpRename(rm.dataset.cprename);
+  if (cc) cpCancel(cc.dataset.cpcancel);
+});
+function cpChips(id, arr, key, suf) {
+  $(id).innerHTML = arr.map(v => `<button type="button" data-v="${v}" class="${cpSel[key] === v ? "on" : ""}">${v}${suf || ""}</button>`).join("");
+  $(id).onclick = e => { const b = e.target.closest("button"); if (!b) return; cpSel[key] = +b.dataset.v; $(id).querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b)); cpOrderUpd(); };
+}
+async function openCpOrder() {
+  if (!profile) { openAuth("login"); return; }
+  if (!CPpricing) { const { data } = await sb.from("cloudphone_pricing").select("*").eq("id", 1).maybeSingle(); CPpricing = data || { price_ram_gb_day: 2500, price_cpu_day: 2000 }; }
+  cpSel = { ram: 2, cpu: 2, days: 7, res: "720x1280" };
+  cpChips("cp-ram", CP_RAM, "ram", "GB"); cpChips("cp-cpu", CP_CPU, "cpu", ""); cpChips("cp-days", CP_DAYS, "days", "n");
+  $("cp-res").innerHTML = CP_RES.map(r => `<option value="${r[0]}">${r[1]} — ${r[0]}</option>`).join("");
+  $("cp-res").onchange = () => { cpSel.res = $("cp-res").value; };
+  $("cp-err").textContent = ""; cpOrderUpd(); show("cporderdlg");
+}
+function cpPrice() { return ((cpSel.ram * (+CPpricing.price_ram_gb_day)) + (cpSel.cpu * (+CPpricing.price_cpu_day))) * cpSel.days; }
+function cpOrderUpd() {
+  const price = cpPrice();
+  $("cp-total").textContent = fmt(price);
+  $("cp-bal").textContent = profile ? fmt(profile.balance) : "—";
+  $("cp-err").textContent = profile && profile.balance < price ? L("Số dư không đủ. Cần nạp thêm ", "Need ") + fmt(price - profile.balance) + "." : "";
+  $("cp-obuy").textContent = profile && profile.balance < price ? t("Nạp tiền", "topup") : "Thanh toán & tạo máy";
+}
+$("cp-ocancel") && ($("cp-ocancel").onclick = () => show("cporderdlg", false));
+$("cp-obuy") && ($("cp-obuy").onclick = () => busy($("cp-obuy"), async () => {
+  const price = cpPrice();
+  if (profile.balance < price) { show("cporderdlg", false); openTopup(Math.max(+SITE.minTop || 10000, Math.ceil((price - profile.balance) / 1000) * 1000)); return; }
+  const { error } = await sb.rpc("cloudphone_order_custom", { p_ram: cpSel.ram, p_cpu: cpSel.cpu, p_days: cpSel.days, p_res: cpSel.res, p_name: null });
+  if (error) { $("cp-err").textContent = errMsg(error); return; }
+  show("cporderdlg", false); await loadProfile(); renderUser();
+  toast(L("Đã tạo đơn! Máy đang khởi tạo (~2–3 phút).", "Order placed! Creating…")); openCloud();
+}));
+async function cpRenew(id) {
+  const p = myCloud.find(x => x.id === id); if (!p) return;
+  const rate = CPpricing || { price_ram_gb_day: 2500, price_cpu_day: 2000 };
+  const per = (p.ram * rate.price_ram_gb_day) + (p.cpu * rate.price_cpu_day);
+  const ans = prompt(`Gia hạn "${p.name}" bao nhiêu ngày?  (giá ${fmt(per)}/ngày)`, "30");
+  if (ans === null) return; const d = parseInt(ans, 10);
+  if (!d || d < 1) { toast("Số ngày không hợp lệ.", 1); return; }
+  const { error } = await sb.rpc("cloudphone_renew", { p_id: id, p_days: d });
+  if (error) { toast(errMsg(error), 1); return; }
+  await loadProfile(); renderUser(); toast(L("Đã gia hạn +" + d + " ngày.", "Renewed.")); openCloud();
+}
+async function cpRename(id) {
+  const p = myCloud.find(x => x.id === id); if (!p) return;
+  const n = prompt("Tên mới cho máy:", p.name); if (n === null) return;
+  const { error } = await sb.rpc("cloudphone_rename", { p_id: id, p_name: n });
+  if (error) { toast(errMsg(error), 1); return; } openCloud();
+}
+async function cpCancel(id) {
+  if (!confirm(L("Huỷ máy này? Máy sẽ bị XOÁ và KHÔNG hoàn tiền.", "Cancel this phone? It will be deleted."))) return;
+  const { error } = await sb.rpc("cloudphone_cancel", { p_id: id });
+  if (error) { toast(errMsg(error), 1); return; }
+  toast(L("Đang huỷ máy…", "Cancelling…")); openCloud();
+}
+
 </script>
+
+<!-- ĐIỆN THOẠI ĐÁM MÂY — của tôi -->
+<div class="modal" id="cpdlg" hidden>
+  <div class="dlg wide" role="dialog" aria-modal="true" aria-labelledby="cp-title">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <h3 id="cp-title" style="margin:0">📱 Điện thoại đám mây của tôi</h3>
+      <button class="btn sm" id="cp-new" style="margin-left:auto">+ Thuê máy mới</button>
+      <button class="btn ghost sm" id="cp-close">Đóng</button>
+    </div>
+    <div class="note">Máy Android chạy trên cloud 24/7. Bấm <b>Điều khiển</b> để mở máy trong trình duyệt. Gần hết hạn nhớ gia hạn kẻo máy bị xoá.</div>
+    <div class="olist" id="cp-list"></div>
+  </div>
+</div>
+<!-- ĐIỆN THOẠI ĐÁM MÂY — thuê máy mới -->
+<div class="modal" id="cporderdlg" hidden>
+  <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="cpo-title">
+    <h3 id="cpo-title">Thuê điện thoại đám mây</h3>
+    <label style="font-size:13px;color:var(--muted)">RAM (GB)</label>
+    <div class="amts" id="cp-ram"></div>
+    <label style="font-size:13px;color:var(--muted);margin-top:10px;display:block">CPU (số nhân)</label>
+    <div class="amts" id="cp-cpu"></div>
+    <label style="font-size:13px;color:var(--muted);margin-top:10px;display:block">Số ngày thuê</label>
+    <div class="amts" id="cp-days"></div>
+    <label style="font-size:13px;color:var(--muted);margin-top:10px;display:block">Độ phân giải</label>
+    <select class="in" id="cp-res" style="width:100%"></select>
+    <div class="sum" style="margin-top:14px"><span>Tổng thanh toán</span><b id="cp-total"></b></div>
+    <div class="sum"><span>Số dư hiện tại</span><span id="cp-bal" style="font-family:var(--mono)"></span></div>
+    <div class="err" id="cp-err"></div>
+    <div class="acts"><button class="btn ghost" id="cp-ocancel">Đóng</button><button class="btn" id="cp-obuy">Thanh toán &amp; tạo máy</button></div>
+  </div>
+</div>
 </body>
 </html>

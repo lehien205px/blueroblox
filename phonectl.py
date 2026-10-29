@@ -150,10 +150,15 @@ def install_file(port, path):
     finally: shutil.rmtree(d, ignore_errors=True)
 
 # Cho phép trình duyệt / Gmail / app quản lý file cài APK (khách khỏi phải bật "Cài ứng dụng không rõ nguồn")
-PERM_SH = ("for p in com.android.chrome org.mozilla.firefox com.google.android.gm com.google.android.documentsui "
-           "com.android.documentsui com.google.android.apps.nbu.files $(pm list packages -3 2>/dev/null | cut -d: -f2); do "
-           "pm path $p >/dev/null 2>&1 && appops set $p REQUEST_INSTALL_PACKAGES allow >/dev/null 2>&1; done; "
-           "settings put secure install_non_market_apps 1 >/dev/null 2>&1; true")
+# Cho phép TRÌNH DUYỆT / Gmail / app quản lý file cài APK (khách khỏi phải bật "Cài ứng dụng không rõ nguồn").
+# ⚠️ Chỉ đổi khi chưa bật: Android TẮT app ngay khi quyền này bị thay đổi → trước đây đổi cho mọi app mỗi 5 phút
+#    làm game/app của khách bị văng. Không bao giờ đụng vào app khác (game…).
+BROWSERS = ("com.android.chrome org.mozilla.firefox com.brave.browser com.google.android.gm com.google.android.documentsui "
+            "com.android.documentsui com.google.android.apps.nbu.files com.kiwibrowser.browser com.opera.browser "
+            "com.microsoft.emmx mark.via.gp com.sec.android.app.sbrowser com.mi.android.globalFileexplorer com.UCMobile.intl")
+PERM_SH = ("for p in " + BROWSERS + "; do pm path $p >/dev/null 2>&1 || continue; "
+           "case \"$(appops get $p REQUEST_INSTALL_PACKAGES 2>/dev/null)\" in *allow*) ;; "
+           "*) appops set $p REQUEST_INSTALL_PACKAGES allow >/dev/null 2>&1;; esac; done; true")
 def grant_perms(name):
     sh(["docker", "exec", name, "/system/bin/sh", "-c", PERM_SH])
     tune(name)          # giữ màn hình máy ảo luôn sáng (máy tạo trước bản này cũng được áp dụng)

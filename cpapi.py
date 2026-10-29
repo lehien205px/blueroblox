@@ -332,7 +332,7 @@ def bulk_install(jid, fid, ids, every, keep):
         if good and r.get("container"):
             mark = "touch /data/local/tmp/.cp_pre_" + re.sub(r"[^\w.-]", "_", name) + "; " if keep else ""
             subprocess.run(["docker", "exec", r["container"], "/system/bin/sh", "-c",
-                            mark + "for p in $(pm list packages -3 | cut -d: -f2); do appops set $p REQUEST_INSTALL_PACKAGES allow; done"],
+                            mark + "true"],                     # KHÔNG đổi quyền app khác (Android sẽ tắt app đó → game văng)
                            capture_output=True, timeout=60)
         with lock:
             (ok if good else bad).append(r["name"] if good else f"{r['name']}: {o[-120:]}")

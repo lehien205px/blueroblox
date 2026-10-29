@@ -6,7 +6,9 @@
 #   list                                                    : liệt kê máy + hạn dùng
 #   delete <ten>                                            : xoá máy
 #   renew <ten> --days 7                                    : cộng thêm ngày
-#   reap                                                    : xoá hết máy đã hết hạn (dùng cho cron)
+#   stop <ten>                                              : tạm dừng máy (khi vừa hết hạn)
+#   reap                                                    : hết hạn → tạm dừng; quá 30 phút → xoá máy + dữ liệu
+#   connect-all                                             : kết nối lại mọi máy vào trình điều khiển web
 #   capacity                                                : xem tài nguyên đã dùng / ngưỡng 85%
 import json, os, sys, subprocess, time, argparse, datetime, re
 
@@ -17,6 +19,8 @@ WSNAME = "wsscrcpy"                 # container ws-scrcpy (để đăng ký máy
 PORT_BASE = 5555
 PORT_MAX = 5585                    # adb emulator chỉ quét 5555..5585
 LIMIT_PCT = 85                    # ngưỡng chặn (theo % tài nguyên máy chủ)
+GRACE_MIN = 30                    # hết hạn bao nhiêu phút thì xoá hẳn dữ liệu
+BOOT_WAIT = 180                   # chờ Android khởi động tối đa (giây)
 ARM = ("ro.product.cpu.abilist=x86_64,arm64-v8a,x86,armeabi-v7a,armeabi "
        "ro.product.cpu.abilist64=x86_64,arm64-v8a "
        "ro.product.cpu.abilist32=x86,armeabi-v7a,armeabi "
@@ -26,6 +30,7 @@ ARM = ("ro.product.cpu.abilist=x86_64,arm64-v8a,x86,armeabi-v7a,armeabi "
        "ro.dalvik.vm.native.bridge=libndk_translation.so ro.ndk_translation.version=0.2.3").split()
 
 def sh(cmd, check=False):
+    cmd = [c for c in cmd if c != "sudo"]   # chạy docker trực tiếp (user đã trong nhóm docker)
     r = subprocess.run(cmd, capture_output=True, text=True)
     if check and r.returncode != 0:
         raise RuntimeError((r.stderr or r.stdout).strip())
@@ -72,7 +77,42 @@ def free_port(st):
         if port not in busy: return port
     return None
 
-def now(): return datetime.datetime.now()
+def now(): return datetime.datetime.now().astimezone()
+def parse_dt(s):
+    d = datetime.datetime.fromisoformat(str(s).replace("Z", "+00:00"))
+    return d if d.tzinfo else d.astimezone()   # giờ cũ không có múi giờ → coi là giờ máy chủ
+
+SAFE = re.compile(r"^[A-Za-z0-9_.-]+$")
+def wipe_data(name):
+    """Xoá SẠCH thư mục dữ liệu của máy (file do Android tạo thuộc root nên xoá qua docker)."""
+    if not SAFE.match(name): return
+    path = os.path.join(DATA_ROOT, name)
+    if not os.path.exists(path): return
+    sh(["docker", "run", "--rm", "-v", f"{DATA_ROOT}:/d", "alpine", "rm", "-rf", f"/d/{name}"])
+    if os.path.exists(path):
+        import shutil; shutil.rmtree(path, ignore_errors=True)
+
+def adb_connect(port):
+    sh(["docker", "exec", WSNAME, "adb", "connect", f"127.0.0.1:{port}"])
+
+def is_running(name):
+    r = sh(["docker", "inspect", "-f", "{{.State.Running}}", name])
+    return (r.stdout or "").strip() == "true"
+
+def wait_boot(name, port):
+    """Chờ Android khởi động xong rồi mới kết nối (kết nối sớm → màn đen)."""
+    t0 = time.time()
+    while time.time() - t0 < BOOT_WAIT:
+        r = sh(["docker", "exec", name, "/system/bin/getprop", "sys.boot_completed"])
+        if (r.stdout or "").strip() == "1": break
+        time.sleep(5)
+    time.sleep(3)
+    for _ in range(5):
+        adb_connect(port)
+        r = sh(["docker", "exec", WSNAME, "adb", "-s", f"127.0.0.1:{port}", "get-state"])
+        if (r.stdout or "").strip() == "device": return True
+        time.sleep(4)
+    return False
 def fmt(dt): return dt.strftime("%d/%m/%Y %H:%M")
 
 def cmd_capacity(a):
@@ -94,8 +134,11 @@ def cmd_create(a):
     if not port: print("LỖI: hết cổng (tối đa 30 máy/node)."); sys.exit(3)
     if not re.match(r"^\d+x\d+$", a.res): print("LỖI: --res phải dạng 720x1280."); sys.exit(1)
     w, h = a.res.split("x")
+    if not SAFE.match(a.name): print("LỖI: tên máy chỉ gồm chữ, số, _ . -"); sys.exit(1)
+    sh(["docker", "rm", "-f", a.name])           # phòng còn container cũ trùng tên
+    wipe_data(a.name)                             # đảm bảo máy MỚI TINH, không dính dữ liệu cũ
     data = os.path.join(DATA_ROOT, a.name); os.makedirs(data, exist_ok=True)
-    run = ["sudo", "docker", "run", "-itd", "--privileged", "--name", a.name,
+    run = ["sudo", "docker", "run", "-itd", "--privileged", "--restart", "unless-stopped", "--name", a.name,
            f"--memory={a.ram}g", f"--cpus={a.cpu}",
            "-v", f"{data}:/data", "-p", f"{port}:5555", IMAGE,
            f"androidboot.redroid_width={w}", f"androidboot.redroid_height={h}",
@@ -103,14 +146,14 @@ def cmd_create(a):
     r = sh(run)
     if r.returncode != 0:
         print("LỖI tạo máy:", (r.stderr or r.stdout).strip()); sys.exit(4)
-    # đăng ký vào ws-scrcpy để điều khiển qua web
-    sh(["sudo", "docker", "exec", WSNAME, "adb", "connect", f"127.0.0.1:{port}"])
+    # chờ boot xong rồi mới đăng ký vào ws-scrcpy (tránh màn đen)
+    ok = wait_boot(a.name, port)
     exp = now() + datetime.timedelta(days=a.days)
     st["phones"].append({"name": a.name, "port": port, "ram": a.ram, "cpu": a.cpu,
                           "res": a.res, "created": fmt(now()), "expires": exp.isoformat()})
     save(st)
     print(f"✅ Đã tạo máy '{a.name}'  | cổng {port} | RAM {a.ram}GB CPU {a.cpu} | hết hạn {fmt(exp)}")
-    print(f"   Chờ ~90s cho máy boot, rồi vào ws-scrcpy (cổng 8000) sẽ thấy máy này.")
+    print("   Android đã khởi động xong, sẵn sàng điều khiển." if ok else "   CẢNH BÁO: máy chưa kết nối được trình điều khiển, sẽ tự thử lại.")
 
 def rm_container(name):
     sh(["sudo", "docker", "rm", "-f", name])
@@ -118,18 +161,33 @@ def rm_container(name):
 def cmd_delete(a):
     st = load(); p = next((x for x in st["phones"] if x["name"] == a.name), None)
     if not p: print("Không có máy tên này."); sys.exit(1)
-    rm_container(a.name)
-    sh(["sudo", "docker", "exec", WSNAME, "adb", "disconnect", f"127.0.0.1:{p['port']}"])
+    sh(["docker", "exec", WSNAME, "adb", "disconnect", f"127.0.0.1:{p['port']}"])
+    rm_container(a.name); wipe_data(a.name)
     st["phones"] = [x for x in st["phones"] if x["name"] != a.name]; save(st)
-    print(f"🗑️  Đã xoá máy '{a.name}'.")
+    print(f"🗑️  Đã xoá máy '{a.name}' và toàn bộ dữ liệu.")
+
+def cmd_stop(a):
+    st = load(); p = next((x for x in st["phones"] if x["name"] == a.name), None)
+    if not p: print("Không có máy tên này."); sys.exit(1)
+    sh(["docker", "exec", WSNAME, "adb", "disconnect", f"127.0.0.1:{p['port']}"])
+    sh(["docker", "stop", a.name])
+    print(f"⏸  Đã tạm dừng '{a.name}' (dữ liệu còn giữ {GRACE_MIN} phút).")
+
+def cmd_connect_all(a):
+    st = load()
+    for p in st["phones"]:
+        if is_running(p["name"]): adb_connect(p["port"])
+    print("Đã kết nối lại", len(st["phones"]), "máy.")
 
 def cmd_renew(a):
     st = load(); p = next((x for x in st["phones"] if x["name"] == a.name), None)
     if not p: print("Không có máy tên này."); sys.exit(1)
-    base = datetime.datetime.fromisoformat(p["expires"])
+    base = parse_dt(p["expires"])
     if base < now(): base = now()
     base += datetime.timedelta(days=a.days)
     p["expires"] = base.isoformat(); save(st)
+    if not is_running(a.name):                    # máy đang tạm dừng vì hết hạn → bật lại
+        sh(["docker", "start", a.name]); wait_boot(a.name, p["port"])
     print(f"🔄 '{a.name}' gia hạn +{a.days} ngày → hết hạn {fmt(base)}")
 
 def cmd_list(a):
@@ -137,7 +195,7 @@ def cmd_list(a):
     if not st["phones"]: print("(chưa có máy nào)"); return
     print(f"{'TÊN':<16}{'CỔNG':<7}{'RAM':<6}{'CPU':<5}{'HẾT HẠN':<18}{'CÒN'}")
     for p in st["phones"]:
-        exp = datetime.datetime.fromisoformat(p["expires"])
+        exp = parse_dt(p["expires"])
         left = exp - now(); d = left.days; hrs = int(left.total_seconds()//3600)
         status = f"{d}n" if d >= 0 else "HẾT HẠN"
         print(f"{p['name']:<16}{p['port']:<7}{str(p['ram'])+'G':<6}{str(p['cpu']):<5}{fmt(exp):<18}{status}")
@@ -145,13 +203,18 @@ def cmd_list(a):
 def cmd_reap(a):
     st = load(); n = 0
     for p in list(st["phones"]):
-        if datetime.datetime.fromisoformat(p["expires"]) < now():
-            rm_container(p["name"])
-            sh(["sudo", "docker", "exec", WSNAME, "adb", "disconnect", f"127.0.0.1:{p['port']}"])
+        exp = parse_dt(p["expires"])
+        if exp + datetime.timedelta(minutes=GRACE_MIN) < now():
+            sh(["docker", "exec", WSNAME, "adb", "disconnect", f"127.0.0.1:{p['port']}"])
+            rm_container(p["name"]); wipe_data(p["name"])
             st["phones"] = [x for x in st["phones"] if x["name"] != p["name"]]; n += 1
-            print(f"🗑️  Hết hạn → xoá '{p['name']}'")
+            print(f"🗑️  Hết hạn quá {GRACE_MIN} phút → xoá '{p['name']}' + dữ liệu")
+        elif exp < now() and is_running(p["name"]):
+            sh(["docker", "exec", WSNAME, "adb", "disconnect", f"127.0.0.1:{p['port']}"])
+            sh(["docker", "stop", p["name"]])
+            print(f"⏸  Hết hạn → tạm dừng '{p['name']}' (còn {GRACE_MIN} phút để gia hạn)")
     save(st)
-    print(f"Xong. Đã xoá {n} máy hết hạn.")
+    print(f"Xong. Đã xoá {n} máy.")
 
 def main():
     ap = argparse.ArgumentParser()
@@ -161,6 +224,8 @@ def main():
     d = sub.add_parser("delete"); d.add_argument("name"); d.set_defaults(f=cmd_delete)
     r = sub.add_parser("renew"); r.add_argument("name"); r.add_argument("--days", type=int, default=7); r.set_defaults(f=cmd_renew)
     sub.add_parser("reap").set_defaults(f=cmd_reap)
+    s = sub.add_parser("stop"); s.add_argument("name"); s.set_defaults(f=cmd_stop)
+    sub.add_parser("connect-all").set_defaults(f=cmd_connect_all)
     sub.add_parser("capacity").set_defaults(f=cmd_capacity)
     a = ap.parse_args()
     if not getattr(a, "cmd", None): ap.print_help(); sys.exit(0)

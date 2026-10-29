@@ -6,6 +6,7 @@
 #   PUBLIC_BASE=https://xxxx.trycloudflare.com   (link ws-scrcpy ra internet)
 # Chạy:  python3 ~/cloudphoned.py           (vòng lặp mỗi 15s)
 import json, os, sys, time, subprocess, urllib.request, urllib.parse, datetime
+GRACE_MIN = 30          # hết hạn quá 30 phút không gia hạn → xoá máy + dữ liệu
 
 HOME = os.path.expanduser("~")
 CONF = os.path.join(HOME, "cloudphone.conf")
@@ -44,7 +45,10 @@ def get_pending(status):
     return sb("GET", f"cloud_phones?status=eq.{status}&select=*&order=created_at.asc") or []
 
 def get_renew():
-    return sb("GET", "cloud_phones?pending_renew_days=gt.0&status=eq.active&select=*") or []
+    return sb("GET", "cloud_phones?pending_renew_days=gt.0&status=in.(active,expired)&select=*") or []
+
+def get_live():
+    return sb("GET", "cloud_phones?status=in.(active,expired)&select=*") or []
 
 def patch(pid, fields):
     fields["updated_at"] = datetime.datetime.now().isoformat()
@@ -61,7 +65,16 @@ def phone_state(name):
         return None
 
 def stream_url(port):
-    return f"{BASE}/#!action=stream&udid=127.0.0.1:{port}&player=webcodecs"
+    # Phải có tham số ws= thì trang điều khiển mới hiện hình (thiếu → màn đen)
+    q = urllib.parse.quote
+    udid = f"127.0.0.1:{port}"
+    ws = BASE.replace("https://", "wss://").replace("http://", "ws://") + "/?action=proxy-adb&remote=" + q("tcp:8886", safe="") + "&udid=" + q(udid, safe="")
+    return f"{BASE}/#!action=stream&udid={q(udid, safe='')}&player=webcodecs&ws={q(ws, safe='')}"
+
+def now(): return datetime.datetime.now().astimezone()
+def parse_dt(s):
+    d = datetime.datetime.fromisoformat(str(s).replace("Z", "+00:00"))
+    return d if d.tzinfo else d.astimezone()
 
 def cname(row):
     return "cp_" + row["id"].replace("-", "")[:10]
@@ -80,7 +93,7 @@ def do_create(row):
         patch(row["id"], {"status": "error", "error": "Tạo xong nhưng không đọc được trạng thái."}); return
     patch(row["id"], {"status": "active", "container": name, "port": ps["port"],
                       "node": "home", "stream_url": stream_url(ps["port"]),
-                      "expires_at": ps["expires"], "error": None})
+                      "expires_at": parse_dt(ps["expires"]).isoformat(), "error": None})
     print(f"   ✓ active, cổng {ps['port']}")
 
 def do_cancel(row):
@@ -96,8 +109,27 @@ def do_renew(row):
     r = phonectl(["renew", name, "--days", str(d)])
     ps = phone_state(name)
     fields = {"pending_renew_days": 0}
-    if ps: fields["expires_at"] = ps["expires"]
+    if ps:
+        fields["expires_at"] = parse_dt(ps["expires"]).isoformat()
+        fields["status"] = "active"; fields["error"] = None
+        fields["stream_url"] = stream_url(ps["port"])
     patch(row["id"], fields)
+
+def do_expiry(row):
+    """Hết hạn → tạm dừng (giữ dữ liệu 30 phút). Quá 30 phút → xoá máy + toàn bộ dữ liệu."""
+    name = row.get("container") or cname(row)
+    ps = phone_state(name)
+    exp = parse_dt(ps["expires"]) if ps else (parse_dt(row["expires_at"]) if row.get("expires_at") else None)
+    if not exp: return
+    t = now()
+    if t > exp + datetime.timedelta(minutes=GRACE_MIN):
+        print(f"[xoá hết hạn] {name}")
+        if ps: phonectl(["delete", name])
+        patch(row["id"], {"status": "cancelled", "error": f"Hết hạn quá {GRACE_MIN} phút không gia hạn — máy và dữ liệu đã bị xoá."})
+    elif t > exp and row["status"] == "active":
+        print(f"[tạm dừng] {name} hết hạn, chờ gia hạn {GRACE_MIN} phút")
+        if ps: phonectl(["stop", name])
+        patch(row["id"], {"status": "expired"})
 
 def tick():
     for row in get_pending("pending"):
@@ -109,10 +141,18 @@ def tick():
     for row in get_renew():
         try: do_renew(row)
         except Exception as e: print("lỗi gia hạn:", e)
+    for row in get_live():
+        try: do_expiry(row)
+        except Exception as e: print("lỗi hết hạn:", e)
 
 if __name__ == "__main__":
     print(f"cloudphoned chạy — đọc {SB} mỗi {POLL}s. Ctrl+C để dừng.")
+    n = 0
     while True:
         try: tick()
         except Exception as e: print("lỗi vòng lặp:", e)
+        if n % 20 == 0:          # ~5 phút: kết nối lại các máy vào trình điều khiển (sau khi khởi động lại...)
+            try: phonectl(["connect-all"])
+            except Exception as e: print("lỗi connect-all:", e)
+        n += 1
         time.sleep(POLL)

@@ -109,7 +109,9 @@ def do_create(row):
 
 def finish_boot(pid, name):
     try:
-        phonectl(["waitboot", name])          # tối đa ~4 phút; rớt thì connect-all sẽ nối lại sau
+        r = phonectl(["waitboot", name])      # tối đa ~4 phút; rớt thì connect-all sẽ nối lại sau (gồm cài app sẵn + mở quyền APK)
+        for ln in (r.stdout or "").splitlines():
+            if ln.strip().startswith(("+", "!")): print("  ", name, ln.strip())
         ps = phone_state(name)
         if not ps: return
         patch(pid, {"status": "active", "container": name, "port": ps["port"], "node": NODE_ID,
@@ -318,8 +320,12 @@ if __name__ == "__main__":
             except Exception as e: print("lỗi báo cáo tài nguyên:", e)
             try: do_locks()
             except Exception as e: print("lỗi khoá máy:", e)
-        if n % 20 == 5:                     # ~5 phút: mở quyền cài APK cho Chrome/Firefox/app khách mới cài
-            try: phonectl(["perms"])
-            except Exception as e: print("lỗi mở quyền APK:", e)
+        if n % 20 == 5:                     # ~5 phút: cài app còn thiếu (máy nào lỡ) + mở quyền cài APK cho app khách mới cài
+            try:
+                r = phonectl(["preinstall", "--all"])
+                for ln in (r.stdout or "").splitlines():
+                    if ln.strip(): print("  ", ln.strip())
+                phonectl(["perms"])
+            except Exception as e: print("lỗi cài app sẵn / mở quyền APK:", e)
         n += 1
         time.sleep(POLL)

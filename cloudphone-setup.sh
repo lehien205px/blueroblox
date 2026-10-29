@@ -142,8 +142,16 @@ else
     ok "Đã tải Firefox $V"
   else warn "Không tải được Firefox tự động — tải tay rồi bỏ vào $H/apk-cai-san"; fi
 fi
-ls -1 "$H/apk-cai-san" | sed 's/^/   • /'
-echo "   Muốn cài sẵn thêm Chrome / Gmail: tải bản x86_64 (.apk hoặc .apkm) bỏ vào thư mục trên rồi chạy:  cloudphone apps"
+if ls "$H/apk-cai-san"/*rave* >/dev/null 2>&1; then ok "Đã có Brave (trình duyệt nhân Chrome)"
+else
+  asu "curl -fsSL -o '$H/apk-cai-san/brave.apk' 'https://github.com/brave/brave-browser/releases/latest/download/BraveMonox64.apk'" \
+    && ok "Đã tải Brave (trình duyệt nhân Chrome, tải file/APK được, đăng nhập Google được)" || warn "Không tải được Brave"
+fi
+for f in "$H"/apk-cai-san/*; do [ -s "$f" ] && [ "$(stat -c %s "$f")" -lt 1000000 ] && { warn "File $(basename "$f") quá nhỏ (tải lỗi) — đã xoá"; rm -f "$f"; }; done
+ls -lh "$H/apk-cai-san" | tail -n +2 | awk '{print "   • "$9"  ("$5")"}'
+echo "   Muốn cài sẵn thêm app (Chrome/Gmail .apkm x86_64…): bỏ vào thư mục trên rồi chạy:  cloudphone apps"
+echo "   Đang cài app sẵn cho các máy đang chạy (có thể mất vài phút)…"
+asu "python3 '$H/phonectl.py' preinstall --all; python3 '$H/phonectl.py' perms" 2>&1 | grep -E "^\s*[+!]" || true
 
 # ---------------------------------------------------------------------
 # Lệnh tắt "cloudphone"
@@ -157,6 +165,8 @@ case "\${1:-}" in
     printf "%-18s %s\n" "ws-scrcpy" "\$(docker inspect -f '{{.State.Status}}' $WSNAME 2>/dev/null || echo không có)"
     lsmod | grep -q binder && echo "binder             bật" || echo "binder             TẮT (sudo modprobe binder_linux)"
     df -h / | tail -1 | awk '{print "ổ cứng             trống "\$4" / "\$2}'
+    grep -q "def preinstall" "\$H/phonectl.py" && echo "phonectl.py        bản mới (có cài app sẵn)" || echo "phonectl.py        BẢN CŨ → chạy: cloudphone update"
+    echo "app cài sẵn        \$(ls "\$H/apk-cai-san" 2>/dev/null | tr '\n' ' ')"
     run python3 "\$H/phonectl.py" capacity ;;
   update)
     for f in phonectl.py cloudphoned.py cpapi.py; do
@@ -167,7 +177,7 @@ case "\${1:-}" in
   restart) sudo systemctl restart cpapi cloudphoned; docker start $WSNAME >/dev/null; echo "✓ Đã khởi động lại" ;;
   logs)    sudo journalctl -u "\${2:-cloudphoned}" -n "\${3:-50}" --no-pager ;;
   list)    run python3 "\$H/phonectl.py" list ;;
-  apps)    run python3 "\$H/phonectl.py" preinstall --all ;;
+  apps)    run python3 "\$H/phonectl.py" preinstall --all; run python3 "\$H/phonectl.py" perms; echo "✓ Xong (máy nào đã có app thì bỏ qua)" ;;
   perms)   run python3 "\$H/phonectl.py" perms && echo "✓ Đã mở quyền cài APK cho mọi máy" ;;
   *) echo "cloudphone [status|update|restart|logs [cpapi|cloudphoned]|list|apps|perms]" ;;
 esac

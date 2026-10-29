@@ -107,11 +107,17 @@ TUNE = ("settings put global window_animation_scale 0.5; settings put global tra
 def tune(name):
     """Cho máy mượt hơn: giảm hiệu ứng chuyển cảnh, cài APK không phải chờ quét, màn hình không tự tắt."""
     sh(["docker", "exec", name, "/system/bin/sh", "-c", TUNE])
-PRE_DIR = os.path.expanduser("~/apk-cai-san")   # bỏ file .apk vào đây → mọi máy mới tự cài sẵn (VD: trình duyệt Chrome/Firefox)
+def _pre_dir():
+    """Thư mục app cài sẵn: cạnh phonectl.py, hoặc ~/apk-cai-san, hoặc /home/*/apk-cai-san (dịch vụ chạy bằng user nào cũng tìm thấy)."""
+    import glob
+    for d in [os.path.join(os.path.dirname(os.path.abspath(__file__)), "apk-cai-san"), os.path.expanduser("~/apk-cai-san")] + sorted(glob.glob("/home/*/apk-cai-san")):
+        if os.path.isdir(d): return d
+    return os.path.expanduser("~/apk-cai-san")
+PRE_DIR = _pre_dir()   # bỏ file .apk/.apkm vào đây → mọi máy mới tự cài sẵn (trình duyệt, Gmail…)
 def preinstall(name, port, force=False):
     """Cài các APK trong ~/apk-cai-san vào máy (mỗi APK chỉ cài 1 lần / máy, lưu dấu trong /data của máy)."""
     try: apks = sorted(f for f in os.listdir(PRE_DIR) if f.lower().endswith((".apk", ".apks", ".apkm", ".xapk")))
-    except OSError: return
+    except OSError: print(f"   ! Không thấy thư mục app cài sẵn {PRE_DIR}"); return
     for f in apks:
         mark = "/data/local/tmp/.cp_pre_" + re.sub(r"[^\w.-]", "_", f)
         if not force and sh(["docker", "exec", name, "/system/bin/sh", "-c", f"test -f {mark} && echo y"]).stdout.strip() == "y":
@@ -159,9 +165,9 @@ def cmd_perms(a):
 
 def cmd_preinstall(a):
     """Cài APK trong ~/apk-cai-san cho máy đang chạy: phonectl.py preinstall TÊN_MÁY  hoặc  --all"""
-    st = load()
+    st = load(); running = set((sh(["docker", "ps", "--format", "{{.Names}}"]).stdout or "").split())
     for p in st["phones"]:
-        if a.all or p["name"] == a.name:
+        if (a.all and p["name"] in running) or p["name"] == a.name:
             if sh(["docker", "exec", WSNAME, "adb", "-s", f"127.0.0.1:{p['port']}", "get-state"]).stdout.strip() != "device":
                 adb_connect(p["port"])
             preinstall(p["name"], p["port"], a.force); grant_perms(p["name"])

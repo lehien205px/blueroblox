@@ -357,36 +357,43 @@ async function openSession() { await api("session", { method: "POST", json: {} }
 
 /* ---------- kết nối màn hình (1 máy hoặc từng ô) — tự nối lại khi rớt ---------- */
 function resOf(p) { const m = /^(\d+)x(\d+)$/.exec(p && p.res || ""); return m ? [+m[1], +m[2]] : [720, 1280]; }
-function streamUrl(p, q, sid) {
+function streamUrl(p, q, sid, raw) {
   const udid = "127.0.0.1:" + p.port, [w, h] = resOf(p);
   const ws = "wss://" + new URL(PHONE).host + "/?action=proxy-adb&remote=" + encodeURIComponent("tcp:8886") + "&udid=" + encodeURIComponent(udid);
   return PHONE + "/?v=" + sid + "#!action=stream&udid=" + encodeURIComponent(udid) + "&player=" + player + "&ws=" + encodeURIComponent(ws)
-    + "&captureKeyboard=1&cpq=" + q + "&cpfps=" + (p.fps || 30) + "&cpw=" + w + "&cph=" + h + "&cpn=" + sid;
+    + "&captureKeyboard=1&cpq=" + q + "&cpfps=" + (p.fps || 30) + "&cpw=" + w + "&cph=" + h + "&cpn=" + sid + (raw ? "&cpraw=1" : "");
 }
 const CONNS = new Set();
 class Conn {
   constructor(iframe, veilEl, hooks) {
-    this.f = iframe; this.v = veilEl; this.h = hooks || {}; this.tries = 0; this.ok = false; this.size = null; this.kbps = 0; CONNS.add(this);
+    this.f = iframe; this.v = veilEl; this.h = hooks || {}; this.tries = 0; this.fails = 0; this.raw = false;
+    this.ok = false; this.size = null; this.kbps = 0; CONNS.add(this);
     iframe.addEventListener("load", () => {
       if (!this.p || !/^https:/.test(this.f.src)) return;
       const sid = this.sid;
-      setTimeout(() => {            // không nhận được "boot" → server bản cũ: hiện hình luôn, không tự nối lại
+      setTimeout(() => {   // không có tin "boot" → chế độ gốc (server cũ hoặc đã tắt tối ưu): hiện hình luôn
         if (this.sid !== sid || this.boot || !this.p) return;
         clearTimeout(this.t); this.legacy = true; this.ok = true; this.tries = 0; this.h.ok && this.h.ok();
       }, 3500);
+      setTimeout(() => {   // có tối ưu nhưng chưa xác nhận hình → vẫn bỏ màn che sau 7 giây, không bắt khách chờ
+        if (this.sid !== sid || !this.p || this.ok) return;
+        this.soft = true; this.h.ok && this.h.ok();
+      }, 7000);
     });
   }
   open(p, q) {
-    this.p = p; this.q = q; this.ok = false; this.boot = false; this.legacy = false; this.sid = Math.random().toString(36).slice(2, 10);
-    clearTimeout(this.t); this.f.src = streamUrl(p, q, this.sid);
-    this.arm(30000);   // lần đầu chờ tới 30 giây (máy mới khởi động trình phát hình chậm)
-    this.h.connecting && this.h.connecting(this.tries);
+    this.p = p; this.q = q; this.ok = false; this.boot = false; this.legacy = false; this.soft = false;
+    this.sid = Math.random().toString(36).slice(2, 10);
+    clearTimeout(this.t); this.f.src = streamUrl(p, q, this.sid, this.raw);
+    this.arm(30000);   // máy mới khởi động trình phát hình có thể chậm
+    this.h.connecting && this.h.connecting(this.tries, this.raw);
   }
   arm(ms) { clearTimeout(this.t); this.t = setTimeout(() => this.retry("Không nhận được hình"), ms); }
   retry(why) {
-    clearTimeout(this.t); this.ok = false;
+    clearTimeout(this.t); this.ok = false; this.fails++;
+    if (!this.raw && this.fails >= 2) this.raw = true;       // tối ưu không chạy được → dùng chế độ gốc (như bản đầu)
     if (this.tries >= 5) { this.h.fail && this.h.fail(why); return; }
-    this.tries++; this.h.connecting && this.h.connecting(this.tries);
+    this.tries++; this.h.connecting && this.h.connecting(this.tries, this.raw);
     setTimeout(() => this.p && this.open(this.p, this.q), Math.min(800 * this.tries, 4000));
   }
   stop() { clearTimeout(this.t); this.p = null; this.ok = false; this.f.src = "about:blank"; }
@@ -394,15 +401,15 @@ class Conn {
     if (d.n !== this.sid) return;                         // tin cũ của lần mở trước → bỏ qua
     if (d.t === "boot") { this.boot = true; return; }
     if (d.t === "open") { if (!this.ok) { this.arm(30000); this.h.progress && this.h.progress("Đã kết nối, đang chờ hình đầu tiên…"); } return; }
-    if (d.t === "ok") { clearTimeout(this.t); this.ok = true; this.tries = 0; this.h.ok && this.h.ok(); }
+    if (d.t === "ok") { clearTimeout(this.t); const first = !this.ok || this.soft; this.ok = true; this.soft = false; this.tries = 0; this.fails = 0; if (first) this.h.ok && this.h.ok(); }
     else if (d.t === "closed") { if (this.p) this.retry("Mất kết nối hình"); }
     else if (d.t === "size") { this.size = [d.w, d.h]; this.h.size && this.h.size(); }
-    else if (d.t === "stat") { this.kbps = d.kbps; if (!this.ok && d.kbps > 0) this.arm(20000); this.h.stat && this.h.stat(); }
+    else if (d.t === "stat") { this.kbps = d.kbps; if ((!this.ok || this.soft) && d.kbps > 0) this.arm(20000); this.h.stat && this.h.stat(); }
     else if (d.t === "keyok" || d.t === "nokey") { const cb = this.cb && this.cb[d.id]; if (cb) { delete this.cb[d.id]; cb(d.t === "keyok"); } }
   }
   key(name) {   // bấm phím qua đường hình (tức thì); không được thì nhờ server
     return new Promise(res => {
-      if (!this.ok || this.legacy || !this.f.contentWindow) return res(false);
+      if (!this.ok || this.legacy || this.soft || !this.f.contentWindow) return res(false);
       const id = Math.random().toString(36).slice(2); this.cb = this.cb || {}; this.cb[id] = res;
       this.f.contentWindow.postMessage({ cpcmd: "key", key: name, id }, PHONE);
       setTimeout(() => { if (this.cb[id]) { delete this.cb[id]; res(false); } }, 700);
@@ -420,7 +427,7 @@ async function pressKey(conn, p, code) {
 
 /* ---------- 1 máy ---------- */
 const main = new Conn($("scr"), $("veil"), {
-  connecting(n) { setState("wait", n ? "Đang kết nối lại…" : "Đang kết nối…"); veil(true, n ? `Đang kết nối lại (lần ${n})…` : "Đang mở màn hình máy…", n ? "Hình bị gián đoạn, đang tự nối lại." : ""); },
+  connecting(n, raw) { setState("wait", n ? "Đang kết nối lại…" : "Đang kết nối…"); veil(true, n ? `Đang kết nối lại (lần ${n})…` : "Đang mở màn hình máy…", n ? (raw ? "Chuyển sang chế độ hình gốc cho chắc chắn…" : "Hình bị gián đoạn, đang tự nối lại.") : ""); },
   ok() { veil(false); setState("ok", "Đang chạy"); },
   progress(txt) { if (!$("veil").hidden) $("veild").textContent = txt; },
   fail(why) { setState("bad", "Không kết nối được"); veil(true, why || "Không kết nối được màn hình", '<button class="btn sm" id="vretry">Thử lại</button>', false); const b = $("vretry"); if (b) b.onclick = () => { main.tries = 0; main.open(cur, quality); }; },
@@ -454,6 +461,7 @@ function info() {
   const land = s ? s[0] > s[1] : rw > rh, base = land ? Math.max(rw, rh) : Math.min(rw, rh);
   parts.push(`hiển thị ${dw}×${dh} (${Math.round(dw / base * 100)}%)`);
   if (main.ok && main.kbps) parts.push((main.kbps / 1000).toFixed(1) + " Mbps");
+  if (main.ok && main.legacy && !$("adminlink").hidden) parts.push("⚠ chế độ gốc — server chưa chạy cpapi mới");
   $("info").textContent = parts.join(" · ");
 }
 addEventListener("resize", () => { fit(); if (document.body.classList.contains("multi")) layoutGrid(); });

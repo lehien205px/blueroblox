@@ -1252,6 +1252,9 @@ window.BR_CONFIG = {
     <label class="cpl" for="cp-days-x">Số ngày thuê</label>
     <div class="amts" id="cp-days"></div>
     <input class="in cpx" id="cp-days-x" type="number" min="1" step="1" inputmode="numeric" placeholder="Hoặc tự nhập số ngày, VD 45">
+    <label class="cpl" for="cp-qty-x">Số lượng máy (cùng cấu hình)</label>
+    <div class="amts" id="cp-qty"></div>
+    <input class="in cpx" id="cp-qty-x" type="number" min="1" max="20" step="1" inputmode="numeric" placeholder="Hoặc tự nhập số máy, tối đa 20">
     <label class="cpl" for="cp-res">Độ phân giải (rộng x cao)</label>
     <div class="amts" id="cp-resq"></div>
     <input class="in cpx" id="cp-res" type="text" autocomplete="off" placeholder="Hoặc tự nhập, VD 1080x2400">
@@ -3252,16 +3255,16 @@ $("tg-test") && ($("tg-test").onclick = async () => {
 
 
 /* ===================== ĐIỆN THOẠI ĐÁM MÂY (khách) ===================== */
-const CP_RAM = [2, 4, 6, 8, 12, 16, 24, 32], CP_CPU = [2, 4, 6, 8], CP_DAYS = [7, 15, 30, 60], CP_FPS = [30, 60, 90, 120];
+const CP_RAM = [2, 4, 6, 8, 12, 16, 24, 32], CP_CPU = [2, 4, 6, 8], CP_DAYS = [7, 15, 30, 60], CP_FPS = [30, 60, 90, 120], CP_QTY = [1, 2, 5, 10];
 const CP_RES = [["540x960", "Nhẹ máy"], ["720x1280", "HD"], ["720x1600", "HD+ dài"], ["1080x1920", "Full HD"],
   ["1080x2340", "FHD+ dài"], ["1080x2400", "FHD+ 20:9"], ["1280x720", "HD ngang"], ["1920x1080", "FHD ngang"]];
 const CP_GRACE_MIN = 30;
 const CP_DEF = { price_ram_gb_day: 2500, price_cpu_day: 2000, min_ram: 1, max_ram: 16, min_cpu: 1, max_cpu: 8, min_days: 1, max_days: 90, min_fps: 10, max_fps: 120 };
 const CP_CARD_DEF = { name: "Điện thoại đám mây (Cloud Phone)", feats: "Android 24/7, Chạy game, Điều khiển web",
   desc: "Thuê điện thoại Android chạy trên cloud — tự chọn RAM, CPU, số ngày. Cài game, treo acc, điều khiển mọi nơi qua trình duyệt." };
-let CPpricing = null, cpSel = { ram: 2, cpu: 2, days: 7, res: "720x1280", fps: 30 }, myCloud = [], cpPollT = null;
+let CPpricing = null, cpSel = { ram: 2, cpu: 2, days: 7, res: "720x1280", fps: 30, qty: 1 }, myCloud = [], cpPollT = null;
 Object.assign(ERR, { BAD_RAM: "RAM nằm ngoài giới hạn cho phép.", BAD_CPU: "Số nhân CPU nằm ngoài giới hạn cho phép.", BAD_DAYS: "Số ngày nằm ngoài giới hạn cho phép.",
-  BAD_RES: "Độ phân giải không hợp lệ (dạng 720x1280).", BAD_FPS: "FPS nằm ngoài giới hạn cho phép.", PHONE_LOCKED: "Máy đang bị khoá, không gia hạn được. Liên hệ hỗ trợ.", BAD_DISCOUNT: "Chiết khấu phải từ 0 đến 90%.", NOT_ADMIN: "Chỉ admin mới làm được việc này.", MAINTENANCE: "Hệ thống đang bảo trì, vui lòng quay lại sau.",
+  BAD_RES: "Độ phân giải không hợp lệ (dạng 720x1280).", BAD_FPS: "FPS nằm ngoài giới hạn cho phép.", BAD_QTY: "Số lượng không hợp lệ.", PHONE_LOCKED: "Máy đang bị khoá, không gia hạn được. Liên hệ hỗ trợ.", BAD_DISCOUNT: "Chiết khấu phải từ 0 đến 90%.", NOT_ADMIN: "Chỉ admin mới làm được việc này.", MAINTENANCE: "Hệ thống đang bảo trì, vui lòng quay lại sau.",
   OUT_OF_CAPACITY: "Máy chủ đã hết chỗ cho cấu hình này. Chọn cấu hình nhỏ hơn hoặc quay lại sau.", SERVER_OFFLINE: "Máy chủ điện thoại đang tạm ngưng, vui lòng quay lại sau.", PHONE_GONE: "Máy đã bị xoá vì hết hạn quá 30 phút — hãy thuê máy mới.", NO_PHONE: "Không tìm thấy máy." });
 
 let CPstatus = null;
@@ -3288,7 +3291,7 @@ async function cpLoadPricing() {
 }
 const cpN = v => +v || 0;
 function cpPerDay(ram, cpu, pr) { pr = pr || CPpricing || CP_DEF; return ram * cpN(pr.price_ram_gb_day) + cpu * cpN(pr.price_cpu_day); }
-function cpPrice() { return cv(cpPerDay(cpSel.ram, cpSel.cpu) * cpSel.days); }
+function cpPrice() { return cv(cpPerDay(cpSel.ram, cpSel.cpu) * cpSel.days) * (cpSel.qty || 1); }
 function cpCard() {
   const p = CPpricing || {};
   return { name: (p.card_name || "").trim() || CP_CARD_DEF.name, desc: (p.card_desc || "").trim() || CP_CARD_DEF.desc,
@@ -3301,9 +3304,10 @@ function cpCheck() {
   if (!(cpSel.cpu >= p.min_cpu && cpSel.cpu <= p.max_cpu)) return `CPU phải từ ${p.min_cpu} đến ${p.max_cpu} nhân.`;
   if (!(cpSel.days >= p.min_days && cpSel.days <= p.max_days)) return `Số ngày phải từ ${p.min_days} đến ${p.max_days}.`;
   if (!(cpSel.fps >= p.min_fps && cpSel.fps <= p.max_fps)) return `FPS phải từ ${p.min_fps} đến ${p.max_fps}.`;
+  if (!(cpSel.qty >= 1 && cpSel.qty <= 20)) return "Số lượng máy phải từ 1 đến 20.";
   const s = CPstatus;
-  if (s && !isAdmin() && (cpSel.ram > +s.free_ram || cpSel.cpu > +s.free_cpu))
-    return `Máy chủ chỉ còn trống ${Math.floor(+s.free_ram)}GB RAM và ${Math.floor(+s.free_cpu)} nhân CPU. Chọn cấu hình nhỏ hơn.`;
+  if (s && !isAdmin() && (cpSel.ram * cpSel.qty > +s.free_ram || cpSel.cpu * cpSel.qty > +s.free_cpu))
+    return `Máy chủ chỉ còn trống ${Math.floor(+s.free_ram)}GB RAM và ${Math.floor(+s.free_cpu)} nhân CPU — chọn ít máy hơn hoặc cấu hình nhỏ hơn.`;
   const m = /^(\d{3,4})x(\d{3,4})$/.exec(cpSel.res);
   if (!m || +m[1] < 320 || +m[2] < 320 || +m[1] > 4096 || +m[2] > 4096) return "Độ phân giải phải dạng rộng x cao, VD 720x1280 (mỗi cạnh 320–4096).";
   return "";
@@ -3375,13 +3379,14 @@ async function openCpOrder() {
   const why = cpBlocked(); if (why) { toast(why, 1); try { renderGrid(); } catch (e) {} return; }
   const p = CPpricing;
   const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
-  cpSel = { ram: clamp(2, p.min_ram, p.max_ram), cpu: clamp(2, p.min_cpu, p.max_cpu), days: clamp(7, p.min_days, p.max_days), res: "720x1280", fps: clamp(30, p.min_fps, p.max_fps) };
+  cpSel = { ram: clamp(2, p.min_ram, p.max_ram), cpu: clamp(2, p.min_cpu, p.max_cpu), days: clamp(7, p.min_days, p.max_days), res: "720x1280", fps: clamp(30, p.min_fps, p.max_fps), qty: 1 };
   cpChips("cp-ram", CP_RAM.filter(v => v >= p.min_ram && v <= p.max_ram), "ram", "GB");
   cpChips("cp-cpu", CP_CPU.filter(v => v >= p.min_cpu && v <= p.max_cpu), "cpu", "");
   cpChips("cp-days", CP_DAYS.filter(v => v >= p.min_days && v <= p.max_days), "days", " ngày");
   cpChips("cp-fps", CP_FPS.filter(v => v >= p.min_fps && v <= p.max_fps), "fps", " FPS");
+  cpChips("cp-qty", CP_QTY, "qty", " máy");
   cpResChips();
-  ["cp-ram-x", "cp-cpu-x", "cp-days-x", "cp-fps-x"].forEach(id => { $(id).value = ""; });
+  ["cp-ram-x", "cp-cpu-x", "cp-days-x", "cp-fps-x", "cp-qty-x"].forEach(id => { $(id).value = ""; });
   $("cp-fps-x").min = p.min_fps; $("cp-fps-x").max = p.max_fps;
   $("cp-ram-x").max = p.max_ram; $("cp-cpu-x").max = p.max_cpu; $("cp-days-x").max = p.max_days;
   $("cp-res").value = "";
@@ -3391,7 +3396,7 @@ async function openCpOrder() {
 }
 function cpOrderUpd() {
   const price = cpPrice(), p = CPpricing || CP_DEF, bad = cpCheck();
-  $("cp-calc").textContent = `(${cpSel.ram}GB×${vnd(p.price_ram_gb_day)} + ${cpSel.cpu} nhân×${vnd(p.price_cpu_day)}) × ${cpSel.days} ngày` + (isCtv() ? ` − ${ctvPct()}% CTV` : "");
+  $("cp-calc").textContent = `(${cpSel.ram}GB×${vnd(p.price_ram_gb_day)} + ${cpSel.cpu} nhân×${vnd(p.price_cpu_day)}) × ${cpSel.days} ngày` + (isCtv() ? ` − ${ctvPct()}% CTV` : "") + (cpSel.qty > 1 ? ` × ${cpSel.qty} máy` : "");
   $("cp-total").textContent = bad ? "—" : fmt(price);
   $("cp-bal").textContent = profile ? fmt(profile.balance) : "—";
   $("cp-err").textContent = bad || (profile && profile.balance < price ? L("Số dư không đủ. Cần nạp thêm ", "Need ") + fmt(price - profile.balance) + "." : "");
@@ -3401,11 +3406,11 @@ async function cpBuy() {
   const bad = cpCheck(); if (bad) { $("cp-err").textContent = bad; return; }
   const price = cpPrice();
   if (profile.balance < price) { show("cporderdlg", false); openTopup(Math.max(+SITE.minTop || 10000, Math.ceil((price - profile.balance) / 1000) * 1000)); return; }
-  const { error } = await sb.rpc("cloudphone_order_custom", { p_ram: cpSel.ram, p_cpu: cpSel.cpu, p_days: cpSel.days, p_res: cpSel.res, p_name: null, p_fps: cpSel.fps });
+  const { error } = await sb.rpc("cloudphone_order_custom", { p_ram: cpSel.ram, p_cpu: cpSel.cpu, p_days: cpSel.days, p_res: cpSel.res, p_name: null, p_fps: cpSel.fps, p_qty: cpSel.qty });
   if (error) { $("cp-err").textContent = errMsg(error); return; }
   show("cporderdlg", false); await loadProfile(); renderUser();
-  toast(L("Đã tạo đơn! Máy đang khởi tạo (khoảng 2–3 phút).", "Order placed! Creating…"));
-  notifyTg && notifyTg(`📱 <b>Đơn ĐT đám mây mới</b>\n${cpSel.ram}GB / ${cpSel.cpu} nhân / ${cpSel.days} ngày / ${cpSel.res} / ${cpSel.fps} FPS\nGiá: ${vnd(price)}`);
+  toast(cpSel.qty > 1 ? `Đã tạo đơn ${cpSel.qty} máy! Các máy đang khởi tạo (khoảng 2–3 phút mỗi máy).` : L("Đã tạo đơn! Máy đang khởi tạo (khoảng 2–3 phút).", "Order placed! Creating…"));
+  notifyTg && notifyTg(`📱 <b>Đơn ĐT đám mây mới</b>\n${cpSel.qty} máy × ${cpSel.ram}GB / ${cpSel.cpu} nhân / ${cpSel.days} ngày / ${cpSel.res} / ${cpSel.fps} FPS\nGiá: ${vnd(price)}`);
   openCloud();
 }
 
@@ -3416,9 +3421,9 @@ document.addEventListener("click", e => {
   if (t.closest("#cp-obuy")) { const b = $("cp-obuy"); if (!b.disabled) busy(b, cpBuy); return; }
   if (t.closest("#cp-close")) { clearTimeout(cpPollT); show("cpdlg", false); return; }
   if (t.closest("#cp-new")) { openCpOrder(); return; }
-  const chip = t.closest("#cp-ram button, #cp-cpu button, #cp-days button, #cp-fps button, #cp-resq button");
+  const chip = t.closest("#cp-ram button, #cp-cpu button, #cp-days button, #cp-fps button, #cp-qty button, #cp-resq button");
   if (chip) {
-    const box = chip.parentElement, key = { "cp-ram": "ram", "cp-cpu": "cpu", "cp-days": "days", "cp-fps": "fps", "cp-resq": "res" }[box.id];
+    const box = chip.parentElement, key = { "cp-ram": "ram", "cp-cpu": "cpu", "cp-days": "days", "cp-fps": "fps", "cp-qty": "qty", "cp-resq": "res" }[box.id];
     cpSel[key] = key === "res" ? chip.dataset.v : +chip.dataset.v;
     box.querySelectorAll("button").forEach(x => x.classList.toggle("on", x === chip));
     const x = key === "res" ? $("cp-res") : $("cp-" + key + "-x"); if (x) x.value = "";
@@ -3429,7 +3434,7 @@ document.addEventListener("click", e => {
 });
 document.addEventListener("input", e => {
   const id = e.target.id;
-  const key = { "cp-ram-x": "ram", "cp-cpu-x": "cpu", "cp-days-x": "days", "cp-fps-x": "fps" }[id];
+  const key = { "cp-ram-x": "ram", "cp-cpu-x": "cpu", "cp-days-x": "days", "cp-fps-x": "fps", "cp-qty-x": "qty" }[id];
   if (key) {
     const v = parseInt(e.target.value, 10);
     if (v > 0) { cpSel[key] = v; $("cp-" + key).querySelectorAll("button").forEach(b => b.classList.toggle("on", +b.dataset.v === v)); }

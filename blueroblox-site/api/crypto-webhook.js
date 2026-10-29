@@ -31,8 +31,16 @@ module.exports = async (req, res) => {
     const ref = "NOW-" + (data.payment_id || "");
     if (!order_id) return res.status(200).json({ ok: true });
 
-    // Chỉ cộng khi thanh toán hoàn tất; cộng đúng số VND của lệnh nạp (không theo số crypto)
-    if (status === "finished" || status === "confirmed") {
+    // Ngưỡng chấp nhận trả thiếu (do phí mạng). Mặc định 95% — chỉnh qua CRYPTO_ACCEPT_PCT.
+    const ACCEPT = Number(process.env.CRYPTO_ACCEPT_PCT) || 95;
+    const paid = Number(data.actually_paid) || 0;
+    const need = Number(data.pay_amount) || 0;
+    const nearEnough = need > 0 && paid >= need * (ACCEPT / 100);
+
+    // Cộng khi: hoàn tất, HOẶC trả thiếu một chút (partial) nhưng đã ≥ ngưỡng.
+    // Cộng đúng số VND của lệnh nạp; credit_crypto idempotent nên không cộng trùng.
+    if (status === "finished" || status === "confirmed" ||
+        (status === "partially_paid" && nearEnough)) {
       await rpc("credit_crypto", { p_memo: String(order_id), p_ref: ref });
     }
     return res.status(200).json({ ok: true });

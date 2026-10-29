@@ -141,8 +141,8 @@ def cmd_create(a):
     r = docker_run(a.name, a.ram, a.cpu, port, a.res, fps, a.dpi)
     if r.returncode != 0:
         print("LỖI tạo máy:", (r.stderr or r.stdout).strip()); sys.exit(4)
-    # chờ boot xong rồi mới đăng ký vào ws-scrcpy (tránh màn đen)
-    ok = wait_boot(a.name, port)
+    # chờ boot xong rồi mới đăng ký vào ws-scrcpy (tránh màn đen) — bỏ qua nếu --nowait (chương trình nền tự chờ song song)
+    ok = True if a.nowait else wait_boot(a.name, port)
     exp = now() + datetime.timedelta(days=a.days)
     st["phones"].append({"name": a.name, "port": port, "ram": a.ram, "cpu": a.cpu, "res": a.res, "fps": fps,
                           "dpi": a.dpi, "created": fmt(now()), "expires": exp.isoformat()})
@@ -184,6 +184,12 @@ def cmd_reconfig(a):
     p["res"], p["fps"], p["dpi"] = res, fps, dpi; save(st)
     ok = wait_boot(a.name, p["port"])
     print(f"✅ '{a.name}' → {res} · {fps} FPS" + ("" if ok else " (đang kết nối lại)"))
+
+def cmd_waitboot(a):
+    st = load(); p = next((x for x in st["phones"] if x["name"] == a.name), None)
+    if not p: print("Không có máy tên này."); sys.exit(1)
+    ok = wait_boot(a.name, p["port"])
+    print("Android đã khởi động xong." if ok else "Chưa kết nối được, sẽ tự thử lại."); sys.exit(0 if ok else 5)
 
 def rm_container(name):
     sh(["sudo", "docker", "rm", "-f", name])
@@ -262,13 +268,14 @@ def cmd_reap(a):
 def main():
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest="cmd")
-    c = sub.add_parser("create"); c.add_argument("name"); c.add_argument("--ram", type=float, default=2); c.add_argument("--cpu", type=float, default=2); c.add_argument("--days", type=int, default=7); c.add_argument("--res", default="720x1280"); c.add_argument("--dpi", type=int, default=0); c.add_argument("--fps", type=int, default=30); c.set_defaults(f=cmd_create)
+    c = sub.add_parser("create"); c.add_argument("name"); c.add_argument("--ram", type=float, default=2); c.add_argument("--cpu", type=float, default=2); c.add_argument("--days", type=int, default=7); c.add_argument("--res", default="720x1280"); c.add_argument("--dpi", type=int, default=0); c.add_argument("--fps", type=int, default=30); c.add_argument("--nowait", action="store_true"); c.set_defaults(f=cmd_create)
     sub.add_parser("list").set_defaults(f=cmd_list)
     d = sub.add_parser("delete"); d.add_argument("name"); d.set_defaults(f=cmd_delete)
     r = sub.add_parser("renew"); r.add_argument("name"); r.add_argument("--days", type=int, default=7); r.set_defaults(f=cmd_renew)
     sub.add_parser("reap").set_defaults(f=cmd_reap)
     s = sub.add_parser("stop"); s.add_argument("name"); s.set_defaults(f=cmd_stop)
     sub.add_parser("connect-all").set_defaults(f=cmd_connect_all)
+    w = sub.add_parser("waitboot"); w.add_argument("name"); w.set_defaults(f=cmd_waitboot)
     g = sub.add_parser("reconfig"); g.add_argument("name"); g.add_argument("--fps", type=int, default=0); g.add_argument("--res", default=""); g.set_defaults(f=cmd_reconfig)
     sub.add_parser("capacity").set_defaults(f=cmd_capacity)
     a = ap.parse_args()

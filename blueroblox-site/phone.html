@@ -497,11 +497,15 @@ const main = new Conn($("scr"), $("veil"), {
   ok() { veil(false); setState("ok", "Đang chạy"); },
   progress(txt) { if (!$("veil").hidden) $("veild").textContent = txt; },
   fail(why) { setState("bad", "Không kết nối được"); veil(true, why || "Không kết nối được màn hình", '<button class="btn sm" id="vretry">Thử lại</button>', false); const b = $("vretry"); if (b) b.onclick = () => { main.tries = 0; main.open(cur, quality); }; },
-  size() { fit(); info(); }, stat: () => info(),
+  size() { try { if (cur && main.size) localStorage.setItem("cp_sz_" + cur.id + "_" + cur.res, main.size[0] + "x" + main.size[1]); } catch (e) {} fit(); info(); }, stat: () => info(),
   clip(text) { showClip(text); },
   pasteKey() { if (cur) api(cur.id + "/key", { method: "POST", json: { code: 279 } }).catch(() => {}); },
 });
-function aspect() { const s = main.size; if (s) return s; return resOf(cur); }
+function aspect() {      // dùng kích thước hình thật lần trước (VD game đang để màn ngang) → mở lại không bị dựng sai khung
+  const s = main.size; if (s) return s;
+  try { const v = cur && localStorage.getItem("cp_sz_" + cur.id + "_" + cur.res); if (v) { const [w, h] = v.split("x").map(Number); if (w > 0 && h > 0) return [w, h]; } } catch (e) {}
+  return resOf(cur);
+}
 function fit() {
   const fr = $("frame"), vp = $("viewport");
   if (document.body.classList.contains("focus")) { fr.style.width = innerWidth + "px"; fr.style.height = innerHeight + "px"; return; }
@@ -607,7 +611,7 @@ function checkFit() {
   const off = mobile && a && b && Math.abs(a - b) / b > 0.08;
   $("fitbar").hidden = !off || skip;
   if (!off || skip) return;
-  $("fittxt").textContent = `Máy ${cur.res} lệch tỉ lệ màn hình bạn. Đổi sang ${mine} cho kín màn? (giữ dữ liệu)`;
+  $("fittxt").textContent = `Máy ${cur.res} lệch tỉ lệ màn hình bạn. Đổi sang ${mine} cho kín màn? (đổi ngay, app vẫn chạy)`;
   $("fitgo").onclick = () => ACT.display(mine);
   $("fitno").onclick = () => { try { localStorage.setItem(key, "1"); } catch (e) {} $("fitbar").hidden = true; };
 }
@@ -757,7 +761,11 @@ async function checkInfo() {
       underMaint = true; renderHead(); return;
     }
     if (underMaint) { underMaint = false; openPhone(cur); return; }
-    if (!i.online && !main.ok) setState("wait", "Máy đang khởi động…");
+    if ((!i.online || i.booting) && !main.ok) {
+      setState("wait", "Máy đang khởi động…");
+      veil(true, "Máy đang khởi động lại…", "Android trong máy đang bật lại (thường do app dùng hết RAM). Khoảng 1–2 phút, màn hình tự mở lại khi xong.");
+      main.tries = 0;
+    }
   } catch (e) { if (!main.ok) setState("bad", e.status === 409 ? "Máy chưa chạy" : e.status ? "Lỗi server (" + e.status + ")" : "Không tới được server"); }
   renderHead();
 }
@@ -878,7 +886,7 @@ const ACT = {
       $("d-fps").innerHTML = FPS.map(v => `<button type="button" data-fps="${v}" class="${v === fps ? "on" : ""}">${v}<small>FPS</small></button>`).join("");
       $("d-res").innerHTML = RES.map(r => `<button type="button" data-res="${r[0]}" class="${r[0] === res ? "on" : ""}">${r[1]}<small>${r[0]}</small></button>`).join("");
     };
-    ask({ title: "FPS & độ phân giải", desc: `Đang dùng <b>${esc(cur.res)}</b> · <b>${cur.fps || 30} FPS</b>. Áp dụng xong máy tự khởi động lại (1–3 phút), <b>dữ liệu và ứng dụng giữ nguyên</b>.`,
+    ask({ title: "FPS & độ phân giải", desc: `Đang dùng <b>${esc(cur.res)}</b> · <b>${cur.fps || 30} FPS</b>. <br>• Chỉ đổi <b>độ phân giải</b>: đổi ngay trong vài giây, <b>app đang chạy không bị tắt</b>.<br>• Đổi <b>FPS</b>: máy khởi động lại (1–3 phút), dữ liệu vẫn giữ nhưng app đang mở sẽ đóng.`,
       body: `<span class="lbl">FPS (${lo}–${hi})</span><div class="chips" id="d-fps"></div><input class="in" id="d-fpsx" type="number" min="${lo}" max="${hi}" inputmode="numeric" placeholder="Hoặc tự nhập FPS">
              <span class="lbl">Độ phân giải</span><div class="chips" id="d-res"></div><input class="in" id="d-resx" type="text" autocomplete="off" placeholder="Hoặc tự nhập, VD 1080x2400">`,
       ok: "Áp dụng",
@@ -888,7 +896,8 @@ const ACT = {
         if (fps === (cur.fps || 30) && res === cur.res) { toast("Bạn chưa thay đổi gì."); return false; }
         try {
           const j = await api(cur.id + "/display", { method: "POST", json: { fps, res } });
-          main.stop(); setTools(false); setState("wait", "Đang đổi cấu hình…"); veil(true, `Đang chuyển sang ${res} · ${fps} FPS…`, "Khoảng 1–3 phút, màn hình tự mở lại khi xong.");
+          const quick = fps === (cur.fps || 30);
+          main.stop(); setTools(false); setState("wait", "Đang đổi cấu hình…"); veil(true, `Đang chuyển sang ${res} · ${fps} FPS…`, quick ? "Vài giây, app đang chạy vẫn giữ nguyên." : "Khoảng 1–3 phút, màn hình tự mở lại khi xong.");
           const item = trayItem(`${res} · ${fps} FPS`, 0);
           if (await pollJob(j.job, item)) { cur.fps = fps; cur.res = res; }
           openPhone(cur);

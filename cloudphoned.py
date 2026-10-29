@@ -5,7 +5,7 @@
 #   SUPABASE_SERVICE_KEY=eyJ...            (service_role key — bí mật)
 #   PUBLIC_BASE=https://xxxx.trycloudflare.com   (link ws-scrcpy ra internet)
 # Chạy:  python3 ~/cloudphoned.py           (vòng lặp mỗi 15s)
-import json, os, sys, time, subprocess, urllib.request, urllib.parse, datetime, socket, shutil
+import json, os, sys, time, subprocess, urllib.request, urllib.parse, datetime, socket, shutil, threading
 GRACE_MIN = 30          # hết hạn quá 30 phút không gia hạn → xoá máy + dữ liệu
 
 HOME = os.path.expanduser("~")
@@ -83,25 +83,42 @@ def parse_dt(s):
 def cname(row):
     return "cp_" + row["id"].replace("-", "")[:10]
 
+BOOTING = set()
 def do_create(row):
+    """Tạo container ngay (vài giây), rồi chờ Android khởi động ở luồng riêng → nhiều máy khởi động song song."""
     name = cname(row)
-    print(f"[tạo] đơn {row['id'][:8]} → {name} ({row['ram']}GB/{row['cpu']} {row['days']}n)")
-    r = phonectl(["create", name, "--ram", str(row["ram"]), "--cpu", str(row["cpu"]),
-                  "--days", str(row["days"]), "--res", row.get("res") or "720x1280",
-                  "--fps", str(row.get("fps") or 30)])
-    if r.returncode == 2:   # HẾT HÀNG (quá 85%)
-        refund(row, "Máy chủ đã đầy, chưa tạo được máy"); notify(f"⚠️ <b>Đơn ĐT đám mây bị hoàn tiền</b> vì {NODE_ID} đã đầy 85%."); return
-    if r.returncode != 0:
-        log_err = (r.stdout + r.stderr)[-300:]
-        print("   ✗", log_err)
-        refund(row, "Tạo máy lỗi, vui lòng thử lại"); notify(f"⚠️ <b>Tạo máy lỗi</b> trên {NODE_ID} (đã hoàn tiền khách):\n<code>{log_err[-200:]}</code>"); return
     ps = phone_state(name)
     if not ps:
-        refund(row, "Tạo máy lỗi, vui lòng thử lại"); return
-    patch(row["id"], {"status": "active", "container": name, "port": ps["port"],
-                      "node": "home", "stream_url": stream_url(ps["port"]),
-                      "expires_at": parse_dt(ps["expires"]).isoformat(), "error": None})
-    print(f"   ✓ active, cổng {ps['port']}")
+        print(f"[tạo] đơn {row['id'][:8]} → {name} ({row['ram']}GB/{row['cpu']} {row['days']}n {row.get('fps') or 30}fps)")
+        r = phonectl(["create", name, "--ram", str(row["ram"]), "--cpu", str(row["cpu"]),
+                      "--days", str(row["days"]), "--res", row.get("res") or "720x1280",
+                      "--fps", str(row.get("fps") or 30), "--nowait"])
+        if r.returncode == 2:   # HẾT HÀNG (quá 85%)
+            refund(row, "Máy chủ đã đầy, chưa tạo được máy"); notify(f"⚠️ <b>Đơn ĐT đám mây bị hoàn tiền</b> vì {NODE_ID} đã đầy 85%."); return
+        if r.returncode != 0:
+            log_err = (r.stdout + r.stderr)[-300:]
+            print("   ✗", log_err)
+            refund(row, "Tạo máy lỗi, vui lòng thử lại"); notify(f"⚠️ <b>Tạo máy lỗi</b> trên {NODE_ID} (đã hoàn tiền khách):\n<code>{log_err[-200:]}</code>"); return
+        ps = phone_state(name)
+        if not ps:
+            refund(row, "Tạo máy lỗi, vui lòng thử lại"); return
+        patch(row["id"], {"container": name, "port": ps["port"], "node": NODE_ID})
+    if name in BOOTING: return
+    BOOTING.add(name)
+    threading.Thread(target=finish_boot, args=(row["id"], name), daemon=True).start()
+
+def finish_boot(pid, name):
+    try:
+        phonectl(["waitboot", name])          # tối đa ~4 phút; rớt thì connect-all sẽ nối lại sau
+        ps = phone_state(name)
+        if not ps: return
+        patch(pid, {"status": "active", "container": name, "port": ps["port"], "node": NODE_ID,
+                    "stream_url": stream_url(ps["port"]), "expires_at": parse_dt(ps["expires"]).isoformat(), "error": None})
+        print(f"   ✓ {name} sẵn sàng, cổng {ps['port']}")
+    except Exception as e:
+        print("lỗi chờ khởi động:", e)
+    finally:
+        BOOTING.discard(name)
 
 def refund(row, msg):
     """Tạo máy lỗi → hoàn lại tiền khách đã trả (hàm SQL cloudphone_refund)."""
@@ -212,6 +229,28 @@ def heartbeat():
                if full else f"✅ <b>{NODE_ID}</b> đã có chỗ trống trở lại (RAM cấp {a_ram:.0f}/{ram_t:.0f}GB).")
     _alert["full"] = full
 
+def running(name):
+    r = subprocess.run(["docker", "inspect", "-f", "{{.State.Running}}", name], capture_output=True, text=True)
+    return r.stdout.strip() == "true"
+
+def do_locks():
+    """Máy admin khoá → tắt; hết hạn khoá → tự mở khoá; máy đang chạy mà bị tắt ngoài ý muốn → bật lại."""
+    rows = sb("GET", "cloud_phones?status=eq.active&select=id,container,locked,locked_until") or []
+    t = now()
+    for row in rows:
+        name = row.get("container") or cname(row)
+        if not phone_state(name): continue
+        lk = bool(row.get("locked"))
+        if lk and row.get("locked_until") and parse_dt(row["locked_until"]) <= t:
+            patch(row["id"], {"locked": False, "locked_until": None, "lock_reason": None}); lk = False
+            print(f"[mở khoá] {name} (hết thời hạn khoá)")
+        on = running(name)
+        if lk and on:
+            print(f"[khoá] tắt {name}"); phonectl(["stop", name])
+        elif not lk and not on:
+            print(f"[bật lại] {name}")
+            subprocess.run(["docker", "start", name], capture_output=True, text=True)
+
 def do_cancel(row):
     name = row.get("container") or cname(row)
     print(f"[huỷ] {name}")
@@ -277,5 +316,7 @@ if __name__ == "__main__":
         if n % 2 == 0:                      # ~30 giây: báo cáo CPU/RAM/card/ổ cứng lên trang admin
             try: heartbeat()
             except Exception as e: print("lỗi báo cáo tài nguyên:", e)
+            try: do_locks()
+            except Exception as e: print("lỗi khoá máy:", e)
         n += 1
         time.sleep(POLL)

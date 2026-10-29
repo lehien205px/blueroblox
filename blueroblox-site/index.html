@@ -631,6 +631,11 @@ h1 em::after{background:linear-gradient(90deg,rgba(143,208,255,0),#8fd0ff 15%,#f
 .tr-box label.full{grid-column:1/-1}
 @media(max-width:640px){.tr-box{grid-template-columns:1fr}}
 
+.cpa-cust{all:unset;cursor:pointer;display:flex;flex-direction:column;gap:2px;max-width:220px;border-radius:6px;padding:2px 4px;margin:-2px -4px}
+.cpa-cust b{color:#cfe0ff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cpa-cust span{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cpa-cust:hover b{text-decoration:underline}.cpa-cust:focus-visible{outline:2px solid #6aa3ff}
+
 </style>
 <script>
 // Đã điền sẵn cho blueroblox.shop
@@ -2456,9 +2461,9 @@ async function loadAdmin() {
   const pend = await sb.from("orders").select("*").eq("status", "pending").order("created_at");
   const seen = new Set(), orders = [...(pend.data || []), ...(o.data || [])].filter(x => !seen.has(x.id) && seen.add(x.id));
   ADM = { users: u.data || [], topups: t.data || [], orders, vps: (ADM.vps || []) };
-  renderTable(); renderCust(); renderTx(); renderOrd(); renderVps();
+  renderTable(); renderCust(); renderTx(); renderOrd(); renderVps(); try { renderCpaTbl(); } catch (e) {}
 }
-const uname = id => { const u = ADM.users.find(x => x.id === id); return u ? u.username : "?"; };
+const uname = id => { const u = ADM.users.find(x => x.id === id) || CPA_U.get(id); return u && u.username ? u.username : "?"; };
 function renderTable() {
   const sp = P.slice().sort((a, b) => a.sort - b.sort);
   if ($("pf-count")) $("pf-count").textContent = sp.length ? (sp.length + " sản phẩm") : "";
@@ -3867,12 +3872,31 @@ $("cd-cp-wipe") && ($("cd-cp-wipe").onclick = () => busy($("cd-cp-wipe"), async 
 
 /* ---- Admin: bảng máy khách (lọc, chọn nhiều, khoá, xoá) ---- */
 let CPA_ROWS = [], CPA_VIEW = [], cpaSel = new Set(), cplIds = [], cplHours = 24;
+// Tên khách của từng máy: lấy từ danh sách khách; thiếu ai thì tải riêng hồ sơ người đó
+const CPA_U = new Map(); let cpaUBusy = false;
+const cpaUser = id => ADM.users.find(x => x.id === id) || CPA_U.get(id) || null;
+const cpaUname = id => { const u = cpaUser(id); return u ? (u.username || u.email || "") : ""; };
+async function cpaFetchUsers() {
+  const miss = [...new Set(CPA_ROWS.map(p => p.user_id).filter(id => id && !cpaUser(id)))];
+  if (!miss.length || cpaUBusy) return; cpaUBusy = true;
+  try { const { data } = await sb.from("profiles").select("*").in("id", miss);
+    (data || []).forEach(u => CPA_U.set(u.id, u)); miss.forEach(id => { if (!CPA_U.has(id)) CPA_U.set(id, { id, username: "", missing: 1 }); });
+  } catch (e) {} cpaUBusy = false; renderCpaTbl();
+}
+function cpaCustCell(p) {
+  if (!p.user_id) return '<span class="hint">— chưa gán —</span>';
+  const u = cpaUser(p.user_id);
+  if (!u) return '<span class="hint">Đang tải…</span>';
+  if (u.missing) return `<span class="hint" title="${esc(p.user_id)}">Tài khoản đã xoá</span>`;
+  return `<button class="cpa-cust" type="button" data-cpcust="${esc(u.id)}" title="Mở thông tin khách"><b>${esc(u.username || "(chưa đặt tên)")}</b>${u.email ? `<span>${esc(u.email)}</span>` : ""}</button>`;
+}
 function renderCpaTbl() {
   if (!$("cpa-tbl")) return;
   const q = ($("cpa-q").value || "").trim().toLowerCase(), st = $("cpa-st").value;
   const rows = CPA_ROWS.filter(p => {
     if (st === "locked" ? !cpLocked(p) : (st && p.status !== st)) return false;
-    return !q || [p.name, uname(p.user_id), p.container, p.port, p.res, p.node].join(" ").toLowerCase().includes(q);
+    const u = cpaUser(p.user_id) || {};
+    return !q || [p.name, u.username, u.email, p.container, p.port, p.res, p.node].join(" ").toLowerCase().includes(q);
   });
   CPA_VIEW = rows;
   const nLk = CPA_ROWS.filter(cpLocked).length;
@@ -3881,7 +3905,7 @@ function renderCpaTbl() {
     const exp = p.expires_at ? new Date(p.expires_at).toLocaleString(LANG === "en" ? "en-GB" : "vi-VN") : "—", lk = cpLocked(p);
     return `<tr${lk ? ' style="opacity:.85"' : ""}><td><input type="checkbox" data-cpsel="${p.id}"${cpaSel.has(p.id) ? " checked" : ""} aria-label="Chọn máy ${esc(p.name)}"></td>
       <td><b>${esc(p.name)}</b><div class="hint">${esc(p.container || "")}${p.port ? " · cổng " + p.port : ""}${p.node ? " · " + esc(p.node) : ""}</div></td>
-      <td>${esc(uname(p.user_id))}</td><td class="num">${p.ram}GB/${p.cpu} · ${esc(p.res || "")} · ${p.fps || 30}fps</td>
+      <td>${cpaCustCell(p)}</td><td class="num">${p.ram}GB/${p.cpu} · ${esc(p.res || "")} · ${p.fps || 30}fps</td>
       <td>${cpaStatus(p)}${lk ? `<div style="margin-top:4px"><span class="pill bad">🔒 Khoá ${p.locked_until ? "tới " + new Date(p.locked_until).toLocaleString("vi-VN") : "vĩnh viễn"}</span></div>${p.lock_reason ? `<div class="hint">${esc(p.lock_reason)}</div>` : ""}` : ""}${p.error ? `<div class="hint" style="color:var(--bad)">${esc(p.error)}</div>` : ""}</td>
       <td class="num">${exp}</td>
       <td style="text-align:right;white-space:nowrap">${p.status === "active" ? `<a class="btn ghost sm" href="/phone.html?id=${encodeURIComponent(p.id)}" target="_blank" rel="noopener">Điều khiển</a> ` : ""}${lk
@@ -3889,6 +3913,7 @@ function renderCpaTbl() {
         <button class="btn danger sm" data-cparm="${p.id}">Xoá</button></td></tr>`;
   }).join("") : `<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">${q || st ? "Không có máy nào khớp bộ lọc." : "Chưa có máy nào."}</td></tr>`;
   syncCpaSel();
+  if (CPA_ROWS.some(p => p.user_id && !cpaUser(p.user_id))) cpaFetchUsers();
 }
 function syncCpaSel() {
   for (const id of [...cpaSel]) if (!CPA_ROWS.some(p => p.id === id)) cpaSel.delete(id);
@@ -4060,6 +4085,9 @@ $("pf-trall") && ($("pf-trall").onclick = () => busy($("pf-trall"), async () => 
   }
   toast("Đã dịch " + ok + "/" + todo.length + " sản phẩm sang tiếng Anh."); try { renderGrid(); renderTable(); } catch (e) {}
 }));
+
+document.addEventListener("click", e => { const b = e.target.closest("[data-cpcust]"); if (!b) return;
+  const id = b.dataset.cpcust; if (!ADM.users.some(x => x.id === id) && CPA_U.has(id)) ADM.users.push(CPA_U.get(id)); openCust(id); });
 
 </script>
 </body>

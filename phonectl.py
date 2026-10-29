@@ -103,7 +103,7 @@ def is_running(name):
 TUNE = ("settings put global window_animation_scale 0.5; settings put global transition_animation_scale 0.5; "
         "settings put global animator_duration_scale 0.5; settings put global package_verifier_enable 0; "
         "settings put global verifier_verify_adb_installs 0; settings put global stay_on_while_plugged_in 7; "
-        "settings put system screen_off_timeout 2147483647")
+        "settings put system screen_off_timeout 2147483647; svc power stayon true")
 def tune(name):
     """Cho máy mượt hơn: giảm hiệu ứng chuyển cảnh, cài APK không phải chờ quét, màn hình không tự tắt."""
     sh(["docker", "exec", name, "/system/bin/sh", "-c", TUNE])
@@ -156,6 +156,7 @@ PERM_SH = ("for p in com.android.chrome org.mozilla.firefox com.google.android.g
            "settings put secure install_non_market_apps 1 >/dev/null 2>&1; true")
 def grant_perms(name):
     sh(["docker", "exec", name, "/system/bin/sh", "-c", PERM_SH])
+    tune(name)          # giữ màn hình máy ảo luôn sáng (máy tạo trước bản này cũng được áp dụng)
 
 def cmd_perms(a):
     """Mở quyền cài APK cho mọi máy đang chạy (chương trình nền tự gọi mỗi 5 phút → app khách cài sau cũng được mở)."""

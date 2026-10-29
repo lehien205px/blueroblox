@@ -66,7 +66,7 @@ if lsmod | grep -q binder; then ok "binder đã bật"; else err "binder CHƯA b
 
 # ---------------------------------------------------------------------
 step "4/9 Tải image Android + trình điều khiển web"
-docker pull -q "$IMAGE" >/dev/null && ok "$IMAGE"
+if docker image inspect "$IMAGE" >/dev/null 2>&1; then ok "$IMAGE (đã có sẵn)"; else docker pull -q "$IMAGE" >/dev/null && ok "$IMAGE" || warn "Chưa có image $IMAGE — cần tải/dựng image này trước khi tạo máy"; fi
 docker pull -q alpine >/dev/null && ok "alpine (dùng để xoá sạch dữ liệu máy cũ)"
 if docker ps -a --format '{{.Names}}' | grep -qx "$WSNAME"; then
   docker start "$WSNAME" >/dev/null 2>&1; ok "ws-scrcpy đã có (container $WSNAME)"

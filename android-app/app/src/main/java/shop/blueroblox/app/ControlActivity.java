@@ -158,18 +158,20 @@ public class ControlActivity extends Activity {
         s.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         s.setUserAgentString(s.getUserAgentString() + " BlueRobloxApp/" + Api.version);
         CookieManager.getInstance().setAcceptCookie(true);
+        CookieManager.getInstance().setAcceptThirdPartyCookies(web, true);   // khung hình phone.blueroblox.shop nằm trong trang blueroblox.shop
         web.addJavascriptInterface(new Bridge(), "BRApp");
         web.setWebChromeClient(new WebChromeClient());
         web.setWebViewClient(new WebViewClient() {
             @Override public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest r) {
-                return !Api.PHONE.contains(String.valueOf(r.getUrl().getHost()));
+                String host = String.valueOf(r.getUrl().getHost());
+                return !(host.equals("blueroblox.shop") || host.equals("www.blueroblox.shop") || host.equals("phone.blueroblox.shop"));
             }
             @Override public void onReceivedError(WebView v, WebResourceRequest r, WebResourceError e) {
                 if (r.isForMainFrame()) fail(Ui.L("Không tải được trình điều khiển. Kiểm tra mạng rồi thử lại.", "Could not load the player. Check your network."));
             }
             @Override public void onPageFinished(WebView v, String url) {
-                h.postDelayed(() -> { if (!gotVideo) veilText.setText(Ui.L("Đang nhận hình từ máy…", "Receiving video…")); }, 1500);
-                h.postDelayed(() -> { if (!gotVideo) veil.setVisibility(View.GONE); }, 7000);   // máy cũ không gửi tín hiệu → vẫn hiện hình
+                // trang điều khiển tự lo kết nối / nối lại / báo trạng thái (giống bản web) → ẩn màn chờ của app
+                if (url != null && url.contains("phone.html")) h.postDelayed(() -> veil.setVisibility(View.GONE), 600);
             }
         });
         updQ();
@@ -206,29 +208,18 @@ public class ControlActivity extends Activity {
         }, this::fail);
     }
 
+    /** Mở trang điều khiển của web ở chế độ nhúng: dùng chung bộ kết nối hình đã ổn định của web (tự nối lại, chế độ dự phòng). */
     private void connect() {
-        gotVideo = false;
         showVeil(Ui.L("Đang kết nối máy…", "Connecting…"), true);
-        Api.bg(() -> { try { Api.cp("POST", id + "/key", new JSONObject().put("code", 224)); } catch (Exception ignored) { } return true; }, x -> { }, m -> { });   // bật sáng màn máy ảo
-        Api.bg(Api::cpSession, ck -> {
-            CookieManager cm = CookieManager.getInstance();
-            if (ck != null) cm.setCookie(Api.PHONE, ck);
-            cm.flush();
-            web.loadUrl(streamUrl());
-        }, this::fail);
+        Api.bg(() -> {
+            String at = Api.token();
+            return Api.WEB + "/phone.html?id=" + URLEncoder.encode(id, "UTF-8") + "&embed=app#at=" + URLEncoder.encode(at, "UTF-8")
+                    + "&rt=" + URLEncoder.encode(Api.refresh, "UTF-8");
+        }, url -> web.loadUrl(url), this::fail);
     }
 
-    private String streamUrl() {
-        try {
-            int port = phone.optInt("port");
-            String udid = "127.0.0.1:" + port, res = phone.optString("res", "720x1280");
-            String[] wh = res.split("x");
-            String sid = Integer.toString(new Random().nextInt(1 << 30), 36);
-            String ws = "wss://phone.blueroblox.shop/?action=proxy-adb&remote=" + URLEncoder.encode("tcp:8886", "UTF-8") + "&udid=" + URLEncoder.encode(udid, "UTF-8");
-            return Api.PHONE + "/?v=" + sid + "#!action=stream&udid=" + URLEncoder.encode(udid, "UTF-8") + "&player=webcodecs&ws=" + URLEncoder.encode(ws, "UTF-8")
-                    + "&captureKeyboard=1&cpq=" + quality + "&cpfps=" + phone.optInt("fps", 30) + "&cpw=" + wh[0] + "&cph=" + (wh.length > 1 ? wh[1] : "1280") + "&cpn=" + sid;
-        } catch (Exception e) { return Api.PHONE; }
-    }
+    /** Gọi hàm của trang điều khiển (cpApp.*). */
+    private void page(String js) { web.evaluateJavascript("(function(){try{return window.cpApp?(" + js + "):null;}catch(e){return null;}})()", null); }
 
     private void showVeil(String t, boolean spin) {
         veil.setVisibility(View.VISIBLE);
@@ -239,51 +230,32 @@ public class ControlActivity extends Activity {
 
     private void fail(String m) { showVeil(m, false); }
 
-    /** Nhận tín hiệu từ trình phát hình (đã có hình / rớt mạng / tốc độ). */
+    /** Máy ảo vừa copy chữ → đưa vào bộ nhớ copy của điện thoại. */
     private class Bridge {
+        /** Trang điều khiển xin mã đăng nhập mới (chạy ở luồng nền của WebView nên gọi mạng được). */
+        @JavascriptInterface
+        public String token() {
+            try { return Api.token(); } catch (Exception e) { return ""; }
+        }
+
         @JavascriptInterface
         public void onEvent(String json) {
             h.post(() -> {
                 try {
                     JSONObject m = new JSONObject(json);
-                    String t = m.optString("t");
-                    if ("ok".equals(t)) { gotVideo = true; retries = 0; veil.setVisibility(View.GONE); }
-                    else if ("closed".equals(t)) {
-                        if (isFinishing()) return;
-                        if (retries < 6) {
-                            retries++;
-                            showVeil(Ui.L("Mất kết nối — đang nối lại (" + retries + ")…", "Reconnecting (" + retries + ")…"), true);
-                            h.postDelayed(ControlActivity.this::connect, Math.min(8000, 1200L * retries));
-                        } else fail(Ui.L("Mất kết nối với máy. Kiểm tra mạng rồi bấm Thử lại.", "Connection lost. Check your network and retry."));
-                    } else if ("clip".equals(t)) {          // máy ảo vừa copy chữ → đưa vào bộ nhớ copy của điện thoại
-                        String text = m.optString("text");
-                        if (!text.isEmpty()) {
-                            ClipboardManager cm = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
-                            if (cm != null) cm.setPrimaryClip(ClipData.newPlainText("Cloud Phone", text));
-                            Ui.toast(ControlActivity.this, "📋 " + Ui.L("Đã copy từ máy ảo: ", "Copied from cloud phone: ") + (text.length() > 60 ? text.substring(0, 60) + "…" : text));
-                        }
-                    } else if ("pasteKey".equals(t)) {
-                        cpPost("key", new JSONObject().put("code", 279), null);
-                    } else if ("stat".equals(t)) {
-                        int kb = m.optInt("kbps");
-                        info.setText(phone.optInt("ram") + "GB · " + phone.optString("res") + " · " + (kb >= 1000 ? String.format(java.util.Locale.US, "%.1f Mbps", kb / 1000f) : kb + " kbps"));
-                    }
+                    if (!"clip".equals(m.optString("t"))) return;
+                    String text = m.optString("text");
+                    if (text.isEmpty()) return;
+                    ClipboardManager cm = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+                    if (cm != null) cm.setPrimaryClip(ClipData.newPlainText("Cloud Phone", text));
+                    Ui.toast(ControlActivity.this, "📋 " + Ui.L("Đã copy từ máy ảo: ", "Copied from cloud phone: ") + (text.length() > 60 ? text.substring(0, 60) + "…" : text));
                 } catch (Exception ignored) { }
             });
         }
     }
 
     // ---------------- Phím Android ----------------
-    private void key(String name, int code) {
-        String title = "back".equals(name) ? "Back" : "home".equals(name) ? "Home" : "recents".equals(name) ? "Overview"
-                : "volup".equals(name) ? "Volume up" : "voldown".equals(name) ? "Volume down" : "Power";
-        String js = "(function(){var b=document.querySelector('button[title=\"" + title + "\"]');if(!b)return '0';"
-                + "b.dispatchEvent(new MouseEvent('mousedown',{bubbles:true}));setTimeout(function(){b.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));},50);return '1';})()";
-        web.evaluateJavascript(js, r -> {
-            if (r == null || !r.contains("1"))   // trình phát chưa sẵn sàng → gửi qua máy chủ
-                Api.bg(() -> Api.cp("POST", id + "/key", new JSONObject().put("code", code)), x -> { }, m -> Ui.toast(this, m));
-        });
-    }
+    private void key(String name, int code) { page("cpApp.key(" + code + ")"); }
 
     // ---------------- Công cụ ----------------
     private void tools() {
@@ -306,7 +278,7 @@ public class ControlActivity extends Activity {
                 {"✨", Ui.L("Chất lượng", "Quality"), (Runnable) this::pickQuality},
                 {"⛶", Ui.L("Toàn màn", "Full screen"), (Runnable) () -> setFull(true)},
                 {"📱", Ui.L("Đổi máy", "Switch"), (Runnable) this::switchPhone},
-                {"↻", Ui.L("Tải lại hình", "Reload"), (Runnable) () -> { retries = 0; connect(); }},
+                {"↻", Ui.L("Tải lại hình", "Reload"), (Runnable) () -> page("cpApp.reload()")},
                 {"⚡", Ui.L("Khởi động lại", "Reboot"), (Runnable) this::reboot},
         };
         for (Object[] it : items) {
@@ -364,15 +336,10 @@ public class ControlActivity extends Activity {
                 this::pasteText);
     }
 
-    /** Dán chữ vào máy ảo: đặt vào bộ nhớ copy của máy (giữ được chữ có dấu) rồi bấm Dán; máy chưa hỗ trợ thì gõ từng chữ. */
+    /** Dán chữ vào máy ảo (giữ được chữ có dấu) — trang điều khiển lo phần đặt bộ nhớ copy + bấm Dán. */
     private void pasteText(String text) {
-        web.evaluateJavascript("(function(){try{return !!(window.__cp&&__cp.clipSet(" + JSONObject.quote(text) + "));}catch(e){return false;}})()", r -> {
-            if ("true".equals(r)) {
-                h.postDelayed(() -> { try { cpPost("key", new JSONObject().put("code", 279), Ui.L("Đã dán vào máy.", "Pasted.")); } catch (Exception ignored) { } }, 250);
-            } else {
-                try { cpPost("text", new JSONObject().put("text", text), Ui.L("Đã gửi chữ vào máy.", "Sent.")); } catch (Exception ignored) { }
-            }
-        });
+        page("cpApp.paste(" + JSONObject.quote(text) + ")");
+        Ui.toast(this, Ui.L("Đang dán vào máy…", "Pasting…"));
     }
 
     private void pasteFromPhone() {
@@ -389,10 +356,8 @@ public class ControlActivity extends Activity {
     }
 
     private void copyFromPhone() {
-        web.evaluateJavascript("(function(){try{return !!(window.__cp&&__cp.clipGet());}catch(e){return false;}})()", r -> {
-            if ("true".equals(r)) Ui.toast(this, Ui.L("Đang lấy chữ từ máy…", "Getting text…"));
-            else Ui.toast(this, Ui.L("Trên máy ảo hãy bôi đen chữ rồi bấm Copy — chữ sẽ tự về điện thoại của bạn.", "Select text on the cloud phone and tap Copy — it comes to your phone automatically."));
-        });
+        page("cpApp.copyOut()");
+        Ui.toast(this, Ui.L("Đang lấy chữ từ máy… (hoặc bôi đen chữ trên máy rồi bấm Copy — chữ tự về điện thoại)", "Getting text…"));
     }
 
     private void openUrl() {
@@ -416,7 +381,7 @@ public class ControlActivity extends Activity {
                 Ui.L("Khởi động lại", "Reboot"), () -> {
                     cpPost("reboot", new JSONObject(), Ui.L("Đang khởi động lại…", "Rebooting…"));
                     showVeil(Ui.L("Máy đang khởi động lại, khoảng 1 phút…", "Rebooting, about a minute…"), true);
-                    h.postDelayed(() -> { retries = 0; connect(); }, 45000);
+                    h.postDelayed(() -> page("cpApp.reload()"), 45000);
                 });
     }
 
@@ -428,7 +393,7 @@ public class ControlActivity extends Activity {
         for (int i = 0; i < QUAL.length; i++) {
             final String k = QUAL[i][0];
             Button b = Ui.button(this, Ui.L(QUAL[i][1], QUAL[i][2]) + " — " + desc[i], k.equals(quality) ? Ui.PRIMARY : Ui.GHOST);
-            b.setOnClickListener(v -> { d[0].dismiss(); quality = k; pref.edit().putString("q", k).apply(); updQ(); retries = 0; connect(); });
+            b.setOnClickListener(v -> { d[0].dismiss(); quality = k; pref.edit().putString("q", k).apply(); updQ(); page("cpApp.quality('" + k + "')"); });
             c.addView(b, Ui.fill());
         }
         d[0] = Ui.sheet(this, Ui.L("Chất lượng hình", "Video quality"), c);
@@ -449,7 +414,7 @@ public class ControlActivity extends Activity {
                 if (!"active".equals(p.optString("status")) || MainActivity.locked(p)) continue;
                 boolean me = p.optString("id").equals(id);
                 Button b = Ui.button(this, (me ? "● " : "") + p.optString("name") + " · " + p.optInt("ram") + "GB", me ? Ui.PRIMARY : Ui.GHOST);
-                b.setOnClickListener(v -> { d[0].dismiss(); if (!me) { id = p.optString("id"); retries = 0; load(); } });
+                b.setOnClickListener(v -> { d[0].dismiss(); if (!me) { id = p.optString("id"); load(); } });
                 c.addView(b, Ui.fill());
             }
             if (c.getChildCount() == 0) c.addView(Ui.muted(this, Ui.L("Không có máy nào đang chạy.", "No running phones.")));

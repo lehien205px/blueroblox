@@ -159,6 +159,11 @@ select{width:auto}
 .feats{display:flex;flex-wrap:wrap;gap:6px}
 .feats span{font-size:11.5px;color:#c4cfee;background:rgba(143,208,255,.07);border:1px solid var(--line);padding:2px 8px;border-radius:99px}
 .pdesc{margin:8px 0 0;font-size:12.5px;line-height:1.55;color:#a9b6d6;white-space:pre-line;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
+#ptbl-wrap{min-height:300px;max-height:60vh;overflow:auto}
+#ptbl-wrap table{min-width:520px}
+#pf-summary::-webkit-details-marker{display:none}
+#pf-summary:hover{background:rgba(143,208,255,.05)}
+#pf-details[open] #pf-summary{border-bottom:1px solid var(--line)}
 .days-chip{font-size:12px;color:var(--gold-hi);font-weight:600}
 .row{display:flex;align-items:baseline;justify-content:space-between;margin-top:auto;gap:8px}
 .price{font-size:21px;font-weight:800;letter-spacing:-.02em;color:var(--gold-hi);font-variant-numeric:tabular-nums}
@@ -905,8 +910,12 @@ window.BR_CONFIG = {
       <div class="tbl"><table><thead><tr><th>Sản phẩm</th><th>Lượt bán</th><th>Doanh thu</th></tr></thead><tbody id="st-top"></tbody></table></div>
     </div>
     <div class="dbody" id="pane-prod" hidden>
-      <form class="f" id="pf">
-        <h3 id="pf-title">Thêm sản phẩm</h3>
+      <div style="display:flex;align-items:center;gap:10px"><h3 style="margin:0;font-size:17px">📦 Danh sách sản phẩm</h3><span class="hint" id="pf-count" style="margin-left:auto"></span></div>
+      <div class="tbl" id="ptbl-wrap"><table><thead><tr><th>Sản phẩm</th><th>Mục</th><th>Giá</th><th>Còn</th><th></th></tr></thead><tbody id="ptbl"></tbody></table></div>
+      <details id="pf-details" style="border:1px solid var(--line);border-radius:14px;background:var(--panel)">
+        <summary id="pf-summary" style="cursor:pointer;list-style:none;padding:14px 18px;font-weight:800;font-size:15px;color:#cfe0ff">➕ Thêm sản phẩm mới <span class="hint" style="font-weight:500">(bấm để mở/đóng)</span></summary>
+      <form class="f" id="pf" style="border:0;border-top:1px solid var(--line);border-radius:0 0 14px 14px">
+        <h3 id="pf-title" hidden>Thêm sản phẩm</h3>
         <label class="full">Tên sản phẩm<input id="pf-n" required maxlength="120" placeholder="VD: Clone aged 90 ngày"></label>
         <label>Chuyên mục<select id="pf-c" style="width:100%"><option value="clone">Clone Roblox</option><option value="vps">VPS GPU</option></select></label>
         <label>Kiểu ảnh động<select id="pf-thumb" style="width:100%"><option value="">Theo chuyên mục</option><option value="clone">Khối Clone (3D)</option><option value="vps">Chip VPS</option></select></label>
@@ -930,7 +939,7 @@ window.BR_CONFIG = {
         <div class="acts full"><button class="btn" type="submit" id="pf-save">Thêm sản phẩm</button><button class="btn ghost" type="button" id="pf-reset">Làm mới form</button></div>
         <div class="hint full"><b>Tự động:</b> bấm "Nhập kho" ở bảng dưới để tải file .txt tài khoản lên — khách mua xong nhận tài khoản ngay và tải file .txt. <b>Thủ công (VPS):</b> chỉ cần số lượng — khách mua xong được dẫn tới Discord/Telegram/Zalo để bạn giao máy.</div>
       </form>
-      <div class="tbl"><table><thead><tr><th>Sản phẩm</th><th>Mục</th><th>Giá</th><th>Còn</th><th></th></tr></thead><tbody id="ptbl"></tbody></table></div>
+      </details>
     </div>
     <div class="dbody" id="pane-cust" hidden>
       <div class="tiles"><div><b id="k-users">0</b><span>Khách đã đăng ký</span></div><div><b id="k-bal">0đ</b><span>Tổng số dư khách</span></div><div><b id="k-rev">0đ</b><span>Đã nạp (100 lệnh gần nhất)</span></div></div>
@@ -2154,11 +2163,12 @@ async function loadAdmin() {
 const uname = id => { const u = ADM.users.find(x => x.id === id); return u ? u.username : "?"; };
 function renderTable() {
   const sp = P.slice().sort((a, b) => a.sort - b.sort);
+  if ($("pf-count")) $("pf-count").textContent = sp.length ? (sp.length + " sản phẩm") : "";
   $("ptbl").innerHTML = sp.length ? sp.map(p => `<tr><td>${esc(p.name)}${p.hot ? ' <span class="pill wt">HOT</span>' : ""}</td>
     <td><span class="pill">${esc(catName(p.cat))}</span></td><td class="num">${plansOf(p).length ? plansOf(p).map(x => `${x.days}n: ${vnd(x.price)}`).join("<br>") : vnd(p.price)}</td>
     <td class="num" style="color:${(+p.stock || 0) === 0 ? "var(--bad)" : "inherit"}">${+p.stock || 0}<div class="hint">${p.manual ? "số lượng" : "kho .txt"}</div></td>
     <td style="white-space:nowrap;text-align:right">${p.manual ? "" : `<button class="btn okb sm" data-stock="${esc(p.id)}">Nhập kho</button> `}<button class="btn ghost sm" data-edit="${esc(p.id)}">Sửa</button> <button class="btn danger sm" data-del="${esc(p.id)}">Xoá</button></td></tr>`).join("")
-    : `<tr><td colspan="5" style="color:var(--muted);text-align:center;padding:24px">Chưa có sản phẩm. Điền form phía trên để thêm.</td></tr>`;
+    : `<tr><td colspan="5" style="color:var(--muted);text-align:center;padding:24px">Chưa có sản phẩm. Bấm "➕ Thêm sản phẩm mới" bên dưới để thêm.</td></tr>`;
 }
 function renderCust() {
   const q = $("cq").value.trim().toLowerCase(), us = ADM.users.filter(u => !q || u.username.toLowerCase().includes(q) || u.email.toLowerCase().includes(q));
@@ -2388,8 +2398,8 @@ $("pf-img-file").onchange = () => {
   pfFile = f; try { $("pf-img-prev").src = URL.createObjectURL(f); show("pf-img-row"); } catch (e) {}
 };
 $("pf-img-clear").onclick = () => { pfImage = ""; pfFile = null; $("pf-img-file").value = ""; show("pf-img-row", false); };
-function resetForm() { editId = null; $("pf").reset(); $("pf-plans").innerHTML = ""; $("pf-ms").value = 10; $("pf-mode").value = "auto"; $("pf-thumb").value = ""; syncMode(); pfImage = ""; pfFile = null; $("pf-img-file").value = ""; show("pf-img-row", false); syncPlanUI(); $("pf-o").value = P.length ? Math.max(...P.map(p => +p.sort || 0)) + 1 : 1; $("pf-title").textContent = "Thêm sản phẩm"; $("pf-save").textContent = "Thêm sản phẩm"; }
-function fillForm(p) { editId = p.id; $("pf-n").value = p.name; $("pf-c").value = p.cat; $("pf-vnd").value = p.price; $("pf-o").value = p.sort; $("pf-f").value = (p.features || []).join(", "); $("pf-desc").value = p.description || ""; $("pf-h").checked = !!p.hot; $("pf-ms").value = +p.stock || 0; $("pf-mode").value = p.manual ? "manual" : "auto"; $("pf-thumb").value = p.thumb || ""; syncMode(); pfImage = p.image || ""; pfFile = null; $("pf-img-file").value = ""; if (pfImage) { $("pf-img-prev").src = pfImage; show("pf-img-row"); } else show("pf-img-row", false); $("pf-plans").innerHTML = ""; plansOf(p).forEach(x => planRow(x.days, x.price)); syncPlanUI(); $("pf-title").textContent = "Sửa sản phẩm"; $("pf-save").textContent = "Lưu thay đổi"; $("pane-prod").scrollTop = 0; $("pf-n").focus(); }
+function resetForm() { editId = null; $("pf").reset(); $("pf-plans").innerHTML = ""; $("pf-ms").value = 10; $("pf-mode").value = "auto"; $("pf-thumb").value = ""; syncMode(); pfImage = ""; pfFile = null; $("pf-img-file").value = ""; show("pf-img-row", false); syncPlanUI(); $("pf-o").value = P.length ? Math.max(...P.map(p => +p.sort || 0)) + 1 : 1; $("pf-title").textContent = "Thêm sản phẩm"; $("pf-save").textContent = "Thêm sản phẩm"; if ($("pf-summary")) $("pf-summary").firstChild.textContent = "➕ Thêm sản phẩm mới "; }
+function fillForm(p) { editId = p.id; $("pf-n").value = p.name; $("pf-c").value = p.cat; $("pf-vnd").value = p.price; $("pf-o").value = p.sort; $("pf-f").value = (p.features || []).join(", "); $("pf-desc").value = p.description || ""; $("pf-h").checked = !!p.hot; $("pf-ms").value = +p.stock || 0; $("pf-mode").value = p.manual ? "manual" : "auto"; $("pf-thumb").value = p.thumb || ""; syncMode(); pfImage = p.image || ""; pfFile = null; $("pf-img-file").value = ""; if (pfImage) { $("pf-img-prev").src = pfImage; show("pf-img-row"); } else show("pf-img-row", false); $("pf-plans").innerHTML = ""; plansOf(p).forEach(x => planRow(x.days, x.price)); syncPlanUI(); $("pf-title").textContent = "Sửa sản phẩm"; $("pf-save").textContent = "Lưu thay đổi"; if ($("pf-summary")) $("pf-summary").firstChild.textContent = "✏️ Đang sửa sản phẩm "; if ($("pf-details")) $("pf-details").open = true; $("pf-details") ? $("pf-details").scrollIntoView({ behavior: "smooth", block: "start" }) : ($("pane-prod").scrollTop = 0); setTimeout(() => $("pf-n").focus(), 150); }
 $("pf").onsubmit = e => { e.preventDefault(); busy($("pf-save"), async () => {
   const body = { cat: $("pf-c").value, name: $("pf-n").value.trim(), price: Math.max(0, Math.round(+$("pf-vnd").value || 0)), sort: Math.round(+$("pf-o").value || 100),
     features: $("pf-f").value.split(",").map(s => s.trim()).filter(Boolean).slice(0, 6), description: $("pf-desc").value.trim() || null, hot: $("pf-h").checked,

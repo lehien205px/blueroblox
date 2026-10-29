@@ -3,35 +3,43 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
-        android:allowBackup="true"
+        android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:label="@string/app_name"
         android:hardwareAccelerated="true"
         android:usesCleartextTraffic="false"
+        android:supportsRtl="false"
         android:theme="@style/AppTheme">
 
+        <!-- Màn đăng nhập (mở app vào đây; đã đăng nhập thì tự chuyển sang danh sách máy) -->
         <activity
-            android:name=".MainActivity"
+            android:name=".LoginActivity"
             android:exported="true"
-            android:launchMode="singleTask"
-            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden|navigation|uiMode|density"
-            android:windowSoftInputMode="adjustResize"
-            android:screenOrientation="fullUser">
+            android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- Bấm link blueroblox.shop ở nơi khác (Zalo, Discord…) → mở bằng app -->
-            <intent-filter android:autoVerify="false">
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="https" android:host="blueroblox.shop" />
-                <data android:scheme="https" android:host="www.blueroblox.shop" />
-            </intent-filter>
         </activity>
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:windowSoftInputMode="adjustResize" />
+
+        <!-- Màn điều khiển: xoay điện thoại không làm mất kết nối -->
+        <activity
+            android:name=".ControlActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden|navigation|uiMode|density"
+            android:screenOrientation="fullUser"
+            android:windowSoftInputMode="adjustResize" />
+
+        <receiver android:name=".ExpiryAlarm" android:exported="false" />
     </application>
 </manifest>

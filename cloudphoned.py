@@ -83,7 +83,8 @@ def do_create(row):
     name = cname(row)
     print(f"[tạo] đơn {row['id'][:8]} → {name} ({row['ram']}GB/{row['cpu']} {row['days']}n)")
     r = phonectl(["create", name, "--ram", str(row["ram"]), "--cpu", str(row["cpu"]),
-                  "--days", str(row["days"]), "--res", row.get("res") or "720x1280"])
+                  "--days", str(row["days"]), "--res", row.get("res") or "720x1280",
+                  "--fps", str(row.get("fps") or 30)])
     if r.returncode == 2:   # HẾT HÀNG (quá 85%)
         patch(row["id"], {"status": "error", "error": "HẾT HÀNG — máy chủ đã đầy (85%)."}); return
     if r.returncode != 0:
@@ -151,8 +152,7 @@ if __name__ == "__main__":
     while True:
         try: tick()
         except Exception as e: print("lỗi vòng lặp:", e)
-        if n % 20 == 0:          # ~5 phút: kết nối lại các máy vào trình điều khiển (sau khi khởi động lại...)
-            try: phonectl(["connect-all"])
-            except Exception as e: print("lỗi connect-all:", e)
+        try: phonectl(["connect-all"])      # mỗi 15 giây: máy nào rớt kết nối thì nối lại (tránh màn xám)
+        except Exception as e: print("lỗi connect-all:", e)
         n += 1
         time.sleep(POLL)

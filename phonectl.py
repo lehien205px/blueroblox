@@ -7,6 +7,7 @@
 #   delete <ten>                                            : xoá máy
 #   renew <ten> --days 7                                    : cộng thêm ngày
 #   stop <ten>                                              : tạm dừng máy (khi vừa hết hạn)
+#   reconfig <ten> --fps 60 --res 1080x1920                 : đổi FPS / độ phân giải (giữ nguyên dữ liệu)
 #   reap                                                    : hết hạn → tạm dừng; quá 30 phút → xoá máy + dữ liệu
 #   connect-all                                             : kết nối lại mọi máy vào trình điều khiển web
 #   capacity                                                : xem tài nguyên đã dùng / ngưỡng 85%
@@ -67,7 +68,7 @@ def docker_busy_ports():
     # Cổng host đang bị bất kỳ container nào chiếm (kể cả phone1 tạo tay)
     busy = set()
     r = sh(["sudo", "docker", "ps", "--format", "{{.Ports}}"])
-    for m in re.findall(r"0\.0\.0\.0:(\d+)->", r.stdout or ""):
+    for m in re.findall(r"(?:\d+\.\d+\.\d+\.\d+|\[::\]):(\d+)->", r.stdout or ""):
         busy.add(int(m))
     return busy
 
@@ -133,27 +134,56 @@ def cmd_create(a):
     port = free_port(st)
     if not port: print("LỖI: hết cổng (tối đa 30 máy/node)."); sys.exit(3)
     if not re.match(r"^\d+x\d+$", a.res): print("LỖI: --res phải dạng 720x1280."); sys.exit(1)
-    w, h = a.res.split("x")
     if not SAFE.match(a.name): print("LỖI: tên máy chỉ gồm chữ, số, _ . -"); sys.exit(1)
+    fps = clamp_fps(a.fps)
     sh(["docker", "rm", "-f", a.name])           # phòng còn container cũ trùng tên
     wipe_data(a.name)                             # đảm bảo máy MỚI TINH, không dính dữ liệu cũ
-    data = os.path.join(DATA_ROOT, a.name); os.makedirs(data, exist_ok=True)
-    run = ["sudo", "docker", "run", "-itd", "--privileged", "--restart", "unless-stopped", "--name", a.name,
-           f"--memory={a.ram}g", f"--cpus={a.cpu}",
-           "-v", f"{data}:/data", "-p", f"{port}:5555", IMAGE,
-           f"androidboot.redroid_width={w}", f"androidboot.redroid_height={h}",
-           f"androidboot.redroid_dpi={a.dpi}"] + ARM
-    r = sh(run)
+    r = docker_run(a.name, a.ram, a.cpu, port, a.res, fps, a.dpi)
     if r.returncode != 0:
         print("LỖI tạo máy:", (r.stderr or r.stdout).strip()); sys.exit(4)
     # chờ boot xong rồi mới đăng ký vào ws-scrcpy (tránh màn đen)
     ok = wait_boot(a.name, port)
     exp = now() + datetime.timedelta(days=a.days)
-    st["phones"].append({"name": a.name, "port": port, "ram": a.ram, "cpu": a.cpu,
-                          "res": a.res, "created": fmt(now()), "expires": exp.isoformat()})
+    st["phones"].append({"name": a.name, "port": port, "ram": a.ram, "cpu": a.cpu, "res": a.res, "fps": fps,
+                          "dpi": a.dpi, "created": fmt(now()), "expires": exp.isoformat()})
     save(st)
     print(f"✅ Đã tạo máy '{a.name}'  | cổng {port} | RAM {a.ram}GB CPU {a.cpu} | hết hạn {fmt(exp)}")
     print("   Android đã khởi động xong, sẵn sàng điều khiển." if ok else "   CẢNH BÁO: máy chưa kết nối được trình điều khiển, sẽ tự thử lại.")
+
+def clamp_fps(v):
+    try: v = int(v)
+    except Exception: v = 30
+    return min(max(v, 10), 120)
+
+def auto_dpi(res):
+    w, h = (int(x) for x in res.split("x"))
+    return max(160, min(640, round(min(w, h) / 2.25)))     # 720→320, 1080→480, 540→240
+
+def docker_run(name, ram, cpu, port, res, fps, dpi=0):
+    w, h = res.split("x")
+    data = os.path.join(DATA_ROOT, name); os.makedirs(data, exist_ok=True)
+    return sh(["docker", "run", "-itd", "--privileged", "--restart", "unless-stopped", "--name", name,
+               f"--memory={ram}g", f"--cpus={cpu}",
+               "-v", f"{data}:/data", "-p", f"127.0.0.1:{port}:5555", IMAGE,   # chỉ mở trong server, không lộ ra internet
+               f"androidboot.redroid_width={w}", f"androidboot.redroid_height={h}",
+               f"androidboot.redroid_dpi={int(dpi) or auto_dpi(res)}", f"androidboot.redroid_fps={fps}"] + ARM)
+
+def cmd_reconfig(a):
+    """Đổi FPS / độ phân giải: tạo lại container với CÙNG thư mục dữ liệu → giữ nguyên app, tài khoản."""
+    st = load(); p = next((x for x in st["phones"] if x["name"] == a.name), None)
+    if not p: print("Không có máy tên này."); sys.exit(1)
+    res = a.res or p.get("res") or "720x1280"
+    if not re.match(r"^\d{3,4}x\d{3,4}$", res): print("LỖI: --res phải dạng 720x1280."); sys.exit(1)
+    fps = clamp_fps(a.fps if a.fps else p.get("fps", 30))
+    dpi = p.get("dpi", 0) if res == p.get("res") else 0
+    sh(["docker", "exec", WSNAME, "adb", "disconnect", f"127.0.0.1:{p['port']}"])
+    rm_container(a.name)                       # chỉ xoá container, KHÔNG xoá dữ liệu
+    r = docker_run(a.name, p["ram"], p["cpu"], p["port"], res, fps, dpi)
+    if r.returncode != 0:
+        print("LỖI:", (r.stderr or r.stdout).strip()); sys.exit(4)
+    p["res"], p["fps"], p["dpi"] = res, fps, dpi; save(st)
+    ok = wait_boot(a.name, p["port"])
+    print(f"✅ '{a.name}' → {res} · {fps} FPS" + ("" if ok else " (đang kết nối lại)"))
 
 def rm_container(name):
     sh(["sudo", "docker", "rm", "-f", name])
@@ -173,11 +203,24 @@ def cmd_stop(a):
     sh(["docker", "stop", a.name])
     print(f"⏸  Đã tạm dừng '{a.name}' (dữ liệu còn giữ {GRACE_MIN} phút).")
 
+def adb_online():
+    r = sh(["docker", "exec", WSNAME, "adb", "devices"])
+    ok = set()
+    for line in (r.stdout or "").splitlines():
+        parts = line.split()
+        if len(parts) >= 2 and parts[1] == "device": ok.add(parts[0])
+    return ok
+
 def cmd_connect_all(a):
-    st = load()
+    """Máy nào đang chạy mà trình điều khiển chưa thấy (rớt kết nối) → nối lại."""
+    st = load(); online = adb_online(); n = 0
     for p in st["phones"]:
-        if is_running(p["name"]): adb_connect(p["port"])
-    print("Đã kết nối lại", len(st["phones"]), "máy.")
+        serial = f"127.0.0.1:{p['port']}"
+        if serial in online or not is_running(p["name"]): continue
+        sh(["docker", "exec", WSNAME, "adb", "disconnect", serial])
+        adb_connect(p["port"]); n += 1
+        print("🔌 nối lại", p["name"], serial)
+    if n == 0: print("Tất cả máy đã kết nối.")
 
 def cmd_renew(a):
     st = load(); p = next((x for x in st["phones"] if x["name"] == a.name), None)
@@ -219,13 +262,14 @@ def cmd_reap(a):
 def main():
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest="cmd")
-    c = sub.add_parser("create"); c.add_argument("name"); c.add_argument("--ram", type=float, default=2); c.add_argument("--cpu", type=float, default=2); c.add_argument("--days", type=int, default=7); c.add_argument("--res", default="720x1280"); c.add_argument("--dpi", type=int, default=320); c.set_defaults(f=cmd_create)
+    c = sub.add_parser("create"); c.add_argument("name"); c.add_argument("--ram", type=float, default=2); c.add_argument("--cpu", type=float, default=2); c.add_argument("--days", type=int, default=7); c.add_argument("--res", default="720x1280"); c.add_argument("--dpi", type=int, default=0); c.add_argument("--fps", type=int, default=30); c.set_defaults(f=cmd_create)
     sub.add_parser("list").set_defaults(f=cmd_list)
     d = sub.add_parser("delete"); d.add_argument("name"); d.set_defaults(f=cmd_delete)
     r = sub.add_parser("renew"); r.add_argument("name"); r.add_argument("--days", type=int, default=7); r.set_defaults(f=cmd_renew)
     sub.add_parser("reap").set_defaults(f=cmd_reap)
     s = sub.add_parser("stop"); s.add_argument("name"); s.set_defaults(f=cmd_stop)
     sub.add_parser("connect-all").set_defaults(f=cmd_connect_all)
+    g = sub.add_parser("reconfig"); g.add_argument("name"); g.add_argument("--fps", type=int, default=0); g.add_argument("--res", default=""); g.set_defaults(f=cmd_reconfig)
     sub.add_parser("capacity").set_defaults(f=cmd_capacity)
     a = ap.parse_args()
     if not getattr(a, "cmd", None): ap.print_help(); sys.exit(0)

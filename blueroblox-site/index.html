@@ -384,7 +384,7 @@ a.btn{text-decoration:none}
 @media (max-width:1240px){ .who #who-name{display:none} }
 .notice div{display:block;position:relative;padding-left:28px}
 .notice div::before{position:absolute;left:13px;top:16px;transform:none}
-#custdlg,#stockdlg,#deldlg,#cplockdlg{z-index:70}
+#custdlg,#stockdlg,#deldlg,#cplockdlg,#apkdlg{z-index:70}
 .dpanel{width:min(1060px,100%)}
 .tbl td:last-child{white-space:nowrap;text-align:right}
 @media (max-width:1520px){ nav a svg.ic{display:none} nav a{padding:8px 11px} .who #who-name{display:none} nav a[href="#policy"]{display:none} }
@@ -636,6 +636,30 @@ h1 em::after{background:linear-gradient(90deg,rgba(143,208,255,0),#8fd0ff 15%,#f
 .cpa-cust span{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cpa-cust:hover b{text-decoration:underline}.cpa-cust:focus-visible{outline:2px solid #6aa3ff}
 
+.apkdrop{display:flex;align-items:center;justify-content:center;text-align:center;min-height:86px;padding:14px;margin-top:8px;border:1.5px dashed var(--line);border-radius:12px;cursor:pointer;color:var(--muted);background:rgba(80,140,255,.04)}
+.apkdrop:hover,.apkdrop.on{border-color:#6aa3ff;color:#cfe0ff;background:rgba(80,140,255,.09)}
+.apkdrop input{position:absolute;width:1px;height:1px;opacity:0}
+.apkdrop:focus-within{outline:2px solid #6aa3ff;outline-offset:2px}
+#apk-url{margin-top:8px}
+.apkprog{margin-top:12px}.apkprog .bar{height:8px;border-radius:99px;background:rgba(255,255,255,.08);overflow:hidden}
+.apkprog .bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,#4f8cff,#4fd1c5);transition:width .3s}
+.apkprog .hint{margin-top:6px}
+.apkfail{margin:6px 0 0;padding-left:18px;color:#ff9c9c;font-size:12px;max-height:120px;overflow:auto}
+.apkpre{margin-top:12px;border:1px solid var(--line);border-radius:10px;padding:8px 12px}
+.apkpre summary{cursor:pointer;font-weight:700}
+.apkpre ul{list-style:none;margin:8px 0 0;padding:0;display:grid;gap:6px}
+.apkpre li{display:flex;align-items:center;gap:8px;font-size:13px}.apkpre li span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#apk-src,#apk-tgt{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.dlg label.apkkeep{flex-direction:row;display:flex!important;align-items:center;gap:10px;margin-top:14px;cursor:pointer;font-size:14px}
+.apkkeep input{width:18px;height:18px;flex:none;accent-color:#4f8cff}
+
+.appbar{position:fixed;left:12px;right:12px;bottom:12px;z-index:45;display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:14px;
+  background:rgba(12,22,52,.96);border:1px solid rgba(110,160,255,.35);box-shadow:0 10px 30px rgba(0,0,0,.45);max-width:520px;margin:0 auto}
+.appbar img{flex:none;object-fit:contain}
+.appbar div{flex:1;min-width:0;display:flex;flex-direction:column}
+.appbar b{font-size:14px}.appbar small{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.appbar-x{all:unset;cursor:pointer;color:var(--muted);padding:6px;font-size:14px;border-radius:6px}.appbar-x:focus-visible{outline:2px solid #6aa3ff}
+
 </style>
 <script>
 // Đã điền sẵn cho blueroblox.shop
@@ -738,7 +762,7 @@ window.BR_CONFIG = {
   <div class="wrap">
     <div><a class="logo" href="/" aria-label="BlueRoblox"><span class="mark"></span><span class="wm"><b><em>Blue</em>Roblox</b><small>Clone Roblox &amp; VPS GPU</small></span></a><p id="ft-about"></p></div>
     <div><h5 data-i18n="f_links">Liên kết</h5><ul><li><a href="#policy" data-i18n="policy">Chính sách</a></li><li><a href="#shop" data-i18n="nav_shop">Sản phẩm</a></li></ul></div>
-    <div><h5 data-i18n="f_contact">Liên hệ</h5><ul><li id="ct-zalo"></li><li id="ct-email"></li><li id="ct-discord"></li></ul></div>
+    <div><h5 data-i18n="f_contact">Liên hệ</h5><ul><li id="ct-zalo"></li><li id="ct-email"></li><li id="ct-discord"></li><li id="ft-app" hidden><a href="/download/blueroblox-cloud.apk" download>📱 Tải app Android</a></li></ul></div>
   </div>
   <div class="copy">© <span id="year"></span> BLUEROBLOX. <span data-i18n="disclaimer">Không liên kết với Roblox Corporation.</span></div>
 </footer>
@@ -1202,7 +1226,8 @@ window.BR_CONFIG = {
         <input class="search" id="cpa-q" placeholder="Tìm tên máy, tên khách, cổng…">
         <select class="in" id="cpa-st" aria-label="Lọc trạng thái"><option value="">Mọi trạng thái</option><option value="active">Đang chạy</option><option value="locked">Đang bị khoá</option><option value="expired">Hết hạn (chờ 30p)</option><option value="pending">Đang tạo</option><option value="error">Lỗi</option></select>
         <span class="cpasel" id="cpa-selbar" hidden><b id="cpa-seln">0</b> máy đã chọn
-          <button class="btn ghost sm" type="button" id="cpa-blk">🔒 Khoá</button><button class="btn ghost sm" type="button" id="cpa-bun">🔓 Mở khoá</button><button class="btn danger sm" type="button" id="cpa-bdel">🗑️ Xoá</button></span>
+          <button class="btn ghost sm" type="button" id="cpa-blk">🔒 Khoá</button><button class="btn ghost sm" type="button" id="cpa-bun">🔓 Mở khoá</button><button class="btn danger sm" type="button" id="cpa-bdel">🗑️ Xoá</button><button class="btn ghost sm" type="button" id="cpa-bapk">📦 Cài APK</button></span>
+        <button class="btn sm" type="button" id="cpa-apk" style="margin-left:auto">📦 Cài APK cho máy khách</button>
       </div>
       <div class="tbl"><table><thead><tr><th style="width:30px"><input type="checkbox" id="cpa-all" aria-label="Chọn tất cả máy đang lọc"></th><th>Máy</th><th>Khách</th><th>Cấu hình</th><th>Trạng thái</th><th>Hết hạn</th><th></th></tr></thead><tbody id="cpa-tbl"></tbody></table></div>
     </div>
@@ -1338,6 +1363,27 @@ window.BR_CONFIG = {
     <div class="note" style="margin-top:10px">Máy bị khoá sẽ <b>tắt ngay</b>, khách không mở, điều khiển hay gia hạn được. Dữ liệu vẫn giữ. Hết thời hạn máy tự mở khoá và bật lại.</div>
     <div class="err" id="cpl-err"></div>
     <div class="acts"><button class="btn ghost" type="button" id="cpl-cancel">Huỷ</button><button class="btn danger" type="button" id="cpl-ok">Khoá máy</button></div>
+  </div>
+</div>
+<div class="appbar" id="appbar" hidden role="region" aria-label="Tải app Android">
+  <img src="data:image/webp;base64,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" alt="" width="40" height="27"><div><b>App BlueRoblox Cloud</b><small id="appbar-v">Thuê &amp; điều khiển điện thoại đám mây ngay trên Android</small></div>
+  <a class="btn sm" href="/download/blueroblox-cloud.apk" download id="appbar-dl">Tải app</a><button class="appbar-x" type="button" id="appbar-x" aria-label="Ẩn">✕</button>
+</div>
+<div class="modal" id="apkdlg" hidden>
+  <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="apk-title">
+    <h3 id="apk-title">📦 Cài APK vào máy khách</h3>
+    <div class="hint">Nhận .apk, .apks, .apkm, .xapk · tối đa 4GB · cài song song 4 máy một lúc.</div>
+    <label class="cpl">Lấy file từ</label>
+    <div class="amts" id="apk-src"><button type="button" data-s="file" class="on">Máy tính / điện thoại</button><button type="button" data-s="url">Link tải trực tiếp</button></div>
+    <label class="apkdrop" id="apk-filebox"><input type="file" id="apk-file" accept=".apk,.apks,.apkm,.xapk"><span id="apk-fname">Bấm để chọn file APK (hoặc kéo thả vào đây)</span></label>
+    <input class="in" id="apk-url" type="url" placeholder="https://…/game.apk" hidden aria-label="Link tải APK">
+    <label class="cpl">Cài vào</label>
+    <div class="amts" id="apk-tgt"><button type="button" data-t="sel" id="apk-tsel">Máy đã chọn (0)</button><button type="button" data-t="all" class="on">Tất cả máy đang chạy</button></div>
+    <label class="apkkeep"><input type="checkbox" id="apk-keep" checked><span>Cài sẵn cho mọi máy khách tạo sau này</span></label>
+    <div class="apkprog" id="apk-prog" hidden><div class="bar"><i id="apk-bar"></i></div><div class="hint" id="apk-msg"></div><ul class="apkfail" id="apk-fails"></ul></div>
+    <div class="err" id="apk-err"></div>
+    <details class="apkpre"><summary>📂 App đang cài sẵn cho máy mới <span class="hint" id="apk-precount"></span></summary><ul id="apk-pre"><li class="hint">Đang tải…</li></ul></details>
+    <div class="acts"><button class="btn ghost" type="button" id="apk-close">Đóng</button><button class="btn" type="button" id="apk-go">Cài ngay</button></div>
   </div>
 </div>
 <div class="modal" id="noticedlg" hidden>
@@ -2449,7 +2495,7 @@ $("or-list").onclick = async e => {
 };
 
 /* ---------- ADMIN ---------- */
-async function openAdmin() { if (!isAdmin()) return; fillSite(); resetForm(); setTab("stats"); show("drawer"); await loadAdmin(); loadStats(); }
+async function openAdmin() { if (!isAdmin()) return; try { if (!$("noticedlg").hidden) { show("noticedlg", false); ntOpen = false; ntForce = false; } } catch (e) {} fillSite(); resetForm(); setTab("stats"); show("drawer"); await loadAdmin(); loadStats(); }
 async function loadAdmin() {
   if (!isAdmin()) return;
   const [u, t, o] = await Promise.all([
@@ -4088,6 +4134,116 @@ $("pf-trall") && ($("pf-trall").onclick = () => busy($("pf-trall"), async () => 
 
 document.addEventListener("click", e => { const b = e.target.closest("[data-cpcust]"); if (!b) return;
   const id = b.dataset.cpcust; if (!ADM.users.some(x => x.id === id) && CPA_U.has(id)) ADM.users.push(CPA_U.get(id)); openCust(id); });
+
+// ---- Admin: cài APK vào nhiều máy khách cùng lúc (qua cpapi trên máy chủ) ----
+const CPAPI = "https://phone.blueroblox.shop/cpapi";
+let apkSrc = "file", apkTgt = "all", apkBusy = false;
+async function cpapiCall(path, { method = "GET", json, body, headers = {} } = {}) {
+  const tk = session && session.access_token; if (!tk) throw new Error("Phiên đăng nhập hết hạn, tải lại trang.");
+  const h = { Authorization: "Bearer " + tk, ...headers }; if (json) h["Content-Type"] = "application/json";
+  let r;
+  try { r = await fetch(CPAPI + "/" + path, { method, headers: h, body: json ? JSON.stringify(json) : body }); }
+  catch (e) { throw new Error("Không kết nối được máy chủ điện thoại (server tắt hoặc chưa cập nhật cpapi.py)."); }
+  let j = {}; try { j = await r.json(); } catch (e) {}
+  if (!r.ok) { const err = new Error(j.error || (r.status === 404 ? "Máy chủ chưa có chức năng này — chạy: cloudphone update" : "Lỗi " + r.status)); err.status = r.status; err.data = j; throw err; }
+  return j;
+}
+function apkSetSeg(box, attr, val) { $(box).querySelectorAll("button").forEach(b => b.classList.toggle("on", b.dataset[attr] === val)); }
+function apkSyncSrc() { apkSetSeg("apk-src", "s", apkSrc); show("apk-filebox", apkSrc === "file"); show("apk-url", apkSrc === "url"); }
+function apkSyncTgt() { const n = cpaSel.size; $("apk-tsel").textContent = `Máy đã chọn (${n})`; $("apk-tsel").disabled = !n; if (!n && apkTgt === "sel") apkTgt = "all"; apkSetSeg("apk-tgt", "t", apkTgt); }
+function openApkDlg(fromSel) {
+  if (apkBusy) { show("apkdlg"); return; }
+  apkTgt = fromSel && cpaSel.size ? "sel" : "all"; apkSyncTgt(); apkSyncSrc();
+  $("apk-err").textContent = ""; show("apk-prog", false); $("apk-fails").innerHTML = "";
+  show("apkdlg"); apkLoadPre();
+}
+async function apkLoadPre() {
+  try { const { files } = await cpapiCall("admin/preset");
+    $("apk-precount").textContent = files.length ? `(${files.length})` : "(trống)";
+    $("apk-pre").innerHTML = files.length ? files.map(f => `<li><span title="${esc(f.name)}">📦 ${esc(f.name)}</span><small class="hint">${(f.size / 1048576).toFixed(1)}MB</small><button class="btn danger sm" type="button" data-apkdel="${esc(f.name)}">Bỏ</button></li>`).join("")
+      : '<li class="hint">Chưa có app nào. Tick “Cài sẵn cho mọi máy khách tạo sau này” khi cài để thêm.</li>';
+  } catch (e) { $("apk-pre").innerHTML = `<li class="hint">${esc(e.message)}</li>`; $("apk-precount").textContent = ""; }
+}
+$("cpa-apk") && ($("cpa-apk").onclick = () => openApkDlg(false));
+$("cpa-bapk") && ($("cpa-bapk").onclick = () => openApkDlg(true));
+$("apk-close").onclick = () => show("apkdlg", false);
+$("apk-src").onclick = e => { const b = e.target.closest("button"); if (b && !apkBusy) { apkSrc = b.dataset.s; apkSyncSrc(); } };
+$("apk-tgt").onclick = e => { const b = e.target.closest("button"); if (b && !b.disabled && !apkBusy) { apkTgt = b.dataset.t; apkSyncTgt(); } };
+$("apk-file").onchange = () => { const f = $("apk-file").files[0]; $("apk-fname").textContent = f ? `📦 ${f.name} · ${(f.size / 1048576).toFixed(1)}MB` : "Bấm để chọn file APK (hoặc kéo thả vào đây)"; $("apk-filebox").classList.toggle("on", !!f); };
+["dragover", "dragenter"].forEach(ev => $("apk-filebox").addEventListener(ev, e => { e.preventDefault(); $("apk-filebox").classList.add("on"); }));
+$("apk-filebox").addEventListener("dragleave", () => $("apk-filebox").classList.toggle("on", !!$("apk-file").files[0]));
+$("apk-filebox").addEventListener("drop", e => { e.preventDefault(); if (e.dataTransfer.files[0]) { const dt = new DataTransfer(); dt.items.add(e.dataTransfer.files[0]); $("apk-file").files = dt.files; $("apk-file").onchange(); } });
+document.addEventListener("click", e => { const b = e.target.closest("[data-apkdel]"); if (!b) return;
+  if (!confirm("Bỏ “" + b.dataset.apkdel + "” khỏi app cài sẵn? (máy đã cài vẫn giữ app)")) return;
+  cpapiCall("admin/preset-del", { method: "POST", json: { name: b.dataset.apkdel } }).then(apkLoadPre).catch(er => toast(er.message, 1)); });
+function apkProg(p, msg) { show("apk-prog"); $("apk-bar").style.width = Math.round(Math.max(0, Math.min(1, p)) * 100) + "%"; $("apk-msg").textContent = msg; }
+async function apkPoll(id, base, span, onStep) {
+  for (;;) {
+    await new Promise(r => setTimeout(r, 1200));
+    const j = await cpapiCall("job?id=" + encodeURIComponent(id));
+    if (onStep) onStep(j);
+    if (j.total) apkProg(base + span * (j.done || 0) / j.total, j.msg); else apkProg(base + span * .3, j.msg);
+    if (j.state === "done") return j;
+    if (j.state === "error") throw new Error(j.msg || "Lỗi");
+  }
+}
+$("apk-go").onclick = async () => {
+  if (apkBusy) return; $("apk-err").textContent = ""; $("apk-fails").innerHTML = "";
+  const ids = apkTgt === "sel" ? [...cpaSel] : [];
+  if (apkTgt === "sel" && !ids.length) return $("apk-err").textContent = "Chưa chọn máy nào trong bảng.";
+  let fileId = null; const keep = $("apk-keep").checked;
+  apkBusy = true; $("apk-go").disabled = true; $("apk-go").textContent = "Đang làm…";
+  try {
+    if (apkSrc === "file") {
+      const f = $("apk-file").files[0];
+      if (!f) throw new Error("Chưa chọn file.");
+      if (!/\.(apk|apks|apkm|xapk)$/i.test(f.name)) throw new Error("Chỉ nhận file .apk / .apks / .apkm / .xapk");
+      if (f.size > 4 * 1073741824) throw new Error("File lớn hơn 4GB.");
+      const id = (crypto.randomUUID ? crypto.randomUUID().replace(/-/g, "") : Math.random().toString(36).slice(2) + Date.now().toString(36)).slice(0, 24).toLowerCase();
+      const CH = 8 * 1048576; let off = 0;
+      while (off < f.size) {
+        let j, tries = 0;
+        for (;;) {
+          try { j = await cpapiCall(`admin/upload?id=${id}&name=${encodeURIComponent(f.name)}&total=${f.size}&off=${off}`, { method: "POST", body: f.slice(off, off + CH), headers: { "Content-Type": "application/octet-stream" } }); break; }
+          catch (e) { if (e.status === 409 && e.data && e.data.size != null) { j = { size: e.data.size }; break; }
+            if (e.status && e.status < 500) throw e; if (++tries > 5) throw new Error("Mạng chập chờn, tải lên thất bại."); await new Promise(r => setTimeout(r, 1500 * tries)); }
+        }
+        off = j.size; apkProg(off / f.size * .5, `Đang tải lên máy chủ ${Math.round(off / f.size * 100)}%`);
+        if (j.file) fileId = j.file;
+      }
+    } else {
+      const url = $("apk-url").value.trim();
+      if (!/^https?:\/\/\S+$/.test(url)) throw new Error("Dán link bắt đầu bằng http:// hoặc https://");
+      apkProg(.05, "Máy chủ đang tải file về…");
+      const { job } = await cpapiCall("admin/fromurl", { method: "POST", json: { url } });
+      const d = await apkPoll(job, 0, .5); fileId = d.file;
+    }
+    if (!fileId) throw new Error("Tải lên chưa xong, thử lại.");
+    apkProg(.5, "Bắt đầu cài…");
+    const { job } = await cpapiCall("admin/install", { method: "POST", json: { file: fileId, ids, all: apkTgt === "all", keep } });
+    const r = await apkPoll(job, .5, .5);
+    apkProg(1, "✅ " + r.msg);
+    $("apk-fails").innerHTML = (r.fails || []).map(x => `<li>${esc(x)}</li>`).join("");
+    toast(r.msg); if (keep) apkLoadPre();
+  } catch (e) { $("apk-err").textContent = e.message || "Có lỗi."; }
+  apkBusy = false; $("apk-go").disabled = false; $("apk-go").textContent = "Cài ngay";
+};
+
+// ---- Nút tải app Android (chỉ hiện khi đã có file APK trên web, và không hiện bên trong app) ----
+(async function appPromo() {
+  if (/BlueRobloxApp\//.test(navigator.userAgent)) return;
+  let info = null;
+  try { const r = await fetch("/download/app.json", { cache: "no-store" }); if (r.ok) info = await r.json(); } catch (e) {}
+  if (!info || !info.version) return;
+  const mb = info.size ? " · " + (info.size / 1048576).toFixed(1) + "MB" : "";
+  show("ft-app"); $("ft-app").querySelector("a").textContent = L("📱 Tải app Android", "📱 Get the Android app") + " (v" + info.version + ")";
+  let hid = false; try { hid = localStorage.getItem("br_appbar") === String(info.version); } catch (e) {}
+  if (!/Android/i.test(navigator.userAgent) || hid) return;
+  $("appbar-v").textContent = L("Phiên bản ", "Version ") + info.version + mb + L(" · thuê & điều khiển máy ngay trên điện thoại", " · rent & control phones on the go");
+  $("appbar-dl").textContent = L("Tải app", "Download");
+  show("appbar");
+  $("appbar-x").onclick = () => { show("appbar", false); try { localStorage.setItem("br_appbar", String(info.version)); } catch (e) {} };
+})();
 
 </script>
 </body>

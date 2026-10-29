@@ -222,6 +222,7 @@ def out(r):
 
 # ---------------- Việc chạy nền (cài APK, tải link, khởi động lại) ----------------
 JOBS, JLOCK = {}, threading.Lock()
+VIEWERS, VLOCK = {}, threading.Lock()      # cổng máy → nơi đang xem (mã trang cpv)
 
 
 def new_job(owner, title):
@@ -594,6 +595,7 @@ class H(BaseHTTPRequestHandler):
                 except Exception: booting = False
             return self.send_json(200, {"name": p["name"], "ram": p["ram"], "cpu": p["cpu"], "res": p.get("res"),
                                         "status": p["status"], "expires_at": p.get("expires_at"), "online": st == "device", "booting": booting,
+                                        "viewer": (VIEWERS.get(int(port)) or {}).get("viewer") if port else None,
                                         "fps": p.get("fps") or 30, "fps_range": fps_limits(), "busy": pid in _busy,
                                         "maint": under, "maint_msg": maint_text() if under else None,
                                         "locked": locked, "lock_msg": lock_text(p) if locked else None})
@@ -759,7 +761,10 @@ class H(BaseHTTPRequestHandler):
                 if q.get("action") != "proxy-adb" or q.get("remote") != "tcp:8886": return self.deny(403, "Không được phép.")
                 m = re.match(r"^127\.0\.0\.1:(\d{4,5})$", q.get("udid", ""))
                 if not m or auth.get("u") not in port_owners(int(m.group(1))): return self.deny(403, "Đây không phải máy của bạn.")
-            return self.pipe_ws()
+            m2 = re.match(r"^127\.0\.0\.1:(\d{4,5})$", q.get("udid", ""))
+            viewer = re.sub(r"[^\w-]", "", q.get("cpv", ""))[:40]
+            key = (int(m2.group(1)) if m2 and q.get("action") == "proxy-adb" else None)
+            return self.pipe_ws(key if key and viewer and not auth.get("a") else None, viewer)
         if self.command not in ("GET", "HEAD") and not (auth and auth.get("a")):
             return self.deny(403, "Không được phép.")
         return self.pipe_http()
@@ -788,8 +793,16 @@ class H(BaseHTTPRequestHandler):
         self.end_headers()
         if self.command != "HEAD": self.wfile.write(body)
 
-    def pipe_ws(self):
+    def pipe_ws(self, port=None, viewer=""):
         up = socket.create_connection(UPSTREAM, timeout=10)
+        me = {"viewer": viewer, "close": None}
+        if port:                                  # mỗi máy chỉ 1 nơi xem (khách): nơi mở sau thay nơi cũ → không giành luồng hình
+            with VLOCK:
+                old = VIEWERS.get(port)
+                VIEWERS[port] = me
+            if old and old["viewer"] != viewer and old["close"]:
+                try: old["close"]()
+                except Exception: pass
         for s_ in (up, self.connection):          # gửi ngay từng gói nhỏ (chạm, phím) — không chờ gom
             try: s_.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
             except OSError: pass
@@ -802,6 +815,12 @@ class H(BaseHTTPRequestHandler):
         cli = self.connection
         cli.settimeout(None)
         self.close_connection = True
+
+        def kick():
+            for s_ in (up, cli):
+                try: s_.shutdown(socket.SHUT_RDWR)
+                except Exception: pass
+        me["close"] = kick
 
         def client_to_up():
             try:
@@ -829,6 +848,9 @@ class H(BaseHTTPRequestHandler):
             except Exception: pass
             try: cli.shutdown(socket.SHUT_RDWR)
             except Exception: pass
+            if port:
+                with VLOCK:
+                    if VIEWERS.get(port) is me: VIEWERS.pop(port, None)
         t.join(timeout=3)
 
 

@@ -384,7 +384,7 @@ a.btn{text-decoration:none}
 @media (max-width:1240px){ .who #who-name{display:none} }
 .notice div{display:block;position:relative;padding-left:28px}
 .notice div::before{position:absolute;left:13px;top:16px;transform:none}
-#custdlg,#stockdlg,#deldlg{z-index:70}
+#custdlg,#stockdlg,#deldlg,#cplockdlg{z-index:70}
 .dpanel{width:min(1060px,100%)}
 .tbl td:last-child{white-space:nowrap;text-align:right}
 @media (max-width:1520px){ nav a svg.ic{display:none} nav a{padding:8px 11px} .who #who-name{display:none} nav a[href="#policy"]{display:none} }
@@ -585,6 +585,31 @@ h1 em::after{background:linear-gradient(90deg,rgba(143,208,255,0),#8fd0ff 15%,#f
 .maintbar[hidden]{display:none}
 .stock.wt{color:#ffc861}
 
+/* ===== CTV + quản lý máy (v6) ===== */
+.ctvchip{border-color:rgba(60,224,176,.45)!important;color:var(--ok)!important}
+.ctvchip.wait{border-color:rgba(255,200,97,.45)!important;color:#ffc861!important}
+.ctvchip.none{border-color:var(--line2)!important;color:var(--muted)!important}
+.ctvbox{display:grid;gap:8px;padding:12px;border:1px solid var(--line);border-radius:12px;margin-top:4px}
+.ctvbox .hint{font-size:12px}
+.ctvrow{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.ctvrow select{width:auto;flex:1;min-width:170px}
+.ctvpct{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted)}
+.ctvpct input{width:76px}
+.ctvreq{border:1px solid rgba(255,200,97,.35);background:rgba(255,200,97,.06);border-radius:12px;padding:12px;display:grid;gap:8px}
+.ctvreq .rq{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px}
+.ctvreq .rq span{flex:1;min-width:180px;color:var(--muted)}
+.ctvreq .rq input{width:70px;padding:5px 8px}
+.oldp{font-size:12px;color:var(--muted);text-decoration:line-through;font-family:var(--body);margin-right:4px}
+.ctvtag{font-size:10.5px;font-weight:700;color:var(--ok);border:1px solid rgba(60,224,176,.4);border-radius:6px;padding:1px 5px;margin-left:4px;font-family:var(--body);vertical-align:middle}
+.cpabar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.cpabar .search{flex:1;min-width:200px}
+.cpabar select{width:auto}
+.cpasel{display:inline-flex;gap:6px;align-items:center;font-size:13px;padding:4px 8px;border-radius:10px;background:rgba(61,123,255,.12);border:1px solid var(--line2)}
+.cpasel[hidden]{display:none}
+#cpa-tbl input[type=checkbox],#cpa-all{width:16px;height:16px;accent-color:var(--blue)}
+#cpl-dur{grid-template-columns:repeat(4,1fr)}
+.dbody{grid-auto-rows:max-content}
+
 </style>
 <script>
 // Đã điền sẵn cho blueroblox.shop
@@ -612,6 +637,7 @@ window.BR_CONFIG = {
       <span id="user-acts" hidden style="display:flex;gap:8px;align-items:center">
         <span class="bal"><span data-i18n="balance">Số dư</span>: <b id="bal">0đ</b></span>
         <button class="btn sm" id="btn-topup" data-i18n="btn_topup">+ Nạp</button>
+        <button class="btn ghost sm ctvchip" id="ctv-btn" type="button" hidden></button>
         <span class="who"><span class="av" id="who-av">?</span><span id="who-name"></span><button class="btn ghost sm" id="btn-logout" data-i18n="logout">Thoát</button></span>
       </span>
       <button class="btn gold" id="admin-open" hidden>Quản trị <span class="badge" id="adm-badge" hidden></span></button>
@@ -936,6 +962,15 @@ window.BR_CONFIG = {
       <label>Đặt số dư chính xác (VND)<input class="in" id="cd-balance" type="number" step="1000"></label>
       <label>Đặt lại mật khẩu mới <span class="hint">(để trống nếu không đổi)</span><input class="in" id="cd-pass" type="text" placeholder="Mật khẩu mới ≥ 6 ký tự" autocomplete="new-password"></label>
     </div>
+    <div class="ctvbox">
+      <div><b style="font-size:14px">🤝 Cộng tác viên (CTV)</b> <span class="hint" id="cd-ctvnote"></span></div>
+      <div class="ctvrow"><select class="in" id="cd-ctv" aria-label="Trạng thái CTV"><option value="none">Không phải CTV</option><option value="pending">Đang chờ duyệt</option><option value="approved">CTV đã duyệt</option><option value="rejected">Từ chối</option></select>
+        <label class="ctvpct"><input class="in" id="cd-ctvpct" type="number" min="0" max="90" step="1" placeholder="0"><span>% giảm</span></label>
+        <button class="btn okb sm" type="button" id="cd-ctv-save">Lưu CTV</button></div>
+      <div class="hint">CTV chỉ được giảm giá khi mua (sản phẩm, VPS, ĐT đám mây). Không có quyền quản trị.</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><b style="font-size:14px">📱 ĐT đám mây của khách</b><span class="hint" id="cd-cp-n"></span>
+      <button class="btn danger sm" type="button" id="cd-cp-wipe" style="margin-left:auto">🧹 Xoá hết máy của khách</button></div>
     <div style="margin-top:6px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
       <b style="font-size:14px">🖥 Máy VPS của khách</b><span class="hint" id="cd-vps-n"></span>
       <button class="btn ghost sm" type="button" id="cd-vps-add" style="margin-left:auto">➕ Tạo máy cho khách này</button>
@@ -994,8 +1029,9 @@ window.BR_CONFIG = {
     </div>
     <div class="dbody" id="pane-cust" hidden>
       <div class="tiles"><div><b id="k-users">0</b><span>Khách đã đăng ký</span></div><div><b id="k-bal">0đ</b><span>Tổng số dư khách</span></div><div><b id="k-rev">0đ</b><span>Đã nạp (100 lệnh gần nhất)</span></div></div>
+      <div id="ctv-req"></div>
       <input class="search" id="cq" placeholder="Tìm theo tên hoặc email…" style="width:100%">
-      <div class="tbl"><table><thead><tr><th>Khách</th><th>Email</th><th>Số dư</th><th>Trạng thái</th><th></th></tr></thead><tbody id="ctbl"></tbody></table></div>
+      <div class="tbl"><table><thead><tr><th>Khách</th><th>Email</th><th>Số dư</th><th>Trạng thái</th><th>CTV</th><th></th></tr></thead><tbody id="ctbl"></tbody></table></div>
     </div>
     <div class="dbody" id="pane-tx" hidden>
       <div class="note">Lệnh nạp được cộng tự động khi ngân hàng báo có. Lệnh "Chờ" mà bạn đã thấy tiền vào (khách ghi sai nội dung) thì bấm Duyệt tay.</div>
@@ -1127,8 +1163,14 @@ window.BR_CONFIG = {
       <div class="hint">Công thức: <b>(RAM × giá RAM + CPU × giá CPU) × số ngày</b>. Bảng tự cập nhật khi bạn sửa ô giá phía trên.</div>
       <div class="tbl"><table><thead><tr><th>Cấu hình</th><th class="num">1 ngày</th><th class="num">7 ngày</th><th class="num">30 ngày</th><th class="num">90 ngày</th></tr></thead><tbody id="cpa-ana"></tbody></table></div>
       <div class="hint" id="cpa-sum"></div>
-      <div style="display:flex;align-items:center;gap:10px"><h3 style="margin:0">Máy khách đang thuê</h3><span class="hint" id="cpa-count" style="margin-left:auto"></span></div>
-      <div class="tbl"><table><thead><tr><th>Máy</th><th>Khách</th><th>Cấu hình</th><th>Trạng thái</th><th>Hết hạn</th><th></th></tr></thead><tbody id="cpa-tbl"></tbody></table></div>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><h3 style="margin:0">📋 Máy khách đang thuê <span class="hint">(chỉ admin thấy)</span></h3><span class="hint" id="cpa-count" style="margin-left:auto"></span></div>
+      <div class="cpabar">
+        <input class="search" id="cpa-q" placeholder="Tìm tên máy, tên khách, cổng…">
+        <select class="in" id="cpa-st" aria-label="Lọc trạng thái"><option value="">Mọi trạng thái</option><option value="active">Đang chạy</option><option value="locked">Đang bị khoá</option><option value="expired">Hết hạn (chờ 30p)</option><option value="pending">Đang tạo</option><option value="error">Lỗi</option></select>
+        <span class="cpasel" id="cpa-selbar" hidden><b id="cpa-seln">0</b> máy đã chọn
+          <button class="btn ghost sm" type="button" id="cpa-blk">🔒 Khoá</button><button class="btn ghost sm" type="button" id="cpa-bun">🔓 Mở khoá</button><button class="btn danger sm" type="button" id="cpa-bdel">🗑️ Xoá</button></span>
+      </div>
+      <div class="tbl"><table><thead><tr><th style="width:30px"><input type="checkbox" id="cpa-all" aria-label="Chọn tất cả máy đang lọc"></th><th>Máy</th><th>Khách</th><th>Cấu hình</th><th>Trạng thái</th><th>Hết hạn</th><th></th></tr></thead><tbody id="cpa-tbl"></tbody></table></div>
     </div>
     <div class="dbody" id="pane-bank" hidden>
       <form class="f" id="bf">
@@ -1223,6 +1265,32 @@ window.BR_CONFIG = {
     <div class="note" style="margin-top:10px">Mỗi máy là một điện thoại Android <b>mới tinh</b>, không có dữ liệu hay tài khoản Gmail của ai. Hết hạn máy tạm dừng; không gia hạn trong <b>30 phút</b> thì máy và toàn bộ dữ liệu bị xoá.</div>
     <div class="err" id="cp-err"></div>
     <div class="acts"><button class="btn ghost" type="button" id="cp-ocancel">Đóng</button><button class="btn" type="button" id="cp-obuy">Thanh toán &amp; tạo máy</button></div>
+  </div>
+</div>
+<div class="modal" id="ctvdlg" hidden>
+  <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="ctv-title">
+    <h3 id="ctv-title">🤝 Cộng tác viên (CTV)</h3>
+    <div class="note" id="ctv-st"></div>
+    <div id="ctv-form">
+      <p class="hint" style="margin:10px 0 6px">CTV được mua giá sỉ (giảm theo % admin cài) để bán lại. CTV vẫn là tài khoản khách bình thường, không có quyền quản trị.</p>
+      <label style="font-size:13px;color:var(--muted)">Bạn bán ở đâu / liên hệ (Zalo, Facebook, Discord…)<textarea class="in" id="ctv-note" maxlength="300" rows="3" placeholder="VD: Zalo 09xx…, nhóm Facebook ABC"></textarea></label>
+    </div>
+    <div class="err" id="ctv-err"></div>
+    <div class="acts"><button class="btn ghost" type="button" id="ctv-close">Đóng</button><button class="btn" type="button" id="ctv-send">Gửi đăng ký</button></div>
+  </div>
+</div>
+<div class="modal" id="cplockdlg" hidden>
+  <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="cpl-title">
+    <h3 id="cpl-title">🔒 Khoá máy</h3>
+    <div class="hint" id="cpl-who"></div>
+    <label class="cpl">Thời hạn khoá</label>
+    <div class="amts" id="cpl-dur"><button type="button" data-h="1">1 giờ</button><button type="button" data-h="24" class="on">1 ngày</button><button type="button" data-h="72">3 ngày</button><button type="button" data-h="168">7 ngày</button><button type="button" data-h="720">30 ngày</button><button type="button" data-h="0">Vĩnh viễn</button><button type="button" data-h="-1">Tới ngày…</button></div>
+    <input class="in cpx" id="cpl-until" type="datetime-local" hidden aria-label="Mở khoá lúc">
+    <label class="cpl" for="cpl-reason">Lý do (khách sẽ thấy)</label>
+    <input class="in" id="cpl-reason" maxlength="200" placeholder="VD: Vi phạm điều khoản, chờ xác minh thanh toán…">
+    <div class="note" style="margin-top:10px">Máy bị khoá sẽ <b>tắt ngay</b>, khách không mở, điều khiển hay gia hạn được. Dữ liệu vẫn giữ. Hết thời hạn máy tự mở khoá và bật lại.</div>
+    <div class="err" id="cpl-err"></div>
+    <div class="acts"><button class="btn ghost" type="button" id="cpl-cancel">Huỷ</button><button class="btn danger" type="button" id="cpl-ok">Khoá máy</button></div>
   </div>
 </div>
 <div class="maintov" id="maintov" hidden>
@@ -1886,7 +1954,7 @@ function renderGrid() {
     <div class="body"><h4>${esc(p.name)}</h4><div class="feats">${(p.features || []).map(f => `<span>${esc(f)}</span>`).join("")}</div>
     ${p.description ? `<p class="pdesc">${esc(p.description)}</p>` : ""}
     ${plansOf(p).length ? `<div class="days-chip">${t("Gói","plan")}: ${plansOf(p).map(x => x.days).join(" · ")} ${t("ngày","days")}</div>` : ""}
-    <div class="row"><span class="price">${plansOf(p).length ? `<small style="font-size:12px;color:var(--muted);font-family:var(--body)">${t("từ","from")} </small>` : ""}${fmt(minPrice(p))}</span><span class="stock ${st[0]}">${st[1]}</span></div>
+    <div class="row"><span class="price">${plansOf(p).length ? `<small style="font-size:12px;color:var(--muted);font-family:var(--body)">${t("từ","from")} </small>` : ""}${priceHtml(minPrice(p))}</span><span class="stock ${st[0]}">${st[1]}</span></div>
     <button class="btn" data-buy="${esc(p.id)}" ${s === 0 ? "disabled" : ""}>${s === 0 ? t("Hết hàng","sold_out") : t("Mua ngay","buy_now")}</button></div></article>`;
   }).join("");
   document.querySelectorAll("canvas[data-id]").forEach(cv => drawThumb(cv, seedOf(cv.dataset.id), HUES[cv.dataset.c] ?? 210));
@@ -1905,11 +1973,11 @@ function setCur(c) { cur = c; try { localStorage.setItem("br_cur", c); } catch (
 
 /* ---------- mua hàng ---------- */
 const selP = () => P.find(p => p.id === sel);
-const unitPrice = p => { const pl = plansOf(p); if (!pl.length) return +p.price; const x = pl.find(x => +x.days === +selDays) || pl[0]; return +x.price; };
+const unitPrice = p => { const pl = plansOf(p); if (!pl.length) return cv(+p.price); const x = pl.find(x => +x.days === +selDays) || pl[0]; return cv(+x.price); };
 function renderPlans() {
   const p = selP(), pl = p ? plansOf(p) : [];
   show("m-plans-box", pl.length > 0);
-  $("m-plans").innerHTML = pl.map(x => `<button type="button" data-d="${x.days}" class="${+x.days === +selDays ? "on" : ""}"><b>${x.days} ${L("ngày", "days")}</b><small>${fmt(+x.price)}</small></button>`).join("");
+  $("m-plans").innerHTML = pl.map(x => `<button type="button" data-d="${x.days}" class="${+x.days === +selDays ? "on" : ""}"><b>${x.days} ${L("ngày", "days")}</b><small>${fmt(cv(+x.price))}</small></button>`).join("");
 }
 $("m-plans").onclick = e => { const b = e.target.closest("button"); if (!b) return; selDays = +b.dataset.d; renderPlans(); upd(); };
 function upd() {
@@ -2317,10 +2385,10 @@ function renderCust() {
   $("k-users").textContent = ADM.users.length; $("k-bal").textContent = vnd(ADM.users.reduce((s, u) => s + (+u.balance || 0), 0));
   $("k-rev").textContent = vnd(ADM.topups.filter(t => t.status === "done").reduce((s, t) => s + (+t.amount || 0), 0));
   $("ctbl").innerHTML = us.length ? us.map(u => `<tr><td><b>${esc(u.username)}</b>${u.role === "admin" ? ' <span class="pill wt">ADMIN</span>' : ""}<div class="hint">${ago(u.created_at)}</div></td><td>${esc(u.email)}</td>
-    <td class="num">${vnd(u.balance)}</td><td>${u.locked ? '<span class="pill bad">Đã khoá</span>' : '<span class="pill ok">Hoạt động</span>'}</td>
+    <td class="num">${vnd(u.balance)}</td><td>${u.locked ? '<span class="pill bad">Đã khoá</span>' : '<span class="pill ok">Hoạt động</span>'}</td><td>${ctvCell(u)}</td>
     <td style="white-space:nowrap;text-align:right"><input class="in" style="width:110px;display:inline-block;padding:5px 8px" type="number" step="1000" placeholder="± số tiền" id="adj-${u.id}" aria-label="Điều chỉnh số dư">
     <button class="btn ghost sm" data-adj="${u.id}">Cộng/trừ</button> <button class="btn okb sm" data-cust="${u.id}">Chi tiết</button>${u.id === profile.id ? "" : ` <button class="btn ${u.locked ? "ghost" : "danger"} sm" data-lock="${u.id}" data-to="${u.locked ? 0 : 1}">${u.locked ? "Mở khoá" : "Khoá"}</button>`}</td></tr>`).join("")
-    : `<tr><td colspan="5" style="color:var(--muted);text-align:center;padding:24px">Chưa có khách nào.</td></tr>`;
+    : `<tr><td colspan="6" style="color:var(--muted);text-align:center;padding:24px">Chưa có khách nào.</td></tr>`;
 }
 function txMethod(t) {
   const c = String(t.coin || "").toLowerCase();
@@ -2880,11 +2948,11 @@ function openRenew(id) {
   rnMachine = m; const pl = renewPlans(m);
   rnDays = (pl.find(x => +x.days === +m.plan_days) || pl[0]).days;
   $("rn-name").textContent = "🖥 " + m.machine_name + " · " + m.product_name;
-  $("rn-plans").innerHTML = pl.map(x => `<button type="button" data-d="${x.days}" class="${+x.days === +rnDays ? "on" : ""}"><b>${x.days} ${L("ngày", "days")}</b><small>${fmt(+x.price)}</small></button>`).join("");
+  $("rn-plans").innerHTML = pl.map(x => `<button type="button" data-d="${x.days}" class="${+x.days === +rnDays ? "on" : ""}"><b>${x.days} ${L("ngày", "days")}</b><small>${fmt(cv(+x.price))}</small></button>`).join("");
   renewUpd(); show("renewdlg");
 }
 function renewUpd() {
-  const m = rnMachine, pl = renewPlans(m), x = pl.find(p => +p.days === +rnDays) || pl[0];
+  const m = rnMachine, pl = renewPlans(m), x0 = pl.find(p => +p.days === +rnDays) || pl[0], x = { ...x0, price: cv(+x0.price) };
   const base = Math.max(Date.now(), new Date(m.expires_at).getTime());
   const exp = new Date(base + rnDays * 86400000);
   $("rn-newexp").textContent = exp.toLocaleString(LANG === "en" ? "en-GB" : "vi-VN");
@@ -2896,7 +2964,7 @@ function renewUpd() {
 $("rn-plans").onclick = e => { const b = e.target.closest("button"); if (!b) return; rnDays = +b.dataset.d; $("rn-plans").querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b)); renewUpd(); };
 $("rn-cancel").onclick = () => show("renewdlg", false);
 $("rn-ok").onclick = () => busy($("rn-ok"), async () => {
-  const pl = renewPlans(rnMachine), x = pl.find(p => +p.days === +rnDays) || pl[0];
+  const pl = renewPlans(rnMachine), x0 = pl.find(p => +p.days === +rnDays) || pl[0], x = { ...x0, price: cv(+x0.price) };
   if (profile.balance < +x.price) { show("renewdlg", false); openTopup(Math.max(+SITE.minTop || 10000, Math.ceil((+x.price - profile.balance) / 1000) * 1000)); return; }
   const { error } = await sb.rpc("renew_vps", { p_machine: rnMachine.id, p_days: rnDays });
   if (error) { $("rn-err").textContent = errMsg(error); return; }
@@ -3193,7 +3261,7 @@ const CP_CARD_DEF = { name: "Điện thoại đám mây (Cloud Phone)", feats: "
   desc: "Thuê điện thoại Android chạy trên cloud — tự chọn RAM, CPU, số ngày. Cài game, treo acc, điều khiển mọi nơi qua trình duyệt." };
 let CPpricing = null, cpSel = { ram: 2, cpu: 2, days: 7, res: "720x1280", fps: 30 }, myCloud = [], cpPollT = null;
 Object.assign(ERR, { BAD_RAM: "RAM nằm ngoài giới hạn cho phép.", BAD_CPU: "Số nhân CPU nằm ngoài giới hạn cho phép.", BAD_DAYS: "Số ngày nằm ngoài giới hạn cho phép.",
-  BAD_RES: "Độ phân giải không hợp lệ (dạng 720x1280).", BAD_FPS: "FPS nằm ngoài giới hạn cho phép.", MAINTENANCE: "Hệ thống đang bảo trì, vui lòng quay lại sau.",
+  BAD_RES: "Độ phân giải không hợp lệ (dạng 720x1280).", BAD_FPS: "FPS nằm ngoài giới hạn cho phép.", PHONE_LOCKED: "Máy đang bị khoá, không gia hạn được. Liên hệ hỗ trợ.", BAD_DISCOUNT: "Chiết khấu phải từ 0 đến 90%.", NOT_ADMIN: "Chỉ admin mới làm được việc này.", MAINTENANCE: "Hệ thống đang bảo trì, vui lòng quay lại sau.",
   OUT_OF_CAPACITY: "Máy chủ đã hết chỗ cho cấu hình này. Chọn cấu hình nhỏ hơn hoặc quay lại sau.", SERVER_OFFLINE: "Máy chủ điện thoại đang tạm ngưng, vui lòng quay lại sau.", PHONE_GONE: "Máy đã bị xoá vì hết hạn quá 30 phút — hãy thuê máy mới.", NO_PHONE: "Không tìm thấy máy." });
 
 let CPstatus = null;
@@ -3220,7 +3288,7 @@ async function cpLoadPricing() {
 }
 const cpN = v => +v || 0;
 function cpPerDay(ram, cpu, pr) { pr = pr || CPpricing || CP_DEF; return ram * cpN(pr.price_ram_gb_day) + cpu * cpN(pr.price_cpu_day); }
-function cpPrice() { return cpPerDay(cpSel.ram, cpSel.cpu) * cpSel.days; }
+function cpPrice() { return cv(cpPerDay(cpSel.ram, cpSel.cpu) * cpSel.days); }
 function cpCard() {
   const p = CPpricing || {};
   return { name: (p.card_name || "").trim() || CP_CARD_DEF.name, desc: (p.card_desc || "").trim() || CP_CARD_DEF.desc,
@@ -3275,16 +3343,18 @@ function renderCloud() {
     const exp = p.expires_at ? new Date(p.expires_at) : null, ms = exp ? exp.getTime() - Date.now() : 0;
     const left = !exp ? "" : ms > 0 ? (ms >= 86400000 ? "còn " + Math.floor(ms / 86400000) + " ngày" : "còn " + Math.max(1, Math.ceil(ms / 3600000)) + " giờ") : "";
     const g = cpGraceLeft(p);
-    const lk = p.status === "active" && p.stream_url ? cpLinks(p) : null;
-    const canRenew = p.status === "active" || (p.status === "expired" && g > 0);
+    const locked = cpLocked(p);
+    const lk = p.status === "active" && p.stream_url && !locked ? cpLinks(p) : null;
+    const canRenew = !locked && (p.status === "active" || (p.status === "expired" && g > 0));
     return `<div class="vmi"><div class="top"><div class="nm">📱 ${esc(p.name)}<small>${p.ram}GB · ${p.cpu} nhân · ${esc(p.res || "")} · ${p.fps || 30} FPS</small></div>${cpPill(p)}</div>
       ${exp ? `<div class="exp">${L("Hết hạn", "Expires")}: ${exp.toLocaleString(LANG === "en" ? "en-GB" : "vi-VN")}${left ? " · " + left : ""}</div>` : ""}
       ${p.status === "expired" ? `<div class="exp" style="color:var(--bad)">${g > 0 ? `Máy đã tạm dừng. Gia hạn trong <b>${g} phút</b> nữa để giữ dữ liệu, quá hạn máy sẽ bị xoá.` : "Đã quá 30 phút — máy đang bị xoá."}</div>` : ""}
       ${p.status === "pending" ? `<div class="exp">Máy đang khởi động (khoảng 2–3 phút), trang tự cập nhật.</div>` : ""}
+      ${locked ? `<div class="exp" style="color:var(--bad)">🔒 Máy bị khoá${p.locked_until ? " đến " + new Date(p.locked_until).toLocaleString("vi-VN") : " vĩnh viễn"}${p.lock_reason ? ": " + esc(p.lock_reason) : ""}. Liên hệ hỗ trợ nếu cần.</div>` : ""}
       ${p.status === "error" && p.error ? `<div class="exp" style="color:var(--bad)">${esc(p.error)}</div>` : ""}
       <div class="acts">
         ${lk ? `<a class="btn sm" href="/phone.html?id=${encodeURIComponent(p.id)}" target="_blank" rel="noopener">▶ Điều khiển</a>`
-           : `<button class="btn sm" disabled>${p.status === "pending" ? "Đang tạo…" : p.status === "expired" ? "Đã tạm dừng" : "Chưa sẵn sàng"}</button>`}
+           : `<button class="btn sm" disabled>${locked ? "🔒 Bị khoá" : p.status === "pending" ? "Đang tạo…" : p.status === "expired" ? "Đã tạm dừng" : "Chưa sẵn sàng"}</button>`}
         ${canRenew ? `<button class="btn ghost sm" data-cprenew="${p.id}">🔄 Gia hạn</button>` : ""}
         <button class="btn ghost sm" data-cprename="${p.id}">✏️ Đổi tên</button>
         ${["active", "expired", "error"].includes(p.status) ? `<button class="btn danger sm" data-cpcancel="${p.id}">🗑️ Huỷ</button>` : ""}
@@ -3321,7 +3391,7 @@ async function openCpOrder() {
 }
 function cpOrderUpd() {
   const price = cpPrice(), p = CPpricing || CP_DEF, bad = cpCheck();
-  $("cp-calc").textContent = `(${cpSel.ram}GB×${vnd(p.price_ram_gb_day)} + ${cpSel.cpu} nhân×${vnd(p.price_cpu_day)}) × ${cpSel.days} ngày`;
+  $("cp-calc").textContent = `(${cpSel.ram}GB×${vnd(p.price_ram_gb_day)} + ${cpSel.cpu} nhân×${vnd(p.price_cpu_day)}) × ${cpSel.days} ngày` + (isCtv() ? ` − ${ctvPct()}% CTV` : "");
   $("cp-total").textContent = bad ? "—" : fmt(price);
   $("cp-bal").textContent = profile ? fmt(profile.balance) : "—";
   $("cp-err").textContent = bad || (profile && profile.balance < price ? L("Số dư không đủ. Cần nạp thêm ", "Need ") + fmt(price - profile.balance) + "." : "");
@@ -3376,7 +3446,7 @@ $("nav-cloud") && ($("nav-cloud").onclick = openCloud);
 async function cpRenew(id) {
   const p = myCloud.find(x => x.id === id); if (!p) return;
   await cpLoadPricing();
-  const per = cpPerDay(p.ram, p.cpu);
+  const per = cv(cpPerDay(p.ram, p.cpu));
   const ans = prompt(`Gia hạn "${p.name}" thêm bao nhiêu ngày?\nGiá: ${vnd(per)} / ngày`, "30");
   if (ans === null) return; const d = parseInt(ans, 10);
   if (!d || d < 1) { toast("Số ngày không hợp lệ.", 1); return; }
@@ -3408,7 +3478,7 @@ function cloudGridCard() {
     <div class="body"><h4>${esc(c.name)}</h4>
     <div class="feats">${c.feats.map(f => `<span>${esc(f)}</span>`).join("")}</div>
     <p class="pdesc">${esc(c.desc)}</p>
-    <div class="row"><span class="price"><small style="font-size:12px;color:var(--muted);font-family:var(--body)">từ </small>${fmt(from)}<small style="font-size:12px;color:var(--muted);font-family:var(--body)">/ngày</small></span><span class="stock ${st[0]}">${st[1]}</span></div>
+    <div class="row"><span class="price"><small style="font-size:12px;color:var(--muted);font-family:var(--body)">từ </small>${priceHtml(from)}<small style="font-size:12px;color:var(--muted);font-family:var(--body)">/ngày</small></span><span class="stock ${st[0]}">${st[1]}</span></div>
     <button class="btn" data-cpbuy="1"${st[0] !== "ok" && !isAdmin() ? " disabled" : ""}>${st[0] === "ok" || isAdmin() ? L("Thuê ngay", "Rent now") : st[1]}</button></div></article>`;
 }
 Promise.all([cpLoadPricing(), cpLoadStatus()]).then(() => { try { renderGrid(); } catch (e) {} });
@@ -3449,13 +3519,7 @@ async function loadCloudAdm() {
   $("cpa-minfps").value = pr.min_fps; $("cpa-maxfps").value = pr.max_fps;
   $("cpa-msg").textContent = ""; cpaAnalyze();
   const { data } = await sb.from("cloud_phones").select("*").order("created_at", { ascending: false });
-  const rows = (data || []).filter(r => r.status !== "cancelled");
-  $("cpa-count").textContent = rows.length + " máy · đang chạy " + rows.filter(r => r.status === "active").length;
-  $("cpa-tbl").innerHTML = rows.length ? rows.map(p => {
-    const exp = p.expires_at ? new Date(p.expires_at).toLocaleString(LANG === "en" ? "en-GB" : "vi-VN") : "—";
-    return `<tr><td><b>${esc(p.name)}</b><div class="hint">${esc(p.container || "")}${p.port ? " · cổng " + p.port : ""}</div></td><td>${esc(uname(p.user_id))}</td><td class="num">${p.ram}GB/${p.cpu} · ${esc(p.res || "")} · ${p.fps || 30}fps</td><td>${cpaStatus(p)}${p.error ? `<div class="hint" style="color:var(--bad)">${esc(p.error)}</div>` : ""}</td><td class="num">${exp}</td>
-    <td style="text-align:right;white-space:nowrap">${p.status === "active" ? `<a class="btn ghost sm" href="/phone.html?id=${encodeURIComponent(p.id)}" target="_blank" rel="noopener">Điều khiển</a> ` : ""}${["active", "pending", "error", "expired"].includes(p.status) ? `<button class="btn danger sm" data-cparm="${p.id}">Thu hồi</button>` : ""}</td></tr>`;
-  }).join("") : `<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px">Chưa có máy nào.</td></tr>`;
+  CPA_ROWS = (data || []).filter(r => r.status !== "cancelled"); cpaSel.clear(); renderCpaTbl();
 }
 $("cpa-save") && ($("cpa-save").onclick = () => busy($("cpa-save"), async () => {
   const f = cpaForm();
@@ -3471,12 +3535,6 @@ $("cpa-save") && ($("cpa-save").onclick = () => busy($("cpa-save"), async () => 
   toast("Đã lưu. Khách mở form thuê sẽ thấy giá mới ngay."); $("cpa-msg").textContent = "✓ Đã lưu lúc " + new Date().toLocaleTimeString("vi-VN");
   CPpricing = null; await cpLoadPricing(); try { renderGrid(); } catch (e) {}
 }));
-$("cpa-tbl") && ($("cpa-tbl").onclick = async e => {
-  const b = e.target.closest("[data-cparm]"); if (!b) return;
-  if (!confirm("Thu hồi (xoá) máy này của khách? Máy và dữ liệu sẽ bị xoá khỏi server.")) return;
-  const { error } = await sb.from("cloud_phones").update({ status: "cancelling", updated_at: new Date().toISOString() }).eq("id", b.dataset.cparm);
-  if (error) return toast(errMsg(error), 1); toast("Đang thu hồi…"); loadCloudAdm();
-});
 
 /* ===================== BẢO TRÌ + MÁY CHỦ (v5) ===================== */
 function applyMaint() {
@@ -3584,6 +3642,7 @@ function renderNodes() {
         <span>Cập nhật ${age < 1 ? "vừa xong" : Math.round(age) + " phút trước"}</span>
         <span class="acts"><button class="btn ghost sm" data-nrename="${esc(n.id)}">✏️ Đổi tên</button>
           <button class="btn ${n.enabled ? "ghost" : ""} sm" data-nenable="${esc(n.id)}">${n.enabled ? "Ngừng nhận máy" : "Nhận máy lại"}</button>
+          ${n.phones ? `<button class="btn danger sm" data-nwipe="${esc(n.id)}">🧹 Xoá sạch máy</button>` : ""}
           ${off ? `<button class="btn danger sm" data-ndel="${esc(n.id)}">Xoá</button>` : ""}</span></div>
     </div>`;
   }).join("");
@@ -3619,6 +3678,189 @@ $("cpa-nodes") && ($("cpa-nodes").onclick = async e => {
   openAdmin = async function () { const r = await _oa.apply(this, arguments); checkNodeAlerts(true); return r; };
 }
 setTimeout(() => { try { applyMaint(); checkNodeAlerts(); } catch (e) {} }, 1500);
+
+/* ===================== CTV + QUẢN LÝ MÁY KHÁCH (v6) ===================== */
+// (dùng "function" để gọi được ở mọi chỗ, kể cả trước dòng này)
+function isCtv() { return !!(profile && profile.ctv_status === "approved" && +profile.ctv_discount > 0); }
+function ctvPct() { return isCtv() ? +profile.ctv_discount : 0; }
+function cv(v) { return isCtv() ? Math.round(+v * (100 - ctvPct()) / 100) : +v; }
+function priceHtml(v) { return isCtv() ? `<s class="oldp">${fmt(v)}</s>${fmt(cv(v))}<span class="ctvtag">CTV −${ctvPct()}%</span>` : fmt(v); }
+function cpLocked(p) { return !!(p && p.locked) && (!p.locked_until || new Date(p.locked_until) > new Date()); }
+function ctvCell(u) {
+  const st = u.ctv_status || "none";
+  return st === "approved" ? `<span class="pill ok">CTV −${+u.ctv_discount || 0}%</span>` : st === "pending" ? '<span class="pill wt">Chờ duyệt</span>' : st === "rejected" ? '<span class="pill">Từ chối</span>' : '<span class="hint">—</span>';
+}
+
+/* ---- Khách: nút CTV trên thanh trên ---- */
+function renderCtvChip() {
+  const b = $("ctv-btn"); if (!b) return;
+  const u = profile; if (!u || isAdmin()) { b.hidden = true; return; }
+  const st = u.ctv_status || "none"; b.hidden = false;
+  b.className = "btn ghost sm ctvchip " + (st === "approved" ? "" : st === "pending" ? "wait" : "none");
+  b.textContent = st === "approved" ? `🤝 CTV −${+u.ctv_discount || 0}%` : st === "pending" ? "🤝 CTV chờ duyệt" : "🤝 Đăng ký CTV";
+}
+{ const _ru = renderUser; renderUser = function () { const r = _ru.apply(this, arguments); try { renderCtvChip(); renderGrid(); } catch (e) {} return r; }; }
+$("ctv-btn") && ($("ctv-btn").onclick = () => {
+  const u = profile; if (!u) return openAuth("login");
+  const st = u.ctv_status || "none";
+  $("ctv-st").innerHTML = st === "approved" ? `Bạn đang là <b>cộng tác viên</b>, được giảm <b>${+u.ctv_discount}%</b> khi mua sản phẩm, VPS và điện thoại đám mây. Giá CTV đã hiện sẵn trên web.`
+    : st === "pending" ? "Đơn đăng ký của bạn <b>đang chờ admin duyệt</b>. Bạn có thể sửa thông tin rồi gửi lại."
+    : st === "rejected" ? "Đơn trước chưa được duyệt. Bạn có thể gửi lại kèm thông tin chi tiết hơn."
+    : "Đăng ký làm cộng tác viên để mua với <b>giá CTV</b> và bán lại.";
+  show("ctv-form", st !== "approved"); show("ctv-send", st !== "approved");
+  $("ctv-note").value = u.ctv_note || ""; $("ctv-err").textContent = ""; show("ctvdlg");
+});
+$("ctv-close") && ($("ctv-close").onclick = () => show("ctvdlg", false));
+$("ctv-send") && ($("ctv-send").onclick = () => busy($("ctv-send"), async () => {
+  const note = $("ctv-note").value.trim();
+  if (note.length < 3) { $("ctv-err").textContent = "Hãy ghi cách liên hệ hoặc nơi bạn bán."; return; }
+  const { error } = await sb.rpc("ctv_apply", { p_note: note });
+  if (error) { $("ctv-err").textContent = /ctv_apply/.test(error.message || "") ? "Hệ thống chưa bật CTV, vui lòng báo admin." : errMsg(error); return; }
+  await loadProfile(); renderUser(); show("ctvdlg", false);
+  toast("Đã gửi đăng ký CTV — admin sẽ duyệt sớm.");
+  notifyTg(`🤝 <b>Đăng ký CTV mới</b>: ${esc((profile || {}).username || "")}\n${esc(note)}`);
+}));
+
+/* ---- Admin: duyệt CTV trong tab Khách hàng ---- */
+function renderCtvReq() {
+  const box = $("ctv-req"); if (!box || !ADM || !ADM.users) return;
+  const rq = ADM.users.filter(u => u.ctv_status === "pending");
+  box.innerHTML = rq.length ? `<div class="ctvreq"><b>🤝 ${rq.length} khách đăng ký làm CTV đang chờ duyệt</b>` + rq.map(u => `<div class="rq"><b>${esc(u.username)}</b>
+      <span>${esc(u.ctv_note || "(không ghi chú)")}${u.ctv_at ? " · " + ago(u.ctv_at) : ""}</span>
+      Giảm <input class="in" type="number" min="1" max="90" value="10" id="rqp-${u.id}" aria-label="Phần trăm giảm cho ${esc(u.username)}"> %
+      <button class="btn okb sm" data-ctvok="${u.id}">Duyệt</button><button class="btn ghost sm" data-ctvno="${u.id}">Từ chối</button></div>`).join("") + "</div>" : "";
+}
+{ const _rc = renderCust; renderCust = function () { const r = _rc.apply(this, arguments); try { renderCtvReq(); } catch (e) {} return r; }; }
+async function setCtv(uid, st, pct) {
+  const { data, error } = await sb.rpc("admin_set_ctv", { p_user: uid, p_status: st, p_discount: pct });
+  if (error) { toast(/admin_set_ctv/.test(error.message || "") ? "Chưa chạy file SQL cloud-phones-v6.sql trên Supabase." : errMsg(error), 1); return null; }
+  const u = ADM.users.find(x => x.id === uid); if (u && data) Object.assign(u, data);
+  renderCust(); return data;
+}
+$("ctv-req") && ($("ctv-req").onclick = async e => {
+  const ok = e.target.closest("[data-ctvok]"), no = e.target.closest("[data-ctvno]");
+  if (ok) { const pct = Math.round(+$("rqp-" + ok.dataset.ctvok).value || 0); if (pct < 1 || pct > 90) return toast("Chiết khấu phải từ 1 đến 90%.", 1);
+    ok.disabled = true; if (await setCtv(ok.dataset.ctvok, "approved", pct)) toast(`Đã duyệt CTV, giảm ${pct}%.`); }
+  if (no) { no.disabled = true; if (await setCtv(no.dataset.ctvno, "rejected", 0)) toast("Đã từ chối đăng ký CTV."); }
+});
+{ const _oc = openCust; openCust = function (id) {
+    const r = _oc.apply(this, arguments);
+    try {
+      const u = ADM.users.find(x => x.id === id) || {};
+      $("cd-ctv").value = u.ctv_status || "none"; $("cd-ctvpct").value = +u.ctv_discount || "";
+      $("cd-ctvnote").textContent = u.ctv_note ? "· khách ghi: " + u.ctv_note : "";
+      $("cd-cp-n").textContent = "đang tải…";
+      sb.from("cloud_phones").select("id,status").eq("user_id", id).in("status", ["active", "pending", "expired", "error"]).then(({ data }) => { $("cd-cp-n").textContent = (data || []).length + " máy đang có"; });
+    } catch (e) {}
+    return r;
+  }; }
+$("cd-ctv-save") && ($("cd-ctv-save").onclick = () => busy($("cd-ctv-save"), async () => {
+  const st = $("cd-ctv").value, pct = Math.round(+$("cd-ctvpct").value || 0);
+  if (st === "approved" && (pct < 1 || pct > 90)) return toast("CTV đã duyệt cần chiết khấu từ 1 đến 90%.", 1);
+  if (await setCtv(custId, st, st === "approved" ? pct : 0)) toast(st === "approved" ? `Đã lưu: CTV giảm ${pct}%.` : "Đã lưu trạng thái CTV.");
+}));
+$("cd-cp-wipe") && ($("cd-cp-wipe").onclick = () => busy($("cd-cp-wipe"), async () => {
+  const u = ADM.users.find(x => x.id === custId);
+  if (!confirm(`XOÁ HẾT điện thoại đám mây của ${u ? u.username : "khách này"}?\nMáy và toàn bộ dữ liệu bị xoá khỏi server, không hoàn tiền.`)) return;
+  const { data, error } = await sb.rpc("admin_cloud_delete", { p_user: custId });
+  if (error) return toast(/admin_cloud_delete/.test(error.message || "") ? "Chưa chạy file SQL cloud-phones-v6.sql trên Supabase." : errMsg(error), 1);
+  toast(`Đang xoá ${data || 0} máy của khách.`); $("cd-cp-n").textContent = "0 máy đang có";
+}));
+
+/* ---- Admin: bảng máy khách (lọc, chọn nhiều, khoá, xoá) ---- */
+let CPA_ROWS = [], CPA_VIEW = [], cpaSel = new Set(), cplIds = [], cplHours = 24;
+function renderCpaTbl() {
+  if (!$("cpa-tbl")) return;
+  const q = ($("cpa-q").value || "").trim().toLowerCase(), st = $("cpa-st").value;
+  const rows = CPA_ROWS.filter(p => {
+    if (st === "locked" ? !cpLocked(p) : (st && p.status !== st)) return false;
+    return !q || [p.name, uname(p.user_id), p.container, p.port, p.res, p.node].join(" ").toLowerCase().includes(q);
+  });
+  CPA_VIEW = rows;
+  const nLk = CPA_ROWS.filter(cpLocked).length;
+  $("cpa-count").textContent = `${CPA_ROWS.length} máy · đang chạy ${CPA_ROWS.filter(r => r.status === "active" && !cpLocked(r)).length}${nLk ? " · bị khoá " + nLk : ""}${rows.length !== CPA_ROWS.length ? " · đang lọc " + rows.length : ""}`;
+  $("cpa-tbl").innerHTML = rows.length ? rows.map(p => {
+    const exp = p.expires_at ? new Date(p.expires_at).toLocaleString(LANG === "en" ? "en-GB" : "vi-VN") : "—", lk = cpLocked(p);
+    return `<tr${lk ? ' style="opacity:.85"' : ""}><td><input type="checkbox" data-cpsel="${p.id}"${cpaSel.has(p.id) ? " checked" : ""} aria-label="Chọn máy ${esc(p.name)}"></td>
+      <td><b>${esc(p.name)}</b><div class="hint">${esc(p.container || "")}${p.port ? " · cổng " + p.port : ""}${p.node ? " · " + esc(p.node) : ""}</div></td>
+      <td>${esc(uname(p.user_id))}</td><td class="num">${p.ram}GB/${p.cpu} · ${esc(p.res || "")} · ${p.fps || 30}fps</td>
+      <td>${cpaStatus(p)}${lk ? `<div style="margin-top:4px"><span class="pill bad">🔒 Khoá ${p.locked_until ? "tới " + new Date(p.locked_until).toLocaleString("vi-VN") : "vĩnh viễn"}</span></div>${p.lock_reason ? `<div class="hint">${esc(p.lock_reason)}</div>` : ""}` : ""}${p.error ? `<div class="hint" style="color:var(--bad)">${esc(p.error)}</div>` : ""}</td>
+      <td class="num">${exp}</td>
+      <td style="text-align:right;white-space:nowrap">${p.status === "active" ? `<a class="btn ghost sm" href="/phone.html?id=${encodeURIComponent(p.id)}" target="_blank" rel="noopener">Điều khiển</a> ` : ""}${lk
+        ? `<button class="btn ghost sm" data-cpunlock="${p.id}">🔓 Mở khoá</button>` : `<button class="btn ghost sm" data-cplock="${p.id}">🔒 Khoá</button>`}
+        <button class="btn danger sm" data-cparm="${p.id}">Xoá</button></td></tr>`;
+  }).join("") : `<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">${q || st ? "Không có máy nào khớp bộ lọc." : "Chưa có máy nào."}</td></tr>`;
+  syncCpaSel();
+}
+function syncCpaSel() {
+  for (const id of [...cpaSel]) if (!CPA_ROWS.some(p => p.id === id)) cpaSel.delete(id);
+  $("cpa-seln").textContent = cpaSel.size; show("cpa-selbar", cpaSel.size > 0);
+  const vis = CPA_VIEW.map(p => p.id), all = $("cpa-all");
+  all.checked = vis.length > 0 && vis.every(id => cpaSel.has(id)); all.indeterminate = !all.checked && vis.some(id => cpaSel.has(id));
+}
+async function reloadCpa() {
+  const { data } = await sb.from("cloud_phones").select("*").order("created_at", { ascending: false });
+  CPA_ROWS = (data || []).filter(r => r.status !== "cancelled"); renderCpaTbl();
+}
+const v6Err = e => toast(/admin_cloud_/.test(e.message || "") ? "Chưa chạy file SQL cloud-phones-v6.sql trên Supabase." : errMsg(e), 1);
+async function cpaDelete(ids) {
+  if (!ids.length) return;
+  const names = ids.map(id => (CPA_ROWS.find(p => p.id === id) || {}).name).filter(Boolean);
+  if (!confirm(`Xoá ${ids.length} máy${ids.length <= 3 ? " (" + names.join(", ") + ")" : ""}?\nMáy và toàn bộ dữ liệu của khách bị xoá khỏi server, không hoàn tiền.`)) return;
+  const { data, error } = await sb.rpc("admin_cloud_delete", { p_ids: ids }); if (error) return v6Err(error);
+  toast(`Đang xoá ${data || 0} máy…`); ids.forEach(id => cpaSel.delete(id)); reloadCpa();
+}
+async function cpaUnlock(ids) {
+  const { data, error } = await sb.rpc("admin_cloud_unlock", { p_ids: ids }); if (error) return v6Err(error);
+  toast(`Đã mở khoá ${data || 0} máy — máy tự bật lại trong ít giây.`); reloadCpa();
+}
+function cpaLock(ids) {
+  if (!ids.length) return;
+  cplIds = ids; cplHours = 24;
+  const names = ids.map(id => (CPA_ROWS.find(p => p.id === id) || {}).name).filter(Boolean);
+  $("cpl-who").textContent = ids.length === 1 ? `Máy: ${names[0]} · khách ${uname((CPA_ROWS.find(p => p.id === ids[0]) || {}).user_id)}` : `${ids.length} máy đã chọn`;
+  $("cpl-dur").querySelectorAll("button").forEach(b => b.classList.toggle("on", +b.dataset.h === 24));
+  $("cpl-until").hidden = true; $("cpl-until").value = ""; $("cpl-reason").value = ""; $("cpl-err").textContent = "";
+  show("cplockdlg");
+}
+$("cpl-dur") && ($("cpl-dur").onclick = e => {
+  const b = e.target.closest("[data-h]"); if (!b) return; cplHours = +b.dataset.h;
+  $("cpl-dur").querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b));
+  $("cpl-until").hidden = cplHours !== -1;
+  if (cplHours === -1 && !$("cpl-until").value) { const d = new Date(Date.now() + 86400000 * 3 - new Date().getTimezoneOffset() * 60000); $("cpl-until").value = d.toISOString().slice(0, 16); }
+});
+$("cpl-cancel") && ($("cpl-cancel").onclick = () => show("cplockdlg", false));
+$("cpl-ok") && ($("cpl-ok").onclick = () => busy($("cpl-ok"), async () => {
+  let until = null;
+  if (cplHours > 0) until = new Date(Date.now() + cplHours * 3600000).toISOString();
+  else if (cplHours === -1) { const v = $("cpl-until").value; if (!v || new Date(v) <= new Date()) { $("cpl-err").textContent = "Chọn thời điểm mở khoá ở tương lai."; return; } until = new Date(v).toISOString(); }
+  const { data, error } = await sb.rpc("admin_cloud_lock", { p_ids: cplIds, p_until: until, p_reason: $("cpl-reason").value.trim() || null });
+  if (error) return v6Err(error);
+  show("cplockdlg", false);
+  toast(`Đã khoá ${data || 0} máy ${until ? "tới " + new Date(until).toLocaleString("vi-VN") : "vĩnh viễn"}.`);
+  cpaSel.clear(); reloadCpa();
+}));
+$("cpa-q") && ($("cpa-q").oninput = renderCpaTbl);
+$("cpa-st") && ($("cpa-st").onchange = renderCpaTbl);
+$("cpa-all") && ($("cpa-all").onchange = e => { CPA_VIEW.forEach(p => e.target.checked ? cpaSel.add(p.id) : cpaSel.delete(p.id)); renderCpaTbl(); });
+$("cpa-tbl") && ($("cpa-tbl").onchange = e => { const c = e.target.closest("[data-cpsel]"); if (!c) return; c.checked ? cpaSel.add(c.dataset.cpsel) : cpaSel.delete(c.dataset.cpsel); syncCpaSel(); });
+$("cpa-tbl") && ($("cpa-tbl").onclick = e => {
+  const rm = e.target.closest("[data-cparm]"), lk = e.target.closest("[data-cplock]"), ul = e.target.closest("[data-cpunlock]");
+  if (rm) cpaDelete([rm.dataset.cparm]); else if (lk) cpaLock([lk.dataset.cplock]); else if (ul) cpaUnlock([ul.dataset.cpunlock]);
+});
+$("cpa-blk") && ($("cpa-blk").onclick = () => cpaLock([...cpaSel]));
+$("cpa-bun") && ($("cpa-bun").onclick = () => cpaUnlock([...cpaSel]));
+$("cpa-bdel") && ($("cpa-bdel").onclick = () => cpaDelete([...cpaSel]));
+
+/* ---- Admin: xoá sạch máy trên 1 server ---- */
+$("cpa-nodes") && $("cpa-nodes").addEventListener("click", async e => {
+  const b = e.target.closest("[data-nwipe]"); if (!b) return;
+  const n = NODES.find(x => x.id === b.dataset.nwipe); if (!n) return;
+  const typed = prompt(`XOÁ SẠCH toàn bộ máy khách trên ${n.name} (${n.phones || 0} máy)?\nMáy và dữ liệu bị xoá vĩnh viễn, không hoàn tiền.\n\nGõ XOA để xác nhận:`);
+  if ((typed || "").trim().toUpperCase() !== "XOA") return typed !== null && toast("Chưa xác nhận — không xoá gì.", 1);
+  const { data, error } = await sb.rpc("admin_cloud_delete", { p_node: n.id }); if (error) return v6Err(error);
+  toast(`Đang xoá ${data || 0} máy trên ${n.name}…`); reloadCpa();
+});
 
 </script>
 </body>

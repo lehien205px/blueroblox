@@ -702,6 +702,7 @@ function openPhone(p) {
     return;
   }
   setTools(true); main.tries = 0; main.open(p, quality);
+  api(p.id + "/key", { method: "POST", json: { code: 224 } }).catch(() => {});   // bật sáng màn hình máy ảo (tránh màn đen do máy tự tắt màn)
   checkInfo(); setTimeout(checkFit, 600);
 }
 /* ---- menu chọn máy: mở từng máy / mở tất cả / mở vài máy đã chọn ---- */

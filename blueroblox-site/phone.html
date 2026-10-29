@@ -181,6 +181,13 @@ textarea.in{min-height:110px;resize:vertical}
 .clipbar{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:58;display:flex;align-items:center;gap:10px;
   width:min(520px,calc(100vw - 24px));padding:10px 12px;border-radius:14px;background:var(--panel2);border:1px solid var(--line2);box-shadow:0 14px 30px -14px #000}
 .clipbar[hidden]{display:none}
+html.embed .top,html.embed .side,html.embed .mbar,html.embed .expbar,html.embed .fitbar,html.embed .clipbar,html.embed .tray{display:none!important}
+html.embed{--top:0px}
+html.embed .stage{padding:0!important}
+html.embed .frame{border-radius:0!important;padding:0!important;box-shadow:none!important;border:0!important;background:#000}
+html.embed .frame iframe,html.embed .veil{border-radius:0!important}
+html.embed .veil{inset:0}
+html.embed body{background:#000}
 .getapp{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;padding:7px 12px;border-radius:999px;font-size:13px;font-weight:700;color:#fff;text-decoration:none;
   background:linear-gradient(135deg,#3d7bff,#22b8a7);box-shadow:0 0 0 0 rgba(61,123,255,.6);animation:getapp 2.4s ease-out 3}
 .getapp:hover{filter:brightness(1.1)}.getapp:focus-visible{outline:2px solid #fff;outline-offset:2px}.getapp[hidden]{display:none}
@@ -362,8 +369,13 @@ function safeLock(name, t, fn) {
   return L.request(name, { mode: "exclusive", signal: ac.signal }, async () => { ok = true; clearTimeout(tm); return await fn(); })
     .catch(e => { if (!ok && e && e.name === "AbortError") return fn(); throw e; });
 }
-const sb = window.supabase.createClient(CFG.supabaseUrl, CFG.supabaseAnonKey, { auth: { lock: safeLock } });
+const EMBED = new URLSearchParams(location.search).get("embed") === "app";   // mở bên trong app Android
+// Trong app: phiên đăng nhập do app quản lý (không tự làm mới ở đây, tránh làm app bị đăng xuất)
+const sb = window.supabase.createClient(CFG.supabaseUrl, CFG.supabaseAnonKey, { auth: EMBED ? { lock: safeLock, autoRefreshToken: false, persistSession: false } : { lock: safeLock } });
+let APP_RT = "";
 let token = "", me = null, phones = [], cur = null, underMaint = false;
+const PAGE_ID = Math.random().toString(36).slice(2, 12);      // mã của trang này (mỗi máy chỉ 1 nơi xem cùng lúc)
+if (EMBED) document.documentElement.classList.add("embed");
 let player = store.get("cp_player") === "broadway" ? "broadway" : "webcodecs";
 let quality = ["eco", "bal", "hd"].includes(store.get("cp_q")) ? store.get("cp_q") : "bal";
 let zoom = 1;
@@ -402,14 +414,21 @@ async function api(path, { method = "GET", json, body, blob, headers = {} } = {}
   if (!r.ok) { const err = new Error(j.error || ("Lỗi " + r.status)); err.status = r.status; err.data = j; throw err; }
   return j;
 }
-async function refreshToken() { const { data } = await sb.auth.refreshSession(); if (data && data.session) token = data.session.access_token; }
+async function refreshToken() {
+  if (EMBED && window.BRApp && BRApp.token) {          // app đưa mã mới
+    try { const t = BRApp.token(); if (t) { token = t; await sb.auth.setSession({ access_token: t, refresh_token: APP_RT || "x" }); } } catch (e) {}
+    return;
+  }
+  const { data } = await sb.auth.refreshSession(); if (data && data.session) token = data.session.access_token;
+}
+if (EMBED) setInterval(refreshToken, 25 * 60000);
 async function openSession() { await api("session", { method: "POST", json: {} }); }
 
 /* ---------- kết nối màn hình (1 máy hoặc từng ô) — tự nối lại khi rớt ---------- */
 function resOf(p) { const m = /^(\d+)x(\d+)$/.exec(p && p.res || ""); return m ? [+m[1], +m[2]] : [720, 1280]; }
 function streamUrl(p, q, sid, raw) {
   const udid = "127.0.0.1:" + p.port, [w, h] = resOf(p);
-  const ws = "wss://" + new URL(PHONE).host + "/?action=proxy-adb&remote=" + encodeURIComponent("tcp:8886") + "&udid=" + encodeURIComponent(udid);
+  const ws = "wss://" + new URL(PHONE).host + "/?action=proxy-adb&remote=" + encodeURIComponent("tcp:8886") + "&udid=" + encodeURIComponent(udid) + "&cpv=" + PAGE_ID;
   return PHONE + "/?v=" + sid + "#!action=stream&udid=" + encodeURIComponent(udid) + "&player=" + player + "&ws=" + encodeURIComponent(ws)
     + "&captureKeyboard=1&cpq=" + q + "&cpfps=" + (p.fps || 30) + "&cpw=" + w + "&cph=" + h + "&cpn=" + sid + (raw ? "&cpraw=1" : "");
 }
@@ -452,7 +471,7 @@ class Conn {
     if (d.t === "boot") { this.boot = true; return; }
     if (d.t === "open") { if (!this.ok) { this.arm(30000); this.h.progress && this.h.progress("Đã kết nối, đang chờ hình đầu tiên…"); } return; }
     if (d.t === "ok") { clearTimeout(this.t); const first = !this.ok || this.soft; this.ok = true; this.soft = false; this.tries = 0; this.fails = 0; if (first) this.h.ok && this.h.ok(); }
-    else if (d.t === "closed") { if (this.p) this.retry("Mất kết nối hình"); }
+    else if (d.t === "closed") { if (this.p) { if (this.h.closed) this.h.closed(() => this.retry("Mất kết nối hình")); else this.retry("Mất kết nối hình"); } }
     else if (d.t === "size") { this.size = [d.w, d.h]; this.h.size && this.h.size(); }
     else if (d.t === "stat") { this.kbps = d.kbps; if ((!this.ok || this.soft) && d.kbps > 0) this.arm(20000); this.h.stat && this.h.stat(); }
     else if (d.t === "keyok" || d.t === "nokey") { const cb = this.cb && this.cb[d.id]; if (cb) { delete this.cb[d.id]; cb(d.t === "keyok"); } }
@@ -516,6 +535,16 @@ async function pasteToPhone(t) {
   catch (e) { toast(e.message, 1); return false; }
 }
 
+/* ---------- cầu nối cho app Android (app gọi qua evaluateJavascript) ---------- */
+window.cpApp = {
+  key(code) { if (cur) pressKey(main, cur, code); },
+  reload() { if (cur) { main.tries = 0; main.open(cur, quality); } },
+  quality(q) { if (QUAL[q]) { quality = q; store.set("cp_q", q); if (cur) { main.tries = 0; main.open(cur, q); } } },
+  paste(t) { return pasteToPhone(String(t || "")); },
+  copyOut() { return main.cmd("clipget"); },
+  open(id) { const p = phones.find(x => x.id === id); if (p) openPhone(p); },
+};
+
 /* ---------- 1 máy ---------- */
 const main = new Conn($("scr"), $("veil"), {
   connecting(n, raw) { setState("wait", n ? "Đang kết nối lại…" : "Đang kết nối…"); veil(true, n ? `Đang kết nối lại (lần ${n})…` : "Đang mở màn hình máy…", n ? (raw ? "Chuyển sang chế độ hình gốc cho chắc chắn…" : "Hình bị gián đoạn, đang tự nối lại.") : ""); },
@@ -524,6 +553,18 @@ const main = new Conn($("scr"), $("veil"), {
   fail(why) { setState("bad", "Không kết nối được"); veil(true, why || "Không kết nối được màn hình", '<button class="btn sm" id="vretry">Thử lại</button>', false); const b = $("vretry"); if (b) b.onclick = () => { main.tries = 0; main.open(cur, quality); }; },
   size() { try { if (cur && main.size) localStorage.setItem("cp_sz_" + cur.id + "_" + cur.res, main.size[0] + "x" + main.size[1]); } catch (e) {} fit(); info(); }, stat: () => info(),
   clip(text) { showClip(text); },
+  async closed(go) {           // rớt hình: nếu máy vừa được mở ở nơi khác (tab / máy / app khác) thì dừng, không giành nhau
+    try {
+      const i = await api(cur.id + "/info");
+      if (i.viewer && i.viewer !== PAGE_ID) {
+        main.stop(); setState("wait", "Đang mở ở nơi khác");
+        veil(true, "Máy đang được mở ở nơi khác", "Máy này vừa được mở trên tab, máy tính hoặc app khác. Mỗi máy chỉ xem được ở 1 nơi để hình luôn mượt.<br><button class=\"btn sm\" id=\"vhere\">Mở ở đây</button>", false);
+        const b = $("vhere"); if (b) b.onclick = () => { main.tries = 0; main.open(cur, quality); };
+        return;
+      }
+    } catch (e) {}
+    go();
+  },
   pasteKey() { if (cur) api(cur.id + "/key", { method: "POST", json: { code: 279 } }).catch(() => {}); },
 });
 function aspect() {      // dùng kích thước hình thật lần trước (VD game đang để màn ngang) → mở lại không bị dựng sai khung
@@ -533,7 +574,7 @@ function aspect() {      // dùng kích thước hình thật lần trước (VD
 }
 function fit() {
   const fr = $("frame"), vp = $("viewport");
-  if (document.body.classList.contains("focus")) { fr.style.width = innerWidth + "px"; fr.style.height = innerHeight + "px"; return; }
+  if (document.body.classList.contains("focus") || EMBED) { fr.style.width = innerWidth + "px"; fr.style.height = innerHeight + "px"; if (EMBED) { vp.style.width = innerWidth + "px"; vp.style.height = innerHeight + "px"; } return; }
   const st = $("stage"), cs = getComputedStyle(st), sm = small();
   const W = st.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - (sm ? 0 : $("side").offsetWidth + 14) - 4;
   const H = st.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom) - 4;
@@ -1104,6 +1145,12 @@ document.addEventListener("paste", e => {
 /* ---------- khởi động trang ---------- */
 (async function init() {
   setTools(false); syncMobile();
+  if (EMBED && location.hash.includes("at=")) {          // app Android truyền phiên đăng nhập qua #at=…&rt=…
+    const hp = new URLSearchParams(location.hash.slice(1));
+    APP_RT = hp.get("rt") || "";
+    try { await sb.auth.setSession({ access_token: hp.get("at"), refresh_token: APP_RT }); } catch (e) {}
+    history.replaceState(null, "", location.pathname + location.search);
+  }
   const { data: { session } } = await sb.auth.getSession();
   if (!session) { setState("bad", "Chưa đăng nhập"); veil(true, "Bạn chưa đăng nhập", '<a href="/">Về cửa hàng để đăng nhập</a>, rồi bấm “Điều khiển” trên máy của bạn.', false); return; }
   token = session.access_token; me = session.user;

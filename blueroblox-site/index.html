@@ -542,6 +542,49 @@ h1 em::after{background:linear-gradient(90deg,rgba(143,208,255,0),#8fd0ff 15%,#f
 #cp-resq button small{display:block;font-size:10.5px;font-weight:500;color:var(--muted);font-family:var(--mono);margin-top:2px}
 #cp-resq button.on small{color:var(--gold-hi)}
 
+/* ===== Bảo trì + máy chủ (v5) ===== */
+.admalert{margin:10px 20px 0;display:flex;flex-direction:column;gap:6px}
+.admalert div{padding:9px 12px;border-radius:11px;font-size:13px;line-height:1.45;border:1px solid}
+.admalert .r{background:rgba(255,107,129,.1);border-color:rgba(255,107,129,.4);color:#ffd4db}
+.admalert .y{background:rgba(255,200,97,.08);border-color:rgba(255,200,97,.35);color:#ffe7b8}
+.mtbox{grid-template-columns:1fr}
+.mtrow{display:flex!important;flex-direction:row!important;gap:12px;align-items:flex-start;cursor:pointer}
+.mtrow small{display:block;color:var(--muted);font-size:12.5px;font-weight:400;margin-top:2px}
+.sw{position:relative;flex:none;width:44px;height:26px;margin-top:2px}
+.sw input{position:absolute;z-index:1;opacity:0;inset:0;width:100%!important;height:100%;margin:0;cursor:pointer}
+.sw i{position:absolute;inset:0;border-radius:99px;background:rgba(143,208,255,.18);border:1px solid var(--line2);transition:background .2s}
+.sw i::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#cfd9f5;transition:transform .2s}
+.sw input:checked+i{background:var(--bad);border-color:var(--bad)}
+.sw input:checked+i::after{transform:translateX(18px);background:#fff}
+.sw input:focus-visible+i{outline:2px solid var(--sky);outline-offset:2px}
+.nodes{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px}
+.node{border:1px solid var(--line2);border-radius:14px;padding:14px;background:rgba(6,10,28,.45);display:flex;flex-direction:column;gap:9px}
+.node.full{border-color:rgba(255,107,129,.55)}
+.node.off{opacity:.75;border-style:dashed}
+.nh{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.nh b{font-size:16px}
+.nh .hint{font-family:var(--mono);font-size:11.5px}
+.nh .pill{margin-left:auto}
+.nr{display:grid;grid-template-columns:1fr auto;gap:3px 10px;font-size:12.5px}
+.nr span{color:var(--muted)}
+.nr em{font-style:normal;font-family:var(--mono);font-size:12px;color:var(--fg)}
+.nbar{grid-column:1/-1;position:relative;height:7px;border-radius:6px;background:rgba(143,208,255,.12)}
+.nbar i{position:absolute;left:0;top:0;bottom:0;border-radius:6px;background:var(--ok);max-width:100%}
+.nbar i.y{background:#ffc861}.nbar i.r{background:var(--bad)}
+.nbar b{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--fg);opacity:.55;border-radius:2px}
+.nf{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12px;color:var(--muted);align-items:center;padding-top:4px;border-top:1px solid var(--line)}
+.nf .acts{margin-left:auto;display:flex;gap:6px}
+.maintov{position:fixed;inset:0;z-index:200;display:grid;place-items:center;padding:20px;background:rgba(3,6,18,.92);backdrop-filter:blur(8px)}
+.maintov[hidden]{display:none}
+.mtcard{max-width:440px;text-align:center;background:var(--panel-solid);border:1px solid var(--line2);border-radius:20px;padding:30px 26px}
+.mtico{font-size:42px;margin-bottom:6px}
+.mtcard h2{font-size:24px;margin-bottom:8px}
+.mtcard p{color:#c8d3f2;line-height:1.55;margin-bottom:10px}
+.mtcard .btn{margin-top:8px}
+.maintbar{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:60;padding:8px 14px;border-radius:12px;background:rgba(255,107,129,.16);border:1px solid rgba(255,107,129,.5);color:#ffd4db;font-size:13px;max-width:calc(100vw - 24px);text-align:center}
+.maintbar[hidden]{display:none}
+.stock.wt{color:#ffc861}
+
 </style>
 <script>
 // Đã điền sẵn cho blueroblox.shop
@@ -907,8 +950,9 @@ window.BR_CONFIG = {
 <div class="drawer" id="drawer" hidden>
   <div class="dpanel" role="dialog" aria-modal="true" aria-labelledby="d-title">
     <div class="dhead"><h2 id="d-title">Bảng <span>quản trị</span></h2><button class="btn ghost sm" id="adm-refresh">Tải lại</button><button class="btn ghost sm" id="adm-logout">Đăng xuất</button><button class="btn ghost sm" id="admin-close">Đóng</button></div>
+    <div class="admalert" id="adm-alert" hidden></div>
     <div class="tabs" id="adm-tabs">
-      <button class="on" data-tab="stats">📊 Thống kê</button><button data-tab="prod">Sản phẩm</button><button data-tab="cust">Khách hàng</button><button data-tab="tx">Nạp tiền</button><button data-tab="ord">Đơn hàng <span class="badge" id="ord-badge" hidden></span></button><button data-tab="vps">Máy VPS <span class="badge" id="vps-badge" hidden></span></button><button data-tab="biz">🖥️ Dàn máy nội bộ</button><button data-tab="cloud">📱 ĐT đám mây</button><button data-tab="bank">Ngân hàng</button><button data-tab="site">Nội dung trang</button>
+      <button class="on" data-tab="stats">📊 Thống kê</button><button data-tab="prod">Sản phẩm</button><button data-tab="cust">Khách hàng</button><button data-tab="tx">Nạp tiền</button><button data-tab="ord">Đơn hàng <span class="badge" id="ord-badge" hidden></span></button><button data-tab="vps">Máy VPS <span class="badge" id="vps-badge" hidden></span></button><button data-tab="biz">🖥️ Dàn máy nội bộ</button><button data-tab="cloud">📱 ĐT đám mây <span class="badge" id="cp-adm-badge" hidden>!</span></button><button data-tab="bank">Ngân hàng</button><button data-tab="site">Nội dung trang</button>
     </div>
     <div class="dbody" id="pane-stats" hidden>
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><h3 style="margin:0">Tổng quan cửa hàng</h3><span class="hint" id="st-time"></span><button class="btn ghost sm" id="st-reload" style="margin-left:auto">Tải lại</button></div>
@@ -1049,7 +1093,18 @@ window.BR_CONFIG = {
       </div>
     </div>
     <div class="dbody" id="pane-cloud" hidden>
-      <div class="note">Quản lý <b>điện thoại đám mây</b>: sửa thẻ sản phẩm, đơn giá, giới hạn cấu hình và xem máy khách đang thuê. Lưu xong, khách mở form thuê là thấy giá mới ngay.</div>
+      <div class="note">Quản lý <b>điện thoại đám mây</b>: bảo trì, máy chủ, thẻ sản phẩm, đơn giá, giới hạn cấu hình và máy khách đang thuê. Lưu xong, khách mở form thuê là thấy ngay.</div>
+      <div class="f mtbox">
+        <h3>🛠️ Bảo trì</h3>
+        <label class="mtrow full"><span class="sw"><input type="checkbox" id="mt-site"><i></i></span><span><b>Bảo trì toàn web</b><small>Khách không mua hàng, nạp tiền, thuê hay điều khiển máy được. Admin vẫn dùng bình thường.</small></span></label>
+        <label class="full">Lời nhắn cho khách (toàn web)<input id="mt-sitemsg" maxlength="200" placeholder="VD: Nâng cấp hệ thống, mở lại lúc 20:00"></label>
+        <label class="mtrow full"><span class="sw"><input type="checkbox" id="mt-cloud"><i></i></span><span><b>Bảo trì riêng ĐT đám mây</b><small>Chỉ khoá thuê, gia hạn và điều khiển điện thoại đám mây. Các sản phẩm khác vẫn bán.</small></span></label>
+        <label class="full">Lời nhắn cho khách (ĐT đám mây)<input id="mt-cloudmsg" maxlength="200" placeholder="VD: Đang nâng cấp máy chủ"></label>
+        <div class="hint full">Trong lúc bảo trì, máy của khách <b>không bị tạm dừng hay xoá</b> khi hết hạn; tắt bảo trì xong khách có 30 phút để gia hạn.</div>
+        <div class="acts full"><button class="btn" type="button" id="mt-save">Lưu bảo trì</button><span class="hint" id="mt-msg"></span></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><h3 style="margin:0">🖥️ Máy chủ</h3><span class="hint" id="cpa-nodesum"></span><button class="btn ghost sm" type="button" id="cpa-nodes-reload" style="margin-left:auto">Làm mới</button></div>
+      <div class="nodes" id="cpa-nodes"><div class="empty">Đang tải…</div></div>
       <div class="f" style="grid-template-columns:1fr 1fr">
         <h3>🏷️ Thẻ sản phẩm hiển thị ở cửa hàng</h3>
         <label class="full">Tên sản phẩm<input id="cpa-cname" maxlength="80" placeholder="Điện thoại đám mây (Cloud Phone)"></label>
@@ -1170,6 +1225,16 @@ window.BR_CONFIG = {
     <div class="acts"><button class="btn ghost" type="button" id="cp-ocancel">Đóng</button><button class="btn" type="button" id="cp-obuy">Thanh toán &amp; tạo máy</button></div>
   </div>
 </div>
+<div class="maintov" id="maintov" hidden>
+  <div class="mtcard" role="alertdialog" aria-labelledby="mt-title" aria-describedby="mt-text">
+    <div class="mtico" aria-hidden="true">🛠️</div>
+    <h2 id="mt-title">Đang bảo trì</h2>
+    <p id="mt-text">Hệ thống đang được nâng cấp. Bạn quay lại sau ít phút nhé.</p>
+    <p class="hint">Số dư và máy của bạn vẫn được giữ nguyên.</p>
+    <button class="btn ghost sm" type="button" id="mt-login">Đăng nhập quản trị</button>
+  </div>
+</div>
+<div class="maintbar" id="maintbar" hidden></div>
 <div class="toast" id="toast" hidden></div>
 <canvas id="school" aria-hidden="true"></canvas>
 <script>
@@ -3128,8 +3193,22 @@ const CP_CARD_DEF = { name: "Điện thoại đám mây (Cloud Phone)", feats: "
   desc: "Thuê điện thoại Android chạy trên cloud — tự chọn RAM, CPU, số ngày. Cài game, treo acc, điều khiển mọi nơi qua trình duyệt." };
 let CPpricing = null, cpSel = { ram: 2, cpu: 2, days: 7, res: "720x1280", fps: 30 }, myCloud = [], cpPollT = null;
 Object.assign(ERR, { BAD_RAM: "RAM nằm ngoài giới hạn cho phép.", BAD_CPU: "Số nhân CPU nằm ngoài giới hạn cho phép.", BAD_DAYS: "Số ngày nằm ngoài giới hạn cho phép.",
-  BAD_RES: "Độ phân giải không hợp lệ (dạng 720x1280).", BAD_FPS: "FPS nằm ngoài giới hạn cho phép.", PHONE_GONE: "Máy đã bị xoá vì hết hạn quá 30 phút — hãy thuê máy mới.", NO_PHONE: "Không tìm thấy máy." });
+  BAD_RES: "Độ phân giải không hợp lệ (dạng 720x1280).", BAD_FPS: "FPS nằm ngoài giới hạn cho phép.", MAINTENANCE: "Hệ thống đang bảo trì, vui lòng quay lại sau.",
+  OUT_OF_CAPACITY: "Máy chủ đã hết chỗ cho cấu hình này. Chọn cấu hình nhỏ hơn hoặc quay lại sau.", SERVER_OFFLINE: "Máy chủ điện thoại đang tạm ngưng, vui lòng quay lại sau.", PHONE_GONE: "Máy đã bị xoá vì hết hạn quá 30 phút — hãy thuê máy mới.", NO_PHONE: "Không tìm thấy máy." });
 
+let CPstatus = null;
+async function cpLoadStatus() {
+  try { const { data, error } = await sb.rpc("cloudphone_status"); if (!error && data) CPstatus = data; } catch (e) {}
+  return CPstatus;
+}
+function cpBlocked() {      // lý do không cho thuê (null = được thuê)
+  const s = CPstatus; if (!s || isAdmin()) return null;
+  if (s.maint) return "Đang bảo trì" + (s.maint_msg ? ": " + s.maint_msg : "") + ". Vui lòng quay lại sau.";
+  if (s.online === false) return "Máy chủ điện thoại đang tạm ngưng, vui lòng quay lại sau.";
+  const p = CPpricing || CP_DEF;
+  if (+s.free_ram < p.min_ram || +s.free_cpu < p.min_cpu) return "Đã hết máy trống. Vui lòng quay lại sau.";
+  return null;
+}
 // Luôn đọc giá mới nhất từ máy chủ (admin vừa sửa là khách thấy ngay)
 async function cpLoadPricing() {
   try {
@@ -3154,6 +3233,9 @@ function cpCheck() {
   if (!(cpSel.cpu >= p.min_cpu && cpSel.cpu <= p.max_cpu)) return `CPU phải từ ${p.min_cpu} đến ${p.max_cpu} nhân.`;
   if (!(cpSel.days >= p.min_days && cpSel.days <= p.max_days)) return `Số ngày phải từ ${p.min_days} đến ${p.max_days}.`;
   if (!(cpSel.fps >= p.min_fps && cpSel.fps <= p.max_fps)) return `FPS phải từ ${p.min_fps} đến ${p.max_fps}.`;
+  const s = CPstatus;
+  if (s && !isAdmin() && (cpSel.ram > +s.free_ram || cpSel.cpu > +s.free_cpu))
+    return `Máy chủ chỉ còn trống ${Math.floor(+s.free_ram)}GB RAM và ${Math.floor(+s.free_cpu)} nhân CPU. Chọn cấu hình nhỏ hơn.`;
   const m = /^(\d{3,4})x(\d{3,4})$/.exec(cpSel.res);
   if (!m || +m[1] < 320 || +m[2] < 320 || +m[1] > 4096 || +m[2] > 4096) return "Độ phân giải phải dạng rộng x cao, VD 720x1280 (mỗi cạnh 320–4096).";
   return "";
@@ -3219,7 +3301,8 @@ function cpResChips() {
 }
 async function openCpOrder() {
   if (!profile) { openAuth("login"); return; }
-  CPpricing = null; await cpLoadPricing();
+  CPpricing = null; await Promise.all([cpLoadPricing(), cpLoadStatus()]);
+  const why = cpBlocked(); if (why) { toast(why, 1); try { renderGrid(); } catch (e) {} return; }
   const p = CPpricing;
   const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
   cpSel = { ram: clamp(2, p.min_ram, p.max_ram), cpu: clamp(2, p.min_cpu, p.max_cpu), days: clamp(7, p.min_days, p.max_days), res: "720x1280", fps: clamp(30, p.min_fps, p.max_fps) };
@@ -3317,16 +3400,19 @@ async function cpCancel(id) {
 
 /* ===== THẺ "ĐT đám mây" ở lưới sản phẩm (tên/nội dung admin sửa được) ===== */
 function cloudGridCard() {
-  const c = cpCard(), p = CPpricing || CP_DEF, from = cpPerDay(p.min_ram, p.min_cpu);
+  const c = cpCard(), p = CPpricing || CP_DEF, from = cpPerDay(p.min_ram, p.min_cpu), s = CPstatus;
+  const st = !s ? ["ok", L("Còn hàng", "In stock")] : s.maint ? ["wt", "Bảo trì"] : s.online === false ? ["wt", "Tạm ngưng"]
+    : (+s.free_ram < p.min_ram || +s.free_cpu < p.min_cpu) ? ["out", L("Hết hàng", "Sold out")] : ["ok", L("Còn hàng", "In stock")];
   return `<article class="card" style="cursor:pointer" data-cpbuy="1">
     <div class="thumb"><canvas data-id="cloudphone" data-c="vps"></canvas><span class="tag">ĐT ĐÁM MÂY</span><span class="hot">MỚI</span></div>
     <div class="body"><h4>${esc(c.name)}</h4>
     <div class="feats">${c.feats.map(f => `<span>${esc(f)}</span>`).join("")}</div>
     <p class="pdesc">${esc(c.desc)}</p>
-    <div class="row"><span class="price"><small style="font-size:12px;color:var(--muted);font-family:var(--body)">từ </small>${fmt(from)}<small style="font-size:12px;color:var(--muted);font-family:var(--body)">/ngày</small></span><span class="stock ok">${L("Còn hàng", "In stock")}</span></div>
-    <button class="btn" data-cpbuy="1">${L("Thuê ngay", "Rent now")}</button></div></article>`;
+    <div class="row"><span class="price"><small style="font-size:12px;color:var(--muted);font-family:var(--body)">từ </small>${fmt(from)}<small style="font-size:12px;color:var(--muted);font-family:var(--body)">/ngày</small></span><span class="stock ${st[0]}">${st[1]}</span></div>
+    <button class="btn" data-cpbuy="1"${st[0] !== "ok" && !isAdmin() ? " disabled" : ""}>${st[0] === "ok" || isAdmin() ? L("Thuê ngay", "Rent now") : st[1]}</button></div></article>`;
 }
-cpLoadPricing().then(() => { try { renderGrid(); } catch (e) {} });
+Promise.all([cpLoadPricing(), cpLoadStatus()]).then(() => { try { renderGrid(); } catch (e) {} });
+setInterval(() => { if (document.visibilityState === "visible") cpLoadStatus().then(() => { try { renderGrid(); } catch (e) {} }); }, 60000);
 
 /* ===== ADMIN: thẻ sản phẩm + giá + phân tích + máy khách ===== */
 function cpaStatus(p) {
@@ -3391,6 +3477,148 @@ $("cpa-tbl") && ($("cpa-tbl").onclick = async e => {
   const { error } = await sb.from("cloud_phones").update({ status: "cancelling", updated_at: new Date().toISOString() }).eq("id", b.dataset.cparm);
   if (error) return toast(errMsg(error), 1); toast("Đang thu hồi…"); loadCloudAdm();
 });
+
+/* ===================== BẢO TRÌ + MÁY CHỦ (v5) ===================== */
+function applyMaint() {
+  const site = !!SITE.maint, cloud = !!(CPpricing && CPpricing.maintenance), admin = isAdmin();
+  show("maintov", site && !admin);
+  if (site && !admin) $("mt-text").textContent = SITE.maint_msg || "Hệ thống đang được nâng cấp. Bạn quay lại sau ít phút nhé.";
+  const bar = site ? "🛠️ Đang BẬT bảo trì toàn web — khách không mua, nạp, thuê được." : cloud ? "🛠️ Đang BẬT bảo trì ĐT đám mây — khách không thuê, gia hạn, điều khiển được." : "";
+  show("maintbar", !!bar && admin); $("maintbar").textContent = bar;
+}
+$("mt-login") && ($("mt-login").onclick = () => openAuth("login"));
+{ // gắn applyMaint sau mỗi lần vẽ lại trang / đổi người dùng
+  const _rs = renderSite, _ru = renderUser;
+  renderSite = function () { const r = _rs.apply(this, arguments); try { applyMaint(); } catch (e) {} return r; };
+  renderUser = function () { const r = _ru.apply(this, arguments); try { applyMaint(); checkNodeAlerts(); } catch (e) {} return r; };
+}
+
+/* ---- Lưu bảo trì ---- */
+function fillMaint() {
+  $("mt-site").checked = !!SITE.maint; $("mt-sitemsg").value = SITE.maint_msg || "";
+  $("mt-cloud").checked = !!(CPpricing && CPpricing.maintenance); $("mt-cloudmsg").value = (CPpricing && CPpricing.maint_msg) || "";
+}
+$("mt-save") && ($("mt-save").onclick = () => busy($("mt-save"), async () => {
+  const sOn = $("mt-site").checked, cOn = $("mt-cloud").checked, nowIso = new Date().toISOString();
+  if (sOn && !SITE.maint && !confirm("Bật BẢO TRÌ TOÀN WEB? Khách sẽ không mua, nạp tiền hay thuê máy được cho tới khi bạn tắt.")) return;
+  const sBody = { ...SITE, maint: sOn, maint_msg: $("mt-sitemsg").value.trim() };
+  if (SITE.maint && !sOn) sBody.maint_off_at = nowIso;
+  let { error } = await sb.from("settings").update({ data: sBody }).eq("id", 1);
+  if (error) return toast(errMsg(error), 1);
+  SITE = sBody;
+  const pBody = { maintenance: cOn, maint_msg: $("mt-cloudmsg").value.trim() || null };
+  if (CPpricing && CPpricing.maintenance && !cOn) pBody.maint_off_at = nowIso;
+  ({ error } = await sb.from("cloudphone_pricing").update(pBody).eq("id", 1));
+  if (error) return toast(/maint/.test(error.message || "") ? "Chưa chạy file SQL cloud-phones-v5.sql trên Supabase." : errMsg(error), 1);
+  CPpricing = null; await Promise.all([cpLoadPricing(), cpLoadStatus()]);
+  applyMaint(); try { renderGrid(); } catch (e) {}
+  $("mt-msg").textContent = "✓ Đã lưu lúc " + new Date().toLocaleTimeString("vi-VN");
+  toast(sOn ? "Đã BẬT bảo trì toàn web." : cOn ? "Đã BẬT bảo trì ĐT đám mây." : "Đã TẮT bảo trì — khách dùng bình thường.");
+}));
+
+/* ---- Máy chủ ---- */
+let NODES = [], nodeT = null, nodeToastShown = false;
+const nAge = n => (Date.now() - new Date(n.updated_at).getTime()) / 60000;          // phút từ lần báo cáo cuối
+function nodeAlerts(nodes) {
+  const out = [];
+  if (!nodes.length) out.push(["y", "Chưa có máy chủ nào gửi báo cáo. Cập nhật cloudphoned.py trên server rồi khởi động lại dịch vụ."]);
+  for (const n of nodes) {
+    if (!n.enabled) continue;
+    const age = nAge(n), m = n.metrics || {};
+    if (age > 3) { out.push(["r", `🔴 <b>${esc(n.name)}</b> mất kết nối ${Math.round(age)} phút — khách không thuê được máy mới trên server này.`]); continue; }
+    const pr = +n.alloc_ram / +n.ram_total * 100 || 0, pc = +n.alloc_cpu / +n.cpu_total * 100 || 0, top = Math.max(pr, pc);
+    if (+n.alloc_ram >= +n.cap_ram - 1 || +n.alloc_cpu >= +n.cap_cpu - 1)
+      out.push(["r", `🚨 <b>${esc(n.name)}</b> đã đạt ${n.limit_pct || 85}% (RAM ${Math.round(pr)}%, CPU ${Math.round(pc)}%) — khách đang thấy <b>Hết hàng</b>. Thêm server hoặc chờ máy hết hạn.`]);
+    else if (top >= 75) out.push(["y", `⚠️ <b>${esc(n.name)}</b> sắp đầy: RAM ${Math.round(pr)}%, CPU ${Math.round(pc)}% (ngưỡng ${n.limit_pct || 85}%).`]);
+    const d = m.disk_data; if (d && d.total && d.used / d.total > .9) out.push(["r", `💾 Ổ cứng <b>${esc(n.name)}</b> còn ${(d.total - d.used).toFixed(0)}GB — sắp hết chỗ cho máy mới.`]);
+  }
+  return out;
+}
+function renderAlerts() {
+  const al = nodeAlerts(NODES), red = al.some(x => x[0] === "r");
+  $("adm-alert").innerHTML = al.map(x => `<div class="${x[0]}">${x[1]}</div>`).join(""); show("adm-alert", al.length > 0);
+  show("cp-adm-badge", red);
+  return al;
+}
+async function loadNodes() {
+  if (!isAdmin()) return [];
+  const { data, error } = await sb.from("cloud_nodes").select("*").order("created_at");
+  if (error) { if ($("cpa-nodes")) $("cpa-nodes").innerHTML = `<div class="empty">${/cloud_nodes/.test(error.message || "") ? "Chưa chạy file SQL cloud-phones-v5.sql trên Supabase." : esc(errMsg(error))}</div>`; return []; }
+  NODES = data || []; return NODES;
+}
+let nodeCheckAt = 0;
+async function checkNodeAlerts(force) {
+  if (!isAdmin()) return;
+  if (!force && Date.now() - nodeCheckAt < 60000) return; nodeCheckAt = Date.now();
+  await loadNodes(); const al = renderAlerts();
+  const red = al.filter(x => x[0] === "r");
+  if (red.length && !nodeToastShown) { nodeToastShown = true; toast("⚠️ Máy chủ cần chú ý — mở Bảng quản trị › ĐT đám mây", 1); }
+}
+function nRow(label, val, pct, mark) {
+  const p = Math.max(0, Math.min(100, pct || 0)), cls = p >= (mark || 85) ? "r" : p >= 70 ? "y" : "";
+  return `<div class="nr"><span>${label}</span><em>${val}</em><div class="nbar"><i class="${cls}" style="width:${p}%"></i>${mark ? `<b style="left:${mark}%" title="Ngưỡng ${mark}%"></b>` : ""}</div></div>`;
+}
+function renderNodes() {
+  const box = $("cpa-nodes"); if (!box) return;
+  if (!NODES.length) { box.innerHTML = `<div class="empty">Chưa có máy chủ nào gửi báo cáo. Cập nhật cloudphoned.py trên server rồi khởi động lại dịch vụ.</div>`; $("cpa-nodesum").textContent = ""; return; }
+  let tr = 0, ar = 0, tc = 0, ac = 0, ph = 0;
+  box.innerHTML = NODES.map(n => {
+    const m = n.metrics || {}, age = nAge(n), off = age > 3, lim = n.limit_pct || 85;
+    const full = +n.alloc_ram >= +n.cap_ram - 1 || +n.alloc_cpu >= +n.cap_cpu - 1;
+    if (!off && n.enabled) { tr += +n.ram_total; ar += +n.alloc_ram; tc += +n.cpu_total; ac += +n.alloc_cpu; ph += +n.phones || 0; }
+    const g = (m.gpus || []).map(x => nRow("Card " + esc(x.name).replace("NVIDIA GeForce ", ""),
+      `${x.util ?? "?"}% · VRAM ${x.mem_used != null ? Math.round(x.mem_used) : "?"}/${x.mem_total != null ? Math.round(x.mem_total) : "?"}MB${x.temp != null ? " · " + x.temp + "°C" : ""}`, x.util)).join("")
+      || `<div class="nr"><span>Card đồ hoạ</span><em>không đọc được</em></div>`;
+    const d = m.disk_data;
+    return `<div class="node${full ? " full" : ""}${off ? " off" : ""}">
+      <div class="nh"><b>${esc(n.name)}</b><span class="hint">${esc(n.id)}</span>
+        <span class="pill ${off ? "bad" : full ? "bad" : "ok"}">${off ? "Mất kết nối " + Math.round(age) + " phút" : full ? "Đầy " + lim + "%" : "Đang chạy"}</span></div>
+      ${nRow("CPU đang dùng thật", (m.cpu_pct ?? "?") + "%", m.cpu_pct)}
+      ${nRow("CPU đã cấp cho khách", `${+n.alloc_cpu}/${+n.cpu_total} luồng`, +n.alloc_cpu / +n.cpu_total * 100, lim)}
+      ${nRow("RAM đang dùng thật", `${m.ram_used ?? "?"}/${+n.ram_total} GB`, (m.ram_used || 0) / +n.ram_total * 100)}
+      ${nRow("RAM đã cấp cho khách", `${+n.alloc_ram}/${+n.ram_total} GB`, +n.alloc_ram / +n.ram_total * 100, lim)}
+      ${g}
+      ${d ? nRow("Ổ cứng (dữ liệu máy)", `${d.used}/${d.total} GB`, d.used / d.total * 100, 90) : ""}
+      <div class="nf"><span>📱 ${n.phones || 0} máy${m.running != null ? " (" + m.running + " đang chạy)" : ""}</span>
+        ${m.cpu_temp ? `<span>🌡️ CPU ${Math.round(m.cpu_temp)}°C</span>` : ""}${m.load ? `<span>Tải ${m.load[0]}</span>` : ""}${m.uptime_h != null ? `<span>Bật ${m.uptime_h >= 48 ? Math.round(m.uptime_h / 24) + " ngày" : m.uptime_h + " giờ"}</span>` : ""}
+        <span>Cập nhật ${age < 1 ? "vừa xong" : Math.round(age) + " phút trước"}</span>
+        <span class="acts"><button class="btn ghost sm" data-nrename="${esc(n.id)}">✏️ Đổi tên</button>
+          <button class="btn ${n.enabled ? "ghost" : ""} sm" data-nenable="${esc(n.id)}">${n.enabled ? "Ngừng nhận máy" : "Nhận máy lại"}</button>
+          ${off ? `<button class="btn danger sm" data-ndel="${esc(n.id)}">Xoá</button>` : ""}</span></div>
+    </div>`;
+  }).join("");
+  $("cpa-nodesum").textContent = `${NODES.length} server · cấp RAM ${ar}/${Math.round(tr)}GB · CPU ${ac}/${tc} luồng · ${ph} máy khách`;
+}
+async function refreshNodes() { await loadNodes(); renderNodes(); renderAlerts(); }
+$("cpa-nodes-reload") && ($("cpa-nodes-reload").onclick = () => busy($("cpa-nodes-reload"), refreshNodes));
+$("cpa-nodes") && ($("cpa-nodes").onclick = async e => {
+  const rn = e.target.closest("[data-nrename]"), en = e.target.closest("[data-nenable]"), dl = e.target.closest("[data-ndel]");
+  if (rn) {
+    const n = NODES.find(x => x.id === rn.dataset.nrename); const v = prompt("Tên máy chủ:", n.name); if (!v || !v.trim()) return;
+    const { error } = await sb.from("cloud_nodes").update({ name: v.trim().slice(0, 40) }).eq("id", n.id); if (error) return toast(errMsg(error), 1);
+  } else if (en) {
+    const n = NODES.find(x => x.id === en.dataset.nenable);
+    if (n.enabled && !confirm(`Ngừng nhận máy mới trên ${n.name}? Máy đang chạy không bị ảnh hưởng.`)) return;
+    const { error } = await sb.from("cloud_nodes").update({ enabled: !n.enabled }).eq("id", n.id); if (error) return toast(errMsg(error), 1);
+  } else if (dl) {
+    if (!confirm("Xoá máy chủ này khỏi danh sách? (Nếu server chạy lại nó sẽ tự hiện lại.)")) return;
+    const { error } = await sb.from("cloud_nodes").delete().eq("id", dl.dataset.ndel); if (error) return toast(errMsg(error), 1);
+  } else return;
+  refreshNodes();
+});
+{ // mở tab ĐT đám mây → nạp bảo trì + máy chủ, tự làm mới mỗi 15 giây
+  const _lc = loadCloudAdm;
+  loadCloudAdm = async function () {
+    const r = await _lc.apply(this, arguments);
+    try { fillMaint(); await refreshNodes(); } catch (e) {}
+    clearInterval(nodeT);
+    nodeT = setInterval(() => { if ($("drawer").hidden || $("pane-cloud").hidden) return clearInterval(nodeT); refreshNodes(); }, 15000);
+    return r;
+  };
+  const _oa = openAdmin;
+  openAdmin = async function () { const r = await _oa.apply(this, arguments); checkNodeAlerts(true); return r; };
+}
+setTimeout(() => { try { applyMaint(); checkNodeAlerts(); } catch (e) {} }, 1500);
 
 </script>
 </body>

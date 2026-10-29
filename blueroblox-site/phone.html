@@ -215,7 +215,7 @@ const mb = n => n >= 1073741824 ? (n / 1073741824).toFixed(2) + " GB" : (n / 104
 const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} } };
 
 const sb = window.supabase.createClient(CFG.supabaseUrl, CFG.supabaseAnonKey);
-let token = "", me = null, phones = [], cur = null, rotated = false, online = null;
+let token = "", me = null, phones = [], cur = null, rotated = false, online = null, underMaint = false;
 let mode = store.get("cp_player") === "broadway" ? "broadway" : "webcodecs";
 
 /* ---------- giao diện chung ---------- */
@@ -248,6 +248,7 @@ async function api(path, { method = "GET", json, body, blob, headers = {} } = {}
   if (r.status === 401 && retry) { await refreshToken(); return api(path, { method, json, body, blob, headers }, false); }
   if (blob && r.ok) return r.blob();
   let j = {}; try { j = await r.json(); } catch (e) {}
+  if (r.status === 503 && j.maint && !underMaint) setTimeout(checkInfo, 0);
   if (!r.ok) { const err = new Error(j.error || ("Lỗi " + r.status)); err.status = r.status; err.data = j; throw err; }
   return j;
 }
@@ -323,6 +324,12 @@ async function checkInfo() {
     const i = await api(cur.id + "/info");
     if (i.expires_at) cur.expires_at = i.expires_at;
     if (i.fps) cur.fps = i.fps; if (i.fps_range) cur.fpsRange = i.fps_range;
+    if (i.maint) {
+      setTools(false); setState("bad", "Đang bảo trì"); $("scr").src = "about:blank";
+      veil(true, "Đang bảo trì", esc(i.maint_msg || "Vui lòng quay lại sau.") + "<br>Máy và dữ liệu của bạn vẫn được giữ nguyên.", false);
+      underMaint = true; renderHead(); return;
+    }
+    if (underMaint) { underMaint = false; openPhone(cur); return; }   // hết bảo trì → mở lại màn hình
     online = i.online; setState(online ? "ok" : "wait", online ? "Đang chạy" : "Máy đang khởi động…");
   } catch (e) { setState("bad", e.status === 409 ? "Máy chưa chạy" : "Mất kết nối server"); }
   renderHead();

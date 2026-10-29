@@ -175,6 +175,8 @@ textarea.in{min-height:110px;resize:vertical}
 .clipbar{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:58;display:flex;align-items:center;gap:10px;
   width:min(520px,calc(100vw - 24px));padding:10px 12px;border-radius:14px;background:var(--panel2);border:1px solid var(--line2);box-shadow:0 14px 30px -14px #000}
 .clipbar[hidden]{display:none}
+.dm-app{display:block;margin:8px 10px 10px;padding:9px 12px;border-radius:10px;border:1px solid var(--line2);color:var(--sky);text-decoration:none;font-size:13px;text-align:center}
+.dm-app:hover{background:rgba(61,123,255,.12)}.dm-app[hidden]{display:none}
 .clipbar .ct{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
 .clipbar .ct small{color:var(--muted);font-size:12px}
 .clipbar .ct span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:14px}
@@ -231,6 +233,7 @@ body.focus .exitfocus{display:block}
       <div class="dm-h"><b id="dm-title">Máy của bạn</b><button class="btn sm" type="button" id="dm-all">⊞ Mở tất cả</button></div>
       <div class="dm-l" id="dm-list"></div>
       <div class="dm-f"><span id="dm-hint">Tích chọn để mở nhiều máy cùng lúc</span><button class="btn sm gh" type="button" id="dm-sel" disabled>Mở máy đã chọn</button></div>
+      <a class="dm-app" id="dm-app" href="/download/blueroblox-cloud.apk" download hidden>📱 Tải app Android — điều khiển máy ngay trên điện thoại</a>
     </div>
   </div>
   <div class="seg" id="viewseg" role="group" aria-label="Kiểu xem">
@@ -1059,6 +1062,7 @@ document.addEventListener("paste", e => {
   if (t && !typing && $("dlg").hidden && cur && main.ok) { e.preventDefault(); pasteToPhone(t); }
 });
 
+if (!/BlueRobloxApp\//.test(navigator.userAgent)) fetch("/download/app.json", { cache: "no-store" }).then(r => r.ok ? r.json() : null).then(i => { if (i && i.version) $("dm-app").hidden = false; }).catch(() => {});
 /* ---------- khởi động trang ---------- */
 (async function init() {
   setTools(false); syncMobile();

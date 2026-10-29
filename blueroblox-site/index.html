@@ -660,6 +660,16 @@ h1 em::after{background:linear-gradient(90deg,rgba(143,208,255,0),#8fd0ff 15%,#f
 .appbar b{font-size:14px}.appbar small{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .appbar-x{all:unset;cursor:pointer;color:var(--muted);padding:6px;font-size:14px;border-radius:6px}.appbar-x:focus-visible{outline:2px solid #6aa3ff}
 
+.card .appdl{margin-top:8px;width:100%;justify-content:center;text-align:center;text-decoration:none}
+.appbox{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 14px;border-radius:12px;border:1px solid rgba(110,160,255,.35);background:rgba(61,123,255,.08)}
+.appbox[hidden]{display:none}
+.appbox span{flex:1;min-width:200px;font-size:14px}.appbox small{color:var(--muted)}
+.appnews{max-width:440px;text-align:center}
+.appnews img{display:block;margin:0 auto 6px;object-fit:contain}
+.appnews p{margin:8px 0}
+.ansteps{text-align:left;margin:10px 0 0;padding-left:22px;color:var(--muted);font-size:14px;line-height:1.6}
+.appnews .acts{justify-content:center}
+
 </style>
 <script>
 // Đã điền sẵn cho blueroblox.shop
@@ -1304,6 +1314,7 @@ window.BR_CONFIG = {
       <button class="btn ghost sm" id="cp-close">Đóng</button>
     </div>
     <div class="note">Máy Android chạy trên cloud 24/7. Bấm <b>Điều khiển</b> để mở máy trong trình duyệt. Hết hạn máy sẽ tạm dừng — gia hạn trong <b>30 phút</b>, quá thời gian đó máy và toàn bộ dữ liệu bị xoá.</div>
+    <div class="appbox" hidden><span>📱 <b>App Android</b> — thuê, gia hạn và điều khiển máy ngay trên điện thoại, có thông báo khi sắp hết hạn. <small class="appv"></small></span><a class="btn sm" href="/download/blueroblox-cloud.apk" download>Tải app</a></div>
     <div class="olist" id="cp-list"></div>
   </div>
 </div>
@@ -1363,6 +1374,16 @@ window.BR_CONFIG = {
     <div class="note" style="margin-top:10px">Máy bị khoá sẽ <b>tắt ngay</b>, khách không mở, điều khiển hay gia hạn được. Dữ liệu vẫn giữ. Hết thời hạn máy tự mở khoá và bật lại.</div>
     <div class="err" id="cpl-err"></div>
     <div class="acts"><button class="btn ghost" type="button" id="cpl-cancel">Huỷ</button><button class="btn danger" type="button" id="cpl-ok">Khoá máy</button></div>
+  </div>
+</div>
+<div class="modal" id="appnews" hidden>
+  <div class="dlg appnews" role="dialog" aria-modal="true" aria-labelledby="an-title">
+    <img src="data:image/webp;base64,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" alt="" width="96" height="65">
+    <h3 id="an-title">📱 Đã có app Android BlueRoblox Cloud</h3>
+    <p>Thuê, gia hạn và <b>điều khiển điện thoại đám mây ngay trên điện thoại</b> của bạn — dán chữ có dấu, copy từ máy ảo ra, cài APK từ điện thoại, nhận <b>thông báo trước khi máy hết hạn</b>.</p>
+    <p class="hint">Dùng chung tài khoản và số dư với web. <span id="an-v"></span></p>
+    <ol class="ansteps"><li>Mở trang này trên điện thoại Android, bấm <b>Tải app</b>.</li><li>Mở file vừa tải → cho phép <b>cài từ nguồn này</b> → <b>Cài đặt</b>.</li><li>Đăng nhập bằng tài khoản web.</li></ol>
+    <div class="acts"><button class="btn ghost" type="button" id="an-later">Để sau</button><a class="btn" id="an-dl" href="/download/blueroblox-cloud.apk" download>Tải app Android</a></div>
   </div>
 </div>
 <div class="appbar" id="appbar" hidden role="region" aria-label="Tải app Android">
@@ -2850,7 +2871,7 @@ $("drawer").onclick = e => { if (e.target.id === "drawer") show("drawer", false)
 $("cats").onclick = e => { const b = e.target.closest("button"); if (!b) return; cat = b.dataset.c; renderCats(); renderGrid(); };
 $("q").oninput = renderGrid; $("sort").onchange = renderGrid;
 $("cur-vnd").onclick = () => setCur("VND"); $("cur-usd").onclick = () => setCur("USD");
-$("grid").onclick = e => { if (e.target.closest("[data-cpbuy]")) { openCpOrder(); return; } const b = e.target.closest("[data-buy]"); if (b) openBuy(b.dataset.buy); };
+$("grid").onclick = e => { if (e.target.closest(".appdl")) return; if (e.target.closest("[data-cpbuy]")) { openCpOrder(); return; } const b = e.target.closest("[data-buy]"); if (b) openBuy(b.dataset.buy); };
 $("m-plus").onclick = () => { const p = selP(); $("m-qty").value = Math.min(+p.stock || 1, +$("m-qty").value + 1); upd(); };
 $("m-minus").onclick = () => { $("m-qty").value = Math.max(1, +$("m-qty").value - 1); upd(); };
 $("m-qty").oninput = upd; $("m-cancel").onclick = closeBuy; $("m-ok").onclick = doBuy;
@@ -3627,7 +3648,8 @@ function cloudGridCard() {
     <div class="feats">${c.feats.map(f => `<span>${esc(f)}</span>`).join("")}</div>
     <p class="pdesc">${esc(c.desc)}</p>
     <div class="row"><span class="price"><small style="font-size:12px;color:var(--muted);font-family:var(--body)">từ </small>${priceHtml(from)}<small style="font-size:12px;color:var(--muted);font-family:var(--body)">/ngày</small></span><span class="stock ${st[0]}">${st[1]}</span></div>
-    <button class="btn" data-cpbuy="1"${st[0] !== "ok" && !isAdmin() ? " disabled" : ""}>${st[0] === "ok" || isAdmin() ? L("Thuê ngay", "Rent now") : st[1]}</button></div></article>`;
+    <button class="btn" data-cpbuy="1"${st[0] !== "ok" && !isAdmin() ? " disabled" : ""}>${st[0] === "ok" || isAdmin() ? L("Thuê ngay", "Rent now") : st[1]}</button>
+    ${APP_INFO ? `<a class="btn ghost appdl" href="/download/blueroblox-cloud.apk" download>📱 ${L("Tải app Android", "Get Android app")}</a>` : ""}</div></article>`;
 }
 Promise.all([cpLoadPricing(), cpLoadStatus()]).then(() => { try { renderGrid(); } catch (e) {} });
 setInterval(() => { if (document.visibilityState === "visible") cpLoadStatus().then(() => { try { renderGrid(); } catch (e) {} }); }, 60000);
@@ -4230,20 +4252,41 @@ $("apk-go").onclick = async () => {
 };
 
 // ---- Nút tải app Android (chỉ hiện khi đã có file APK trên web, và không hiện bên trong app) ----
+let APP_INFO = null;
 (async function appPromo() {
-  if (/BlueRobloxApp\//.test(navigator.userAgent)) return;
+  if (/BlueRobloxApp\//.test(navigator.userAgent)) return;          // đang ở trong app → không quảng bá
   let info = null;
   try { const r = await fetch("/download/app.json", { cache: "no-store" }); if (r.ok) info = await r.json(); } catch (e) {}
   if (!info || !info.version) return;
+  APP_INFO = info;
   const mb = info.size ? " · " + (info.size / 1048576).toFixed(1) + "MB" : "";
-  show("ft-app"); $("ft-app").querySelector("a").textContent = L("📱 Tải app Android", "📱 Get the Android app") + " (v" + info.version + ")";
+  const label = L("📱 Tải app Android", "📱 Get the Android app") + " (v" + info.version + ")";
+  show("ft-app"); $("ft-app").querySelector("a").textContent = label;
+  document.querySelectorAll(".appbox").forEach(b => { b.hidden = false; const v = b.querySelector(".appv"); if (v) v.textContent = "v" + info.version + mb; });
+  try { renderGrid(); } catch (e) {}
+  const ios = /iPhone|iPad|iPod/i.test(navigator.userAgent), android = /Android/i.test(navigator.userAgent);
+  // Thông báo 1 lần cho mỗi khách (mỗi phiên bản app): có app Android
+  let seen = false; try { seen = localStorage.getItem("br_appnews") === "1"; } catch (e) {}
+  if (!seen && !ios) {
+    const t = setInterval(() => {
+      if (!window.__siteLoaded || !$("noticedlg").hidden || !$("maintov").hidden) return;     // chờ đóng bảng thông báo / nội quy
+      clearInterval(t);
+      $("an-v").textContent = L("Phiên bản ", "Version ") + info.version + mb;
+      show("appnews");
+    }, 1500);
+    setTimeout(() => clearInterval(t), 120000);
+  }
   let hid = false; try { hid = localStorage.getItem("br_appbar") === String(info.version); } catch (e) {}
-  if (!/Android/i.test(navigator.userAgent) || hid) return;
+  if (!android || hid) return;
   $("appbar-v").textContent = L("Phiên bản ", "Version ") + info.version + mb + L(" · thuê & điều khiển máy ngay trên điện thoại", " · rent & control phones on the go");
   $("appbar-dl").textContent = L("Tải app", "Download");
   show("appbar");
   $("appbar-x").onclick = () => { show("appbar", false); try { localStorage.setItem("br_appbar", String(info.version)); } catch (e) {} };
 })();
+function appNewsClose() { show("appnews", false); try { localStorage.setItem("br_appnews", "1"); } catch (e) {} }
+$("an-later").onclick = appNewsClose;
+$("an-dl").onclick = () => setTimeout(appNewsClose, 300);
+$("appnews").onclick = e => { if (e.target.id === "appnews") appNewsClose(); };
 
 // ---- Mở từ app Android: blueroblox.shop/?topup=1 → mở luôn bảng nạp tiền (chưa đăng nhập thì mở đăng nhập trước) ----
 (function topupFromApp() {

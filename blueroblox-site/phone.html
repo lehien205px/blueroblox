@@ -175,6 +175,17 @@ textarea.in{min-height:110px;resize:vertical}
 .clipbar{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:58;display:flex;align-items:center;gap:10px;
   width:min(520px,calc(100vw - 24px));padding:10px 12px;border-radius:14px;background:var(--panel2);border:1px solid var(--line2);box-shadow:0 14px 30px -14px #000}
 .clipbar[hidden]{display:none}
+.getapp{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;padding:7px 12px;border-radius:999px;font-size:13px;font-weight:700;color:#fff;text-decoration:none;
+  background:linear-gradient(135deg,#3d7bff,#22b8a7);box-shadow:0 0 0 0 rgba(61,123,255,.6);animation:getapp 2.4s ease-out 3}
+.getapp:hover{filter:brightness(1.1)}.getapp:focus-visible{outline:2px solid #fff;outline-offset:2px}.getapp[hidden]{display:none}
+.getapp .ic{stroke:#fff}.getapp .gs{display:none}
+@keyframes getapp{0%{box-shadow:0 0 0 0 rgba(61,123,255,.6)}100%{box-shadow:0 0 0 12px rgba(61,123,255,0)}}
+@media (prefers-reduced-motion:reduce){.getapp{animation:none}}
+.appcta{display:flex;flex-direction:column;gap:3px;margin-bottom:8px;width:164px;padding:11px 12px;border-radius:16px;text-decoration:none;color:var(--fg);
+  background:linear-gradient(160deg,rgba(61,123,255,.28),rgba(34,184,167,.18));border:1px solid rgba(110,170,255,.5)}
+.appcta[hidden]{display:none}.appcta b{font-size:13.5px}.appcta span{font-size:11.5px;color:var(--muted);line-height:1.35}
+.appcta i{font-style:normal;margin-top:5px;align-self:flex-start;padding:5px 10px;border-radius:999px;background:#3d7bff;color:#fff;font-size:12px;font-weight:700}
+.appcta:hover{border-color:#8fd0ff}.appcta:focus-visible{outline:2px solid var(--sky)}
 .dm-app{display:block;margin:8px 10px 10px;padding:9px 12px;border-radius:10px;border:1px solid var(--line2);color:var(--sky);text-decoration:none;font-size:13px;text-align:center}
 .dm-app:hover{background:rgba(61,123,255,.12)}.dm-app[hidden]{display:none}
 .clipbar .ct{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
@@ -189,6 +200,7 @@ textarea.in{min-height:110px;resize:vertical}
   :root{--top:50px}
   .top{gap:6px;padding:0 8px}
   .home span,.meta .spec,.adminlink,.state span,#zoomseg,.info{display:none}
+  .getapp{padding:6px 10px;font-size:12px;gap:4px}.getapp .gl{display:none}.getapp .gs{display:inline}
   #viewseg span{display:none!important}
   #viewseg button{padding:6px 8px}
   .dev{max-width:46vw;padding:6px 8px;font-size:13px}
@@ -246,6 +258,7 @@ body.focus .exitfocus{display:block}
     <div class="seg" id="zoomseg" role="group" aria-label="Phóng to">
       <button id="z-out" title="Thu nhỏ (Ctrl −)" aria-label="Thu nhỏ">−</button><span id="z-val">100%</span><button id="z-in" title="Phóng to (Ctrl +)" aria-label="Phóng to">+</button><button id="z-fit" title="Vừa khung (Ctrl 0)">Vừa</button>
     </div>
+    <a class="getapp" id="getapp" href="/download/blueroblox-cloud.apk" download hidden title="Tải app Android BlueRoblox Cloud"><svg class="ic sm" viewBox="0 0 24 24"><rect x="7" y="2.5" width="10" height="19" rx="2"/><path d="M12 8v6M9.5 11.5L12 14l2.5-2.5"/></svg><span class="gl">Tải app Android</span><span class="gs">Tải app</span></a>
     <a class="adminlink" id="adminlink" href="https://phone.blueroblox.shop/" target="_blank" rel="noopener" hidden>Tất cả máy (admin)</a>
     <span class="state" id="state"><i></i><span id="statetxt">Đang kết nối…</span></span>
   </div>
@@ -261,6 +274,9 @@ body.focus .exitfocus{display:block}
     </div>
   </div>
   <div class="side" id="side">
+    <a class="appcta" id="appcta" href="/download/blueroblox-cloud.apk" download hidden>
+      <b>📱 App Android</b><span>Điều khiển máy ngay trên điện thoại, báo trước khi hết hạn</span><i>Tải app miễn phí</i>
+    </a>
     <aside class="tools" id="tools" aria-label="Công cụ">
       <h6>Điều hướng</h6>
       <button class="tb" data-key="4"><svg class="ic" viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h11a5 5 0 010 10h-3"/></svg>Quay lại</button>
@@ -1062,7 +1078,7 @@ document.addEventListener("paste", e => {
   if (t && !typing && $("dlg").hidden && cur && main.ok) { e.preventDefault(); pasteToPhone(t); }
 });
 
-if (!/BlueRobloxApp\//.test(navigator.userAgent)) fetch("/download/app.json", { cache: "no-store" }).then(r => r.ok ? r.json() : null).then(i => { if (i && i.version) $("dm-app").hidden = false; }).catch(() => {});
+if (!/BlueRobloxApp\//.test(navigator.userAgent)) fetch("/download/app.json", { cache: "no-store" }).then(r => r.ok ? r.json() : null).then(i => { if (i && i.version) ["dm-app", "getapp", "appcta"].forEach(id => { $(id).hidden = false; }); }).catch(() => {});
 /* ---------- khởi động trang ---------- */
 (async function init() {
   setTools(false); syncMobile();

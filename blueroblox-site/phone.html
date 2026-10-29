@@ -1,0 +1,548 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,interactive-widget=resizes-content">
+<meta name="theme-color" content="#060a1c">
+<title>Điều khiển máy – BLUEROBLOX</title>
+<link rel="icon" href="logo.webp">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+:root{
+  --bg:#060a1c; --bg2:#0a1233; --panel:#0e1638; --panel2:#16224f; --line:rgba(143,208,255,.14); --line2:rgba(143,208,255,.28);
+  --fg:#eef3ff; --muted:#97a5cf; --blue:#3d7bff; --sky:#8fd0ff; --ok:#3ce0b0; --wait:#ffc861; --bad:#ff6b81;
+  --font:"Be Vietnam Pro",system-ui,sans-serif; --mono:"JetBrains Mono",ui-monospace,monospace;
+  --ring:var(--wait); --top:56px;
+}
+*{box-sizing:border-box;margin:0}
+html,body{height:100%;background:var(--bg);color:var(--fg);font:14px/1.45 var(--font);-webkit-tap-highlight-color:transparent}
+body{display:flex;flex-direction:column;overflow:hidden;background:radial-gradient(120% 80% at 50% 0%,#0d1a4a 0%,var(--bg) 60%)}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+button:focus-visible,a:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--sky);outline-offset:2px}
+a{color:var(--sky)}
+svg.ic{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
+
+/* thanh trên */
+.top{height:var(--top);flex:none;display:flex;align-items:center;gap:12px;padding:0 16px;border-bottom:1px solid var(--line);background:rgba(6,10,28,.7);backdrop-filter:blur(8px)}
+.home{display:flex;align-items:center;gap:6px;color:var(--muted);text-decoration:none;font-weight:600;white-space:nowrap}
+.home:hover{color:var(--fg)}
+.dev{min-width:0;max-width:280px;background:var(--panel);border:1px solid var(--line2);color:var(--fg);border-radius:10px;padding:7px 10px;font:inherit;font-weight:600}
+.meta{display:flex;align-items:center;gap:14px;color:var(--muted);font-size:13px;min-width:0}
+.meta b{color:var(--fg);font-weight:600}
+.state{display:inline-flex;align-items:center;gap:7px;font-size:13px;color:var(--muted);margin-left:auto;white-space:nowrap}
+.state i{width:8px;height:8px;border-radius:50%;background:var(--ring);box-shadow:0 0 0 4px color-mix(in srgb,var(--ring) 22%,transparent)}
+.adminlink{font-size:12.5px;white-space:nowrap}
+
+/* khu màn hình */
+.stage{flex:1;min-height:0;display:flex;gap:18px;justify-content:center;align-items:center;padding:18px}
+.wrap{flex:1;min-width:0;height:100%;display:flex;align-items:center;justify-content:center;gap:16px}
+.frame{position:relative;border-radius:26px;padding:8px;background:#02040d;border:1px solid var(--line2);
+  box-shadow:0 0 0 1px rgba(0,0,0,.6),0 0 38px -6px color-mix(in srgb,var(--ring) 55%,transparent),0 30px 60px -30px #000;transition:box-shadow .5s}
+.frame iframe{display:block;border:0;border-radius:19px;background:#000;width:100%;height:100%}
+.veil{position:absolute;inset:8px;border-radius:19px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center;padding:24px;background:#040816;color:var(--muted)}
+.veil[hidden]{display:none}
+.veil b{color:var(--fg);font-size:16px}
+.spin{width:34px;height:34px;border-radius:50%;border:3px solid var(--line2);border-top-color:var(--sky);animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* thanh công cụ PC */
+.tools{flex:none;width:164px;max-height:100%;overflow:auto;display:grid;grid-template-columns:1fr 1fr;align-content:start;gap:2px;padding:10px 8px;border-radius:18px;background:rgba(14,22,56,.78);border:1px solid var(--line)}
+.tools h6{grid-column:1/-1;font-size:11px;font-weight:600;color:var(--muted);padding:8px 6px 3px}
+.tools h6:first-child{padding-top:2px}
+.tb{display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 2px;border-radius:12px;color:#d7e1ff;font-size:11.5px;line-height:1.2;text-align:center;transition:background .15s,color .15s}
+.tb:hover{background:var(--panel2);color:#fff}
+.tb:active{transform:scale(.96)}
+.tb.on{color:var(--sky);background:rgba(61,123,255,.16)}
+.tb.danger:hover{color:var(--bad)}
+.tb[disabled]{opacity:.35;pointer-events:none}
+
+/* thanh dưới cho điện thoại */
+.mbar{display:none}
+.sheetbg{display:none}
+
+/* kéo thả */
+.drop{position:fixed;inset:0;z-index:40;display:none;align-items:center;justify-content:center;background:rgba(3,6,18,.78);backdrop-filter:blur(3px)}
+.drop.on{display:flex}
+.drop div{border:2px dashed var(--sky);border-radius:22px;padding:42px 56px;text-align:center;background:rgba(61,123,255,.08)}
+.drop b{display:block;font-size:20px;margin-bottom:6px}
+.drop span{color:var(--muted)}
+body.dragging iframe{pointer-events:none}
+
+/* khay tải lên */
+.tray{position:fixed;right:16px;bottom:16px;z-index:30;width:min(360px,calc(100vw - 32px));display:flex;flex-direction:column;gap:8px}
+.ti{background:var(--panel);border:1px solid var(--line2);border-radius:14px;padding:11px 13px;box-shadow:0 14px 30px -14px #000}
+.ti .r{display:flex;gap:8px;align-items:baseline}
+.ti .n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
+.ti .s{font:12px var(--mono);color:var(--muted);white-space:nowrap}
+.ti .m{font-size:12.5px;color:var(--muted);margin-top:4px}
+.ti.ok .m{color:var(--ok)} .ti.err .m{color:var(--bad)}
+.ti .bar{height:4px;border-radius:4px;background:var(--line);margin-top:8px;overflow:hidden}
+.ti .bar i{display:block;height:100%;width:0;background:var(--blue);transition:width .25s}
+.ti.ok .bar i{background:var(--ok)} .ti.err .bar i{background:var(--bad)}
+.ti .x{color:var(--muted);font-size:18px;line-height:1;padding:0 2px}
+
+/* hộp thoại */
+.dlg{position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(3,6,18,.7)}
+.dlg[hidden]{display:none}
+.box{width:min(460px,100%);max-height:calc(100dvh - 32px);overflow:auto;background:var(--panel);border:1px solid var(--line2);border-radius:18px;padding:20px}
+.box h3{font-size:17px;margin-bottom:6px}
+.box p{color:var(--muted);font-size:13px;margin-bottom:12px}
+.in{width:100%;background:#070c22;border:1px solid var(--line2);color:var(--fg);border-radius:11px;padding:11px 12px;font:inherit}
+textarea.in{min-height:110px;resize:vertical}
+.acts{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
+.btn{padding:10px 16px;border-radius:11px;background:var(--blue);color:#fff;font-weight:600}
+.btn.gh{background:transparent;border:1px solid var(--line2);color:var(--fg)}
+.btn.sm{padding:6px 10px;font-size:12.5px;border-radius:9px}
+.btn.red{background:transparent;border:1px solid rgba(255,107,129,.45);color:var(--bad)}
+.apps{display:flex;flex-direction:column;gap:6px;margin-top:6px}
+.app{display:flex;align-items:center;gap:6px;padding:8px 10px;border:1px solid var(--line);border-radius:12px}
+.chips{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:6px 0 8px}
+.chips button{padding:9px 4px;border-radius:10px;border:1px solid var(--line2);background:#070c22;font-weight:600;font-size:13px;line-height:1.25}
+.chips button small{display:block;font:10.5px var(--mono);color:var(--muted);font-weight:500}
+.chips button.on{border-color:var(--sky);background:rgba(61,123,255,.16);color:#fff}
+.lbl{display:block;font-size:12.5px;color:var(--muted);margin-top:10px}
+.app span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:12.5px var(--mono)}
+.shot{display:block;max-width:100%;max-height:60dvh;margin:0 auto;border-radius:12px;border:1px solid var(--line)}
+.toast{position:fixed;left:50%;top:calc(var(--top) + 12px);transform:translateX(-50%);z-index:60;background:var(--panel2);border:1px solid var(--line2);padding:10px 16px;border-radius:12px;box-shadow:0 14px 30px -14px #000;max-width:calc(100vw - 32px)}
+.toast.bad{border-color:rgba(255,107,129,.5);color:#ffd4db}
+.toast[hidden]{display:none}
+
+/* ---------- Điện thoại / màn nhỏ ---------- */
+@media (max-width:820px){
+  :root{--top:50px}
+  .top{gap:8px;padding:0 10px}
+  .home span,.meta .spec,.adminlink{display:none}
+  .dev{max-width:46vw;padding:6px 8px;font-size:13px}
+  .meta{font-size:12px}
+  .state span{display:none}
+  .stage{padding:8px 8px calc(64px + env(safe-area-inset-bottom));gap:0}
+  .frame{border-radius:18px;padding:4px}
+  .frame iframe,.veil{border-radius:15px}
+  .veil{inset:4px}
+  .tools{position:fixed;left:0;right:0;bottom:0;z-index:45;width:auto;max-height:70dvh;border-radius:20px 20px 0 0;padding:14px 12px calc(14px + env(safe-area-inset-bottom));
+    display:grid;grid-template-columns:repeat(4,1fr);gap:4px;transform:translateY(105%);transition:transform .25s;background:var(--panel);border-color:var(--line2)}
+  .tools.open{transform:none}
+  .tools h6{grid-column:1/-1;text-align:left;padding:8px 4px 2px}
+  .tb{padding:10px 2px;font-size:12px}
+  .sheetbg.open{display:block;position:fixed;inset:0;z-index:44;background:rgba(3,6,18,.55)}
+  .mbar{display:grid;grid-template-columns:repeat(4,1fr);position:fixed;left:0;right:0;bottom:0;z-index:35;padding:6px 8px calc(6px + env(safe-area-inset-bottom));background:rgba(8,13,36,.94);border-top:1px solid var(--line);backdrop-filter:blur(8px)}
+  .mbar .tb{font-size:11px;padding:6px 2px}
+  .tray{bottom:calc(72px + env(safe-area-inset-bottom));right:8px;width:calc(100vw - 16px)}
+}
+body.focus .top,body.focus .tools,body.focus .mbar{display:none}
+body.focus .stage{padding:0}
+body.focus .frame{border-radius:0;padding:0;border:0}
+body.focus .frame iframe,body.focus .veil{border-radius:0;inset:0}
+.exitfocus{position:fixed;top:10px;right:10px;z-index:36;display:none;padding:8px 12px;border-radius:10px;background:rgba(14,22,56,.85);border:1px solid var(--line2);font-size:13px}
+body.focus .exitfocus{display:block}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<header class="top">
+  <a class="home" href="/" title="Về cửa hàng"><svg class="ic" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg><span>Cửa hàng</span></a>
+  <select class="dev" id="dev" aria-label="Chọn máy"></select>
+  <div class="meta"><span class="spec" id="spec"></span><span id="left"></span></div>
+  <a class="adminlink" id="adminlink" href="https://phone.blueroblox.shop/" target="_blank" rel="noopener" hidden>Tất cả máy (admin)</a>
+  <span class="state" id="state"><i></i><span id="statetxt">Đang kết nối…</span></span>
+</header>
+
+<main class="stage">
+  <div class="wrap" id="wrap">
+    <div class="frame" id="frame">
+      <iframe id="scr" title="Màn hình điện thoại" allow="fullscreen; autoplay; clipboard-read; clipboard-write"></iframe>
+      <div class="veil" id="veil"><div class="spin"></div><b id="veilt">Đang mở máy…</b><span id="veild"></span></div>
+    </div>
+  <aside class="tools" id="tools" aria-label="Công cụ">
+      <h6>Điều hướng</h6>
+      <button class="tb" data-key="4"><svg class="ic" viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h11a5 5 0 010 10h-3"/></svg>Quay lại</button>
+      <button class="tb" data-key="3"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/></svg>Màn chính</button>
+      <button class="tb" data-key="187"><svg class="ic" viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2"/></svg>Đa nhiệm</button>
+      <h6>Âm thanh</h6>
+      <button class="tb" data-key="24"><svg class="ic" viewBox="0 0 24 24"><path d="M4 10v4h4l5 4V6L8 10z"/><path d="M17 9v6M14 12h6"/></svg>Tăng âm</button>
+      <button class="tb" data-key="25"><svg class="ic" viewBox="0 0 24 24"><path d="M4 10v4h4l5 4V6L8 10z"/><path d="M15 12h6"/></svg>Giảm âm</button>
+      <h6>Màn hình</h6>
+      <button class="tb" data-act="display"><svg class="ic" viewBox="0 0 24 24"><rect x="7" y="2.5" width="10" height="19" rx="2"/><path d="M10 7.5h4M10 11h4M10 14.5h2"/></svg>FPS &amp; độ nét</button>
+      <button class="tb" data-act="rotate"><svg class="ic" viewBox="0 0 24 24"><path d="M20 12a8 8 0 11-3-6.2"/><path d="M20 4v4h-4"/></svg>Xoay</button>
+      <button class="tb" data-act="shot"><svg class="ic" viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>Chụp màn</button>
+      <button class="tb" data-act="focus"><svg class="ic" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>Toàn màn</button>
+      <button class="tb" data-act="reload"><svg class="ic" viewBox="0 0 24 24"><path d="M4 4v6h6"/><path d="M5.5 15a7 7 0 101.4-7.4L4 10"/></svg>Tải lại hình</button>
+      <button class="tb" data-act="mode" id="modebtn"><svg class="ic" viewBox="0 0 24 24"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg><span id="modetxt">Hình: Nhanh</span></button>
+      <h6>Tệp &amp; ứng dụng</h6>
+      <button class="tb" data-act="upload"><svg class="ic" viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v4h16v-4"/></svg>Tải file / APK</button>
+      <button class="tb" data-act="fromurl"><svg class="ic" viewBox="0 0 24 24"><path d="M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 00-5.7 0l-3 3a4 4 0 005.7 5.7l1-1"/></svg>Cài từ link</button>
+      <button class="tb" data-act="apps"><svg class="ic" viewBox="0 0 24 24"><rect x="4" y="4" width="6" height="6" rx="1.5"/><rect x="14" y="4" width="6" height="6" rx="1.5"/><rect x="4" y="14" width="6" height="6" rx="1.5"/><rect x="14" y="14" width="6" height="6" rx="1.5"/></svg>Ứng dụng</button>
+      <button class="tb" data-act="text"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 10h.01M11 10h.01M15 10h.01M7 14h10"/></svg>Dán chữ</button>
+      <button class="tb" data-act="openurl"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 010 18M12 3a14 14 0 000 18"/></svg>Mở web</button>
+      <h6>Máy</h6>
+      <button class="tb danger" data-act="reboot"><svg class="ic" viewBox="0 0 24 24"><path d="M12 3v8"/><path d="M6.3 6.3a8 8 0 1011.4 0"/></svg>Khởi động lại</button>
+    </aside>
+  </div>
+
+
+</main>
+
+<div class="sheetbg" id="sheetbg"></div>
+<nav class="mbar" aria-label="Điều hướng nhanh">
+  <button class="tb" data-key="4"><svg class="ic" viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h11a5 5 0 010 10h-3"/></svg>Quay lại</button>
+  <button class="tb" data-key="3"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/></svg>Màn chính</button>
+  <button class="tb" data-key="187"><svg class="ic" viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2"/></svg>Đa nhiệm</button>
+  <button class="tb" id="morebtn"><svg class="ic" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/></svg>Công cụ</button>
+</nav>
+<button class="exitfocus" id="exitfocus">Thoát toàn màn</button>
+
+<div class="drop" id="drop"><div><b>Thả file vào đây</b><span>File APK sẽ tự cài · file khác lưu vào thư mục Download</span></div></div>
+<div class="tray" id="tray" aria-live="polite"></div>
+<input type="file" id="file" multiple hidden>
+
+<div class="dlg" id="dlg" hidden><div class="box" role="dialog" aria-modal="true" aria-labelledby="dlgt">
+  <h3 id="dlgt"></h3><p id="dlgd"></p><div id="dlgb"></div>
+  <div class="acts"><button class="btn gh" id="dlgno">Đóng</button><button class="btn" id="dlgok">Gửi</button></div>
+</div></div>
+<div class="toast" id="toast" hidden></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script>
+"use strict";
+const CFG = { supabaseUrl: "https://nprftgodswlpzomcttal.supabase.co", supabaseAnonKey: "sb_publishable_qfNcnOMv70nq5LIlYXDJzg_UtdWHVze" };
+const PHONE = "https://phone.blueroblox.shop", API = PHONE + "/cpapi";
+const CHUNK = 8 * 1024 * 1024;
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const mb = n => n >= 1073741824 ? (n / 1073741824).toFixed(2) + " GB" : (n / 1048576).toFixed(n < 10485760 ? 1 : 0) + " MB";
+const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} } };
+
+const sb = window.supabase.createClient(CFG.supabaseUrl, CFG.supabaseAnonKey);
+let token = "", me = null, phones = [], cur = null, rotated = false, online = null;
+let mode = store.get("cp_player") === "broadway" ? "broadway" : "webcodecs";
+
+/* ---------- giao diện chung ---------- */
+let toastT;
+function toast(msg, bad) { const t = $("toast"); t.textContent = msg; t.className = "toast" + (bad ? " bad" : ""); t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, bad ? 5200 : 3000); }
+function setState(kind, txt) {
+  document.documentElement.style.setProperty("--ring", kind === "ok" ? "var(--ok)" : kind === "bad" ? "var(--bad)" : "var(--wait)");
+  $("statetxt").textContent = txt;
+}
+function veil(on, title, desc, spin = true) {
+  $("veil").hidden = !on; if (!on) return;
+  $("veilt").textContent = title || ""; $("veild").innerHTML = desc || "";
+  $("veil").querySelector(".spin").style.display = spin ? "" : "none";
+}
+function ask({ title, desc, body = "", ok = "Gửi", onOk, noOk }) {
+  $("dlgt").textContent = title; $("dlgd").innerHTML = desc || ""; $("dlgd").hidden = !desc; $("dlgb").innerHTML = body;
+  $("dlgok").textContent = ok; $("dlgok").hidden = !!noOk; $("dlg").hidden = false;
+  const first = $("dlgb").querySelector("input,textarea"); if (first) setTimeout(() => first.focus(), 30);
+  $("dlgok").onclick = async () => { const b = $("dlgok"); b.disabled = true; try { if (await onOk() !== false) $("dlg").hidden = true; } finally { b.disabled = false; } };
+}
+$("dlgno").onclick = () => $("dlg").hidden = true;
+$("dlg").onclick = e => { if (e.target.id === "dlg") $("dlg").hidden = true; };
+document.addEventListener("keydown", e => { if (e.key === "Escape") { $("dlg").hidden = true; closeSheet(); document.body.classList.remove("focus"); } });
+
+/* ---------- gọi API server ---------- */
+async function api(path, { method = "GET", json, body, blob, headers = {} } = {}, retry = true) {
+  const h = { Authorization: "Bearer " + token, ...headers };
+  if (json) h["Content-Type"] = "application/json";
+  const r = await fetch(API + "/" + path, { method, headers: h, body: json ? JSON.stringify(json) : body, credentials: "include" });
+  if (r.status === 401 && retry) { await refreshToken(); return api(path, { method, json, body, blob, headers }, false); }
+  if (blob && r.ok) return r.blob();
+  let j = {}; try { j = await r.json(); } catch (e) {}
+  if (!r.ok) { const err = new Error(j.error || ("Lỗi " + r.status)); err.status = r.status; err.data = j; throw err; }
+  return j;
+}
+async function refreshToken() { const { data } = await sb.auth.refreshSession(); if (data && data.session) token = data.session.access_token; }
+async function openSession() { await api("session", { method: "POST", json: {} }); }
+
+/* ---------- máy ---------- */
+function streamUrl(p) {
+  const udid = "127.0.0.1:" + p.port;
+  const ws = "wss://" + new URL(PHONE).host + "/?action=proxy-adb&remote=" + encodeURIComponent("tcp:8886") + "&udid=" + encodeURIComponent(udid);
+  return PHONE + "/?v=" + Date.now() + "#!action=stream&udid=" + encodeURIComponent(udid) + "&player=" + mode + "&ws=" + encodeURIComponent(ws) + "&fitToScreen=1&captureKeyboard=1";
+}
+function resOf(p) { const m = /^(\d+)x(\d+)$/.exec(p && p.res || ""); return m ? [+m[1], +m[2]] : [720, 1280]; }
+function fit() {
+  const fr = $("frame"), wrap = $("wrap");
+  if (document.body.classList.contains("focus")) { fr.style.width = "100vw"; fr.style.height = "100dvh"; return; }
+  let [w, h] = resOf(cur); if (rotated) [w, h] = [h, w];
+  const small = innerWidth <= 820, pad = small ? 8 : 16, bar = small ? 0 : 52;   // 52px: cột nút của trình điều khiển
+  const W = wrap.clientWidth - (small ? 0 : $("tools").offsetWidth + 16), H = wrap.clientHeight;
+  let vh = H - pad, vw = vh * w / h;
+  if (vw + bar + pad > W) { vw = W - bar - pad; vh = vw * h / w; }
+  fr.style.width = Math.max(220, Math.round(vw + bar + pad)) + "px";
+  fr.style.height = Math.max(300, Math.round(vh + pad)) + "px";
+}
+addEventListener("resize", fit);
+
+function leftText(p) {
+  if (!p.expires_at) return "";
+  const ms = new Date(p.expires_at) - Date.now();
+  if (ms <= 0) return "Đã hết hạn";
+  const d = Math.floor(ms / 86400000), h = Math.floor(ms % 86400000 / 3600000), m = Math.floor(ms % 3600000 / 60000);
+  return "Còn " + (d ? d + " ngày " + h + " giờ" : h ? h + " giờ " + m + " phút" : m + " phút");
+}
+function renderHead() {
+  $("dev").innerHTML = phones.map(p => `<option value="${p.id}"${cur && p.id === cur.id ? " selected" : ""}>${esc(p.name)}${p.status !== "active" ? " (" + ({ pending: "đang tạo", expired: "tạm dừng" }[p.status] || p.status) + ")" : ""}</option>`).join("");
+  if (!cur) return;
+  $("spec").innerHTML = `<b>${cur.ram}GB</b> RAM · <b>${cur.cpu}</b> nhân · ${esc(cur.res || "")} · <b>${cur.fps || 30}</b> FPS`;
+  $("left").textContent = leftText(cur);
+  document.title = cur.name + " – Điều khiển máy";
+}
+function setTools(on) { document.querySelectorAll(".tools .tb, .mbar .tb[data-key]").forEach(b => { b.disabled = !on; }); }
+
+async function loadPhones() {
+  const uid = me.id, want = new URLSearchParams(location.search).get("id");
+  const { data } = await sb.from("cloud_phones").select("*").eq("user_id", uid).in("status", ["active", "pending", "expired"]).order("created_at", { ascending: false });
+  phones = data || [];
+  if (want && !phones.some(p => p.id === want)) {
+    const { data: one } = await sb.from("cloud_phones").select("*").eq("id", want).maybeSingle();   // admin mở máy của khách
+    if (one) phones.unshift(one);
+  }
+  return phones.find(p => p.id === want) || phones.find(p => p.status === "active") || phones[0] || null;
+}
+function openPhone(p) {
+  cur = p; rotated = false; online = null; renderHead(); fit();
+  if (!p) { setTools(false); setState("bad", "Không có máy"); veil(true, "Bạn chưa có máy nào đang thuê", '<a href="/">Về cửa hàng để thuê máy</a>', false); $("scr").src = "about:blank"; return; }
+  const u = new URL(location.href); u.searchParams.set("id", p.id); history.replaceState(null, "", u);
+  if (p.status !== "active" || !p.port) {
+    setTools(false); $("scr").src = "about:blank";
+    if (p.status === "pending") { setState("wait", "Đang tạo máy"); veil(true, "Máy đang được tạo", "Khoảng 2–3 phút, trang tự mở khi xong."); }
+    else { setState("bad", "Máy tạm dừng"); veil(true, "Máy đã hết hạn và đang tạm dừng", 'Gia hạn trong 30 phút để giữ dữ liệu. <a href="/">Về cửa hàng để gia hạn</a>', false); }
+    return;
+  }
+  setTools(true); setState("wait", "Đang kết nối…"); veil(true, "Đang mở màn hình máy…", "");
+  $("scr").src = streamUrl(p);
+  checkInfo();
+}
+$("scr").addEventListener("load", () => { if (cur && cur.status === "active" && $("scr").src !== "about:blank") setTimeout(() => veil(false), 900); });
+$("dev").onchange = () => openPhone(phones.find(p => p.id === $("dev").value));
+
+async function checkInfo() {
+  if (!cur || cur.status !== "active") return;
+  try {
+    const i = await api(cur.id + "/info");
+    if (i.expires_at) cur.expires_at = i.expires_at;
+    if (i.fps) cur.fps = i.fps; if (i.fps_range) cur.fpsRange = i.fps_range;
+    online = i.online; setState(online ? "ok" : "wait", online ? "Đang chạy" : "Máy đang khởi động…");
+  } catch (e) { setState("bad", e.status === 409 ? "Máy chưa chạy" : "Mất kết nối server"); }
+  renderHead();
+}
+setInterval(checkInfo, 20000);
+setInterval(async () => {          // máy đang tạo / tạm dừng → tự cập nhật
+  if (!cur || cur.status === "active") return;
+  const { data } = await sb.from("cloud_phones").select("*").eq("id", cur.id).maybeSingle();
+  if (data && data.status !== cur.status) { Object.assign(cur, data); openPhone(cur); }
+}, 6000);
+setInterval(() => cur && ($("left").textContent = leftText(cur)), 30000);
+setInterval(() => openSession().catch(() => {}), 2 * 3600 * 1000);
+
+/* ---------- phím & công cụ ---------- */
+async function key(code) {
+  try { await api(cur.id + "/key", { method: "POST", json: { code } }); } catch (e) { toast(e.message, 1); }
+}
+document.addEventListener("click", e => {
+  const k = e.target.closest("[data-key]"); if (k && !k.disabled) { key(+k.dataset.key); return; }
+  const a = e.target.closest("[data-act]"); if (a && !a.disabled) { closeSheet(); ACT[a.dataset.act](); }
+});
+const ACT = {
+  async rotate() {
+    rotated = !rotated; fit();
+    try { await api(cur.id + "/rotate", { method: "POST", json: { dir: rotated ? 1 : 0 } }); } catch (e) { toast(e.message, 1); }
+  },
+  async shot() {
+    toast("Đang chụp màn hình…");
+    try {
+      const b = await api(cur.id + "/shot", { blob: true }), url = URL.createObjectURL(b);
+      const name = "manhinh-" + new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-") + ".png";
+      ask({ title: "Ảnh chụp màn hình", body: `<img class="shot" src="${url}" alt="Ảnh chụp màn hình máy">`, ok: "Tải ảnh về", onOk: () => { const l = document.createElement("a"); l.href = url; l.download = name; l.click(); } });
+    } catch (e) { toast(e.message, 1); }
+  },
+  focus() {
+    document.body.classList.add("focus"); fit();
+    const el = document.documentElement; if (el.requestFullscreen) el.requestFullscreen().catch(() => {});
+  },
+  reload() { if (cur) openPhone(cur); },
+  display() {
+    const [lo, hi] = cur.fpsRange || [10, 120];
+    const FPS = [30, 60, 90, 120].filter(v => v >= lo && v <= hi);
+    const RES = [["540x960", "Nhẹ máy"], ["720x1280", "HD"], ["720x1600", "HD+ dài"], ["1080x1920", "Full HD"], ["1080x2340", "FHD+ dài"], ["1080x2400", "FHD+ 20:9"], ["1280x720", "HD ngang"], ["1920x1080", "FHD ngang"]];
+    let fps = cur.fps || 30, res = cur.res || "720x1280";
+    const draw = () => {
+      $("d-fps").innerHTML = FPS.map(v => `<button type="button" data-fps="${v}" class="${v === fps ? "on" : ""}">${v}<small>FPS</small></button>`).join("");
+      $("d-res").innerHTML = RES.map(r => `<button type="button" data-res="${r[0]}" class="${r[0] === res ? "on" : ""}">${r[1]}<small>${r[0]}</small></button>`).join("");
+    };
+    ask({ title: "FPS & độ phân giải", desc: `Đang dùng <b>${esc(cur.res)}</b> · <b>${cur.fps || 30} FPS</b>. Áp dụng xong máy tự khởi động lại (1–3 phút), <b>dữ liệu và ứng dụng giữ nguyên</b>. FPS cao mượt hơn nhưng tốn mạng và CPU hơn.`,
+      body: `<span class="lbl">FPS (${lo}–${hi})</span><div class="chips" id="d-fps"></div><input class="in" id="d-fpsx" type="number" min="${lo}" max="${hi}" inputmode="numeric" placeholder="Hoặc tự nhập FPS">
+             <span class="lbl">Độ phân giải</span><div class="chips" id="d-res"></div><input class="in" id="d-resx" type="text" autocomplete="off" placeholder="Hoặc tự nhập, VD 1080x2400">`,
+      ok: "Áp dụng",
+      onOk: async () => {
+        if (!(fps >= lo && fps <= hi)) { toast(`FPS phải từ ${lo} đến ${hi}.`, 1); return false; }
+        if (!/^\d{3,4}x\d{3,4}$/.test(res)) { toast("Độ phân giải phải dạng rộng x cao, VD 1080x1920.", 1); return false; }
+        if (fps === (cur.fps || 30) && res === cur.res) { toast("Bạn chưa thay đổi gì."); return false; }
+        try {
+          const j = await api(cur.id + "/display", { method: "POST", json: { fps, res } });
+          setTools(false); setState("wait", "Đang đổi cấu hình…"); veil(true, `Đang chuyển sang ${res} · ${fps} FPS…`, "Khoảng 1–3 phút, màn hình tự mở lại khi xong."); $("scr").src = "about:blank";
+          const item = trayItem(`${res} · ${fps} FPS`, 0);
+          if (await pollJob(j.job, item)) { cur.fps = fps; cur.res = res; }
+          openPhone(cur);
+        } catch (e) { toast(e.message, 1); return false; }
+      } });
+    draw();
+    $("d-fps").onclick = e => { const b = e.target.closest("[data-fps]"); if (b) { fps = +b.dataset.fps; $("d-fpsx").value = ""; draw(); } };
+    $("d-res").onclick = e => { const b = e.target.closest("[data-res]"); if (b) { res = b.dataset.res; $("d-resx").value = ""; draw(); } };
+    $("d-fpsx").oninput = e => { const v = parseInt(e.target.value, 10); if (v > 0) { fps = v; draw(); } };
+    $("d-resx").oninput = e => { const v = e.target.value.toLowerCase().replace(/\s+/g, "").replace(/[*×]/g, "x"); if (v) { res = v; draw(); } };
+  },
+  mode() {
+    mode = mode === "webcodecs" ? "broadway" : "webcodecs"; store.set("cp_player", mode); syncMode();
+    toast(mode === "webcodecs" ? "Chế độ hình Nhanh (mượt, ít trễ)" : "Chế độ hình Tương thích (dùng khi bị đen/giật)"); if (cur) openPhone(cur);
+  },
+  upload() { $("file").click(); },
+  fromurl() {
+    ask({ title: "Cài từ link", desc: "Dán link tải file hoặc APK (Google Drive công khai, APKPure, MediaFire…). Server sẽ tự tải về rồi đưa vào máy, APK thì tự cài.",
+      body: '<input class="in" id="f-url" type="url" inputmode="url" placeholder="https://…">', ok: "Tải & cài",
+      onOk: async () => { const u = $("f-url").value.trim(); if (!/^https?:\/\//.test(u)) { toast("Link phải bắt đầu bằng http:// hoặc https://", 1); return false; }
+        const item = trayItem(u.split("/").pop().slice(0, 60) || "Tải từ link", 0); item.msg("Đang gửi yêu cầu…");
+        try { const j = await api(cur.id + "/fromurl", { method: "POST", json: { url: u } }); pollJob(j.job, item); } catch (e) { item.fail(e.message); } } });
+  },
+  async apps() {
+    ask({ title: "Ứng dụng đã cài", desc: "Ứng dụng bạn tự cài thêm trên máy.", body: '<div class="apps" id="applist"><div class="spin" style="margin:16px auto"></div></div>', noOk: true });
+    try {
+      const { apps } = await api(cur.id + "/apps");
+      $("applist").innerHTML = apps.length ? apps.map(p => `<div class="app"><span title="${esc(p)}">${esc(p)}</span>
+        <button class="btn sm" data-app="launch" data-pkg="${esc(p)}">Mở</button><button class="btn sm gh" data-app="stop" data-pkg="${esc(p)}">Dừng</button>
+        <button class="btn sm gh" data-app="clear" data-pkg="${esc(p)}">Xoá dữ liệu</button><button class="btn sm red" data-app="uninstall" data-pkg="${esc(p)}">Gỡ</button></div>`).join("")
+        : '<p>Chưa cài thêm ứng dụng nào. Bấm “Tải file / APK” hoặc mở CH Play trên máy để cài.</p>';
+    } catch (e) { $("applist").innerHTML = `<p style="color:var(--bad)">${esc(e.message)}</p>`; }
+  },
+  text() {
+    ask({ title: "Dán chữ vào máy", desc: "Bấm vào ô nhập trên máy trước, rồi dán chữ ở đây (tài khoản, mật khẩu, link…). Chỉ chữ <b>không dấu</b>; chữ có dấu hãy gõ thẳng trên màn hình máy.",
+      body: '<textarea class="in" id="f-text" maxlength="2000" placeholder="Nội dung cần dán…"></textarea>', ok: "Dán vào máy",
+      onOk: async () => { const t = $("f-text").value; if (!t) return false; try { await api(cur.id + "/text", { method: "POST", json: { text: t } }); toast("Đã dán vào máy."); } catch (e) { toast(e.message, 1); return false; } } });
+  },
+  openurl() {
+    ask({ title: "Mở trang web trên máy", desc: "Máy sẽ mở link này bằng trình duyệt.", body: '<input class="in" id="f-open" type="url" inputmode="url" placeholder="https://…">', ok: "Mở trên máy",
+      onOk: async () => { let u = $("f-open").value.trim(); if (u && !/^https?:\/\//.test(u)) u = "https://" + u; if (!u) return false;
+        try { await api(cur.id + "/url", { method: "POST", json: { url: u } }); toast("Đã mở trên máy."); } catch (e) { toast(e.message, 1); return false; } } });
+  },
+  reboot() {
+    ask({ title: "Khởi động lại máy?", desc: "Máy sẽ tắt rồi bật lại trong khoảng 1–3 phút. Dữ liệu và ứng dụng vẫn giữ nguyên.", ok: "Khởi động lại",
+      onOk: async () => {
+        try {
+          const j = await api(cur.id + "/reboot", { method: "POST", json: {} });
+          setTools(false); setState("wait", "Đang khởi động lại…"); veil(true, "Đang khởi động lại máy…", "Khoảng 1–3 phút, màn hình tự mở lại khi xong."); $("scr").src = "about:blank";
+          const item = trayItem("Khởi động lại " + cur.name, 0); await pollJob(j.job, item); openPhone(cur);
+        } catch (e) { toast(e.message, 1); }
+      } });
+  },
+};
+document.addEventListener("click", async e => {
+  const b = e.target.closest("[data-app]"); if (!b) return;
+  const act = b.dataset.app, pkg = b.dataset.pkg;
+  if (act === "uninstall" && !confirm("Gỡ ứng dụng " + pkg + "?")) return;
+  if (act === "clear" && !confirm("Xoá toàn bộ dữ liệu của " + pkg + "? (đăng xuất, mất tiến trình)")) return;
+  b.disabled = true;
+  try { await api(cur.id + "/" + act, { method: "POST", json: { pkg } }); toast({ launch: "Đã mở ", stop: "Đã dừng ", clear: "Đã xoá dữ liệu ", uninstall: "Đã gỡ " }[act] + pkg); if (act === "uninstall") b.closest(".app").remove(); else if (act === "launch") $("dlg").hidden = true; }
+  catch (err) { toast(err.message, 1); } finally { b.disabled = false; }
+});
+function syncMode() { $("modetxt").textContent = mode === "webcodecs" ? "Hình: Nhanh" : "Hình: Tương thích"; $("modebtn").classList.toggle("on", mode !== "webcodecs"); }
+$("exitfocus").onclick = () => { document.body.classList.remove("focus"); if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); fit(); };
+document.addEventListener("fullscreenchange", () => { if (!document.fullscreenElement && document.body.classList.contains("focus")) { document.body.classList.remove("focus"); fit(); } });
+
+/* ---------- bảng công cụ trên điện thoại ---------- */
+function closeSheet() { $("tools").classList.remove("open"); $("sheetbg").classList.remove("open"); }
+$("morebtn").onclick = () => { $("tools").classList.add("open"); $("sheetbg").classList.add("open"); };
+$("sheetbg").onclick = closeSheet;
+
+/* ---------- tải file lên (chia nhỏ, tự thử lại) ---------- */
+function trayItem(name, size) {
+  const el = document.createElement("div"); el.className = "ti";
+  el.innerHTML = `<div class="r"><span class="n"></span><span class="s"></span><button class="x" aria-label="Ẩn">×</button></div><div class="m">Đang chờ…</div><div class="bar"><i></i></div>`;
+  el.querySelector(".n").textContent = name; el.querySelector(".s").textContent = size ? mb(size) : "";
+  el.querySelector(".x").onclick = () => el.remove();
+  $("tray").prepend(el);
+  return {
+    el, msg(t) { el.querySelector(".m").textContent = t; },
+    pct(p) { el.querySelector(".bar i").style.width = Math.round(p * 100) + "%"; },
+    done(t) { el.classList.add("ok"); this.pct(1); this.msg(t); setTimeout(() => el.remove(), 9000); },
+    fail(t) { el.classList.add("err"); this.pct(1); this.msg(t); },
+  };
+}
+async function pollJob(jid, item) {
+  const t0 = Date.now();
+  while (Date.now() - t0 < 40 * 60 * 1000) {
+    await sleep(1500);
+    try {
+      const j = await api("job?id=" + jid);
+      if (j.state === "done") { item.done(j.msg); return true; }
+      if (j.state === "error") { item.fail(j.msg); return false; }
+      item.msg(j.msg); item.el.querySelector(".bar i").style.width = "100%"; item.el.querySelector(".bar i").style.opacity = ".45";
+    } catch (e) { if (e.status === 404) { item.fail("Không theo dõi được (server vừa khởi động lại)."); return false; } }
+  }
+  item.fail("Quá lâu chưa xong — kiểm tra lại trên máy."); return false;
+}
+const queue = []; let busyUp = false;
+function addFiles(list) {
+  if (!cur || cur.status !== "active") { toast("Máy chưa chạy, chưa tải file được.", 1); return; }
+  for (const f of list) {
+    if (!f.size) { toast(f.name + ": file rỗng.", 1); continue; }
+    if (f.size > 4 * 1073741824) { toast(f.name + ": lớn hơn 4GB.", 1); continue; }
+    const it = trayItem(f.name, f.size); it.msg(/\.apk$/i.test(f.name) ? "Chờ tải lên — sẽ tự cài" : "Chờ tải lên");
+    queue.push({ f, it, pid: cur.id });
+  }
+  runQueue();
+}
+async function runQueue() {
+  if (busyUp) return; busyUp = true;
+  while (queue.length) {
+    const { f, it, pid } = queue.shift();
+    try { await upOne(f, it, pid); } catch (e) { it.fail(e.message || "Tải lên lỗi."); }
+  }
+  busyUp = false;
+}
+async function upOne(f, it, pid) {
+  const id = (crypto.randomUUID ? crypto.randomUUID().replace(/-/g, "") : Math.random().toString(36).slice(2) + Date.now().toString(36)).slice(0, 24).toLowerCase();
+  let off = 0, t0 = Date.now();
+  while (off < f.size) {
+    let j, tries = 0;
+    for (;;) {
+      try {
+        j = await api(`${pid}/upload?id=${id}&name=${encodeURIComponent(f.name)}&total=${f.size}&off=${off}`,
+          { method: "POST", body: f.slice(off, off + CHUNK), headers: { "Content-Type": "application/octet-stream" } });
+        break;
+      } catch (e) {
+        if (e.status === 409 && e.data && e.data.size != null) { j = { size: e.data.size }; break; }
+        if (e.status && e.status < 500 && e.status !== 408) throw e;
+        if (++tries > 5) throw new Error("Mạng chập chờn, tải lên thất bại. Thử lại sau.");
+        it.msg("Mạng chập chờn, đang thử lại…"); await sleep(1500 * tries);
+      }
+    }
+    off = j.size; it.pct(off / f.size * .96);
+    const sp = off / Math.max(1, (Date.now() - t0) / 1000);
+    it.msg(`Đang tải lên ${Math.round(off / f.size * 100)}% · ${mb(sp)}/s`);
+    if (j.job) { it.msg(/\.apk$/i.test(f.name) ? "Đang cài ứng dụng…" : "Đang chép vào máy…"); await pollJob(j.job, it); return; }
+  }
+}
+$("file").onchange = () => { addFiles([...$("file").files]); $("file").value = ""; };
+let dragN = 0;
+const hasFiles = e => e.dataTransfer && [...e.dataTransfer.types].includes("Files");
+addEventListener("dragenter", e => { if (!hasFiles(e)) return; e.preventDefault(); dragN++; document.body.classList.add("dragging"); $("drop").classList.add("on"); });
+addEventListener("dragover", e => { if (hasFiles(e)) e.preventDefault(); });
+addEventListener("dragleave", e => { if (!hasFiles(e)) return; if (--dragN <= 0) { dragN = 0; document.body.classList.remove("dragging"); $("drop").classList.remove("on"); } });
+addEventListener("drop", e => { if (!hasFiles(e)) return; e.preventDefault(); dragN = 0; document.body.classList.remove("dragging"); $("drop").classList.remove("on"); addFiles([...e.dataTransfer.files]); });
+document.addEventListener("paste", e => { const fs = [...(e.clipboardData && e.clipboardData.files || [])]; if (fs.length && $("dlg").hidden) addFiles(fs); });
+
+/* ---------- khởi động trang ---------- */
+(async function init() {
+  syncMode(); setTools(false);
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { setState("bad", "Chưa đăng nhập"); veil(true, "Bạn chưa đăng nhập", '<a href="/">Về cửa hàng để đăng nhập</a>, rồi bấm “Điều khiển” trên máy của bạn.', false); return; }
+  token = session.access_token; me = session.user;
+  sb.auth.onAuthStateChange((_e, s) => { if (s) token = s.access_token; });
+  try { const s = await api("session", { method: "POST", json: {} }); if (s.admin) $("adminlink").hidden = false; }
+  catch (e) { setState("bad", "Không kết nối được server"); veil(true, "Không kết nối được máy chủ điện thoại", esc(e.message) + '<br><a href="">Tải lại trang</a>', false); return; }
+  openPhone(await loadPhones());
+})();
+</script>
+</body>
+</html>

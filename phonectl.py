@@ -110,20 +110,52 @@ def tune(name):
 PRE_DIR = os.path.expanduser("~/apk-cai-san")   # bỏ file .apk vào đây → mọi máy mới tự cài sẵn (VD: trình duyệt Chrome/Firefox)
 def preinstall(name, port, force=False):
     """Cài các APK trong ~/apk-cai-san vào máy (mỗi APK chỉ cài 1 lần / máy, lưu dấu trong /data của máy)."""
-    try: apks = sorted(f for f in os.listdir(PRE_DIR) if f.lower().endswith(".apk"))
+    try: apks = sorted(f for f in os.listdir(PRE_DIR) if f.lower().endswith((".apk", ".apks", ".apkm", ".xapk")))
     except OSError: return
     for f in apks:
         mark = "/data/local/tmp/.cp_pre_" + re.sub(r"[^\w.-]", "_", f)
         if not force and sh(["docker", "exec", name, "/system/bin/sh", "-c", f"test -f {mark} && echo y"]).stdout.strip() == "y":
             continue
-        tmp = "/tmp/pre_" + re.sub(r"[^\w.-]", "_", f)
-        if not tmp.endswith(".apk"): tmp += ".apk"
-        sh(["docker", "cp", os.path.join(PRE_DIR, f), f"{WSNAME}:{tmp}"])
-        r = sh(["docker", "exec", WSNAME, "adb", "-s", f"127.0.0.1:{port}", "install", "-r", "-g", tmp])
-        sh(["docker", "exec", WSNAME, "rm", "-f", tmp])
+        r = install_file(port, os.path.join(PRE_DIR, f))
         if "Success" in (r.stdout or ""):
             sh(["docker", "exec", name, "/system/bin/sh", "-c", f"touch {mark}"]); print(f"   + Đã cài sẵn {f} cho {name}")
         else: print(f"   ! Cài {f} cho {name} lỗi: {((r.stdout or '') + (r.stderr or ''))[-200:]}")
+
+def install_file(port, path):
+    """Cài 1 file: .apk thường, hoặc gói nhiều phần .apks/.apkm/.xapk (VD Chrome, Gmail tải từ APKMirror)."""
+    import zipfile, tempfile, shutil
+    base = re.sub(r"[^\w.-]", "_", os.path.basename(path))
+    if path.lower().endswith(".apk"):
+        tmp = "/tmp/pre_" + base
+        sh(["docker", "cp", path, f"{WSNAME}:{tmp}"])
+        r = sh(["docker", "exec", WSNAME, "adb", "-s", f"127.0.0.1:{port}", "install", "-r", "-g", tmp])
+        sh(["docker", "exec", WSNAME, "rm", "-f", tmp]); return r
+    d = tempfile.mkdtemp(prefix="cpb_"); rdir = "/tmp/preb_" + base
+    try:
+        with zipfile.ZipFile(path) as z:
+            names = [n for n in z.namelist() if n.lower().endswith(".apk") and "/" not in n.strip("/")]
+            for n in names: z.extract(n, d)
+        if not names: return subprocess.CompletedProcess([], 1, "", "gói không có file .apk bên trong")
+        sh(["docker", "exec", WSNAME, "rm", "-rf", rdir]); sh(["docker", "cp", d, f"{WSNAME}:{rdir}"])
+        r = sh(["docker", "exec", WSNAME, "adb", "-s", f"127.0.0.1:{port}", "install-multiple", "-r", "-g"] + [f"{rdir}/{n}" for n in names])
+        sh(["docker", "exec", WSNAME, "rm", "-rf", rdir]); return r
+    except zipfile.BadZipFile:
+        return subprocess.CompletedProcess([], 1, "", "file gói hỏng hoặc bị mã hoá")
+    finally: shutil.rmtree(d, ignore_errors=True)
+
+# Cho phép trình duyệt / Gmail / app quản lý file cài APK (khách khỏi phải bật "Cài ứng dụng không rõ nguồn")
+PERM_SH = ("for p in com.android.chrome org.mozilla.firefox com.google.android.gm com.google.android.documentsui "
+           "com.android.documentsui com.google.android.apps.nbu.files $(pm list packages -3 2>/dev/null | cut -d: -f2); do "
+           "pm path $p >/dev/null 2>&1 && appops set $p REQUEST_INSTALL_PACKAGES allow >/dev/null 2>&1; done; "
+           "settings put secure install_non_market_apps 1 >/dev/null 2>&1; true")
+def grant_perms(name):
+    sh(["docker", "exec", name, "/system/bin/sh", "-c", PERM_SH])
+
+def cmd_perms(a):
+    """Mở quyền cài APK cho mọi máy đang chạy (chương trình nền tự gọi mỗi 5 phút → app khách cài sau cũng được mở)."""
+    running = set((sh(["docker", "ps", "--format", "{{.Names}}"]).stdout or "").split())
+    for p in load()["phones"]:
+        if p["name"] in running: grant_perms(p["name"])
 
 def cmd_preinstall(a):
     """Cài APK trong ~/apk-cai-san cho máy đang chạy: phonectl.py preinstall TÊN_MÁY  hoặc  --all"""
@@ -132,7 +164,7 @@ def cmd_preinstall(a):
         if a.all or p["name"] == a.name:
             if sh(["docker", "exec", WSNAME, "adb", "-s", f"127.0.0.1:{p['port']}", "get-state"]).stdout.strip() != "device":
                 adb_connect(p["port"])
-            preinstall(p["name"], p["port"], a.force)
+            preinstall(p["name"], p["port"], a.force); grant_perms(p["name"])
 
 def wait_boot(name, port):
     """Chờ Android khởi động xong rồi mới kết nối (kết nối sớm → màn đen)."""
@@ -147,7 +179,7 @@ def wait_boot(name, port):
         adb_connect(port)
         r = sh(["docker", "exec", WSNAME, "adb", "-s", f"127.0.0.1:{port}", "get-state"])
         if (r.stdout or "").strip() == "device":
-            preinstall(name, port); return True
+            preinstall(name, port); grant_perms(name); return True
         time.sleep(4)
     return False
 def fmt(dt): return dt.strftime("%d/%m/%Y %H:%M")
@@ -314,6 +346,7 @@ def main():
     w = sub.add_parser("waitboot"); w.add_argument("name"); w.set_defaults(f=cmd_waitboot)
     g = sub.add_parser("reconfig"); g.add_argument("name"); g.add_argument("--fps", type=int, default=0); g.add_argument("--res", default=""); g.set_defaults(f=cmd_reconfig)
     sub.add_parser("capacity").set_defaults(f=cmd_capacity)
+    sub.add_parser("perms").set_defaults(f=cmd_perms)
     pi = sub.add_parser("preinstall"); pi.add_argument("name", nargs="?", default=""); pi.add_argument("--all", action="store_true"); pi.add_argument("--force", action="store_true"); pi.set_defaults(f=cmd_preinstall)
     a = ap.parse_args()
     if not getattr(a, "cmd", None): ap.print_help(); sys.exit(0)

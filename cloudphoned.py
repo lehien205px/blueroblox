@@ -318,5 +318,8 @@ if __name__ == "__main__":
             except Exception as e: print("lỗi báo cáo tài nguyên:", e)
             try: do_locks()
             except Exception as e: print("lỗi khoá máy:", e)
+        if n % 20 == 5:                     # ~5 phút: mở quyền cài APK cho Chrome/Firefox/app khách mới cài
+            try: phonectl(["perms"])
+            except Exception as e: print("lỗi mở quyền APK:", e)
         n += 1
         time.sleep(POLL)

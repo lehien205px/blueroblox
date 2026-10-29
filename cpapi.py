@@ -137,6 +137,31 @@ def whoami(token):
     return me
 
 
+def is_locked(p):
+    if not p.get("locked"): return False
+    u = p.get("locked_until")
+    if not u: return True
+    try:
+        return datetime_parse(u) > time.time()
+    except Exception:
+        return True
+
+
+def datetime_parse(s):
+    import datetime as _dt
+    return _dt.datetime.fromisoformat(str(s).replace("Z", "+00:00")).timestamp()
+
+
+def lock_text(p):
+    u = p.get("locked_until")
+    when = ""
+    if u:
+        import datetime as _dt
+        vn = _dt.timezone(_dt.timedelta(hours=7))          # giờ Việt Nam (server chạy giờ UTC)
+        when = " đến " + _dt.datetime.fromtimestamp(datetime_parse(u), vn).strftime("%H:%M %d/%m/%Y")
+    return "Máy đang bị khoá" + (when or " vĩnh viễn") + (": " + p["lock_reason"] if p.get("lock_reason") else "") + ". Liên hệ hỗ trợ nếu cần."
+
+
 def phone_of(me, pid):
     if not UUID.match(pid or ""): return None
     rows = sb_get(f"/rest/v1/cloud_phones?id=eq.{pid}&select=*") or []
@@ -149,7 +174,7 @@ def phone_of(me, pid):
 def port_owners(port):
     now = time.time(); c = _pcache.get(port)
     if c and c[1] > now: return c[0]
-    rows = sb_get(f"/rest/v1/cloud_phones?port=eq.{int(port)}&status=eq.active&select=user_id") or []
+    rows = sb_get(f"/rest/v1/cloud_phones?port=eq.{int(port)}&status=eq.active&locked=is.false&select=user_id") or []
     owners = {r["user_id"] for r in rows}
     _pcache[port] = (owners, now + 20)
     return owners
@@ -305,6 +330,11 @@ def wait_ready(container, port):
     return False
 
 
+# Đoạn chèn vào trang ws-scrcpy: hình khít khung + độ nét/FPS + báo trạng thái + nhận lệnh phím
+INJECT_JS = '/* Chèn vào trang ws-scrcpy (qua cpapi): hình khít khung, độ nét/FPS theo máy, báo trạng thái, nhận lệnh phím từ trang blueroblox. */\n(function () {\n  "use strict";\n  var PARENTS = ["https://blueroblox.shop", "https://www.blueroblox.shop"];\n  var H = new URLSearchParams(location.hash.replace(/^#!?/, ""));\n  if (H.get("action") !== "stream") return;\n  document.documentElement.classList.add("cp-embed");\n  var Q = H.get("cpq") || "bal";\n  var FPS = Math.max(10, Math.min(120, +H.get("cpfps") || 30));\n  var RW = +H.get("cpw") || 720, RH = +H.get("cph") || 1280;\n  //            cạnh dài tối đa, bitrate, FPS tối đa\n  var PRE = { eco: [960, 1500000, 30], bal: [1280, 4000000, 60], hd: [4096, 8000000, 90] }[Q] || [1280, 4000000, 60];\n  var M = Math.min(PRE[0], Math.max(RW, RH)); M -= M % 8;\n  var F = Math.min(FPS, PRE[2]);\n  var VS = JSON.stringify({ bitrate: PRE[1], maxFps: F, frameRate: F, iFrameInterval: 1, bounds: { width: M, height: M },\n    maxSize: M, sendFrameMeta: false, lockedVideoOrientation: -1, displayId: 0, crop: null });\n  var KEY = /^\\w+:127\\.0\\.0\\.1:\\d+/;\n  try {   // cài đặt hình do trang blueroblox quyết định (ws-scrcpy mặc định chỉ 480px · 24 FPS · 0.5 Mbps)\n    var gi = Storage.prototype.getItem, si = Storage.prototype.setItem;\n    Storage.prototype.getItem = function (k) { if (typeof k === "string" && KEY.test(k)) return /:fit$/.test(k) ? "false" : VS; return gi.apply(this, arguments); };\n    Storage.prototype.setItem = function (k) { if (typeof k === "string" && KEY.test(k)) return; return si.apply(this, arguments); };\n  } catch (e) {}\n\n  var SID = H.get("cpn") || "";\n  function post(m) { m.cp = 1; m.n = SID; for (var i = 0; i < PARENTS.length; i++) { try { parent.postMessage(m, PARENTS[i]); } catch (e) {} } }\n\n  // Theo dõi luồng hình: có dữ liệu → báo "ok"; rớt → báo "closed" để trang ngoài tự nối lại\n  var NWS = window.WebSocket, bytes = 0, last = 0, okSent = false;\n  function W(url, proto) {\n    var ws = arguments.length > 1 ? new NWS(url, proto) : new NWS(url);\n    if (/action=proxy-adb/.test(String(url))) {\n      ws.addEventListener("open", function () { post({ t: "open" }); });\n      ws.addEventListener("message", function (e) {\n        var d = e.data; bytes += (d && (d.byteLength || d.size || d.length)) || 0;\n        if (!okSent && bytes > 30000) { okSent = true; post({ t: "ok" }); }\n      });\n      ws.addEventListener("close", function (e) { post({ t: "closed", code: e.code, ok: okSent }); });\n    }\n    return ws;\n  }\n  W.prototype = NWS.prototype; W.CONNECTING = 0; W.OPEN = 1; W.CLOSING = 2; W.CLOSED = 3;\n  window.WebSocket = W;\n  setInterval(function () { var kb = (bytes - last) * 8 / 2000; last = bytes; post({ t: "stat", kbps: Math.round(kb) }); }, 2000);\n\n  // Hình luôn khít khung, đúng tỉ lệ (không viền đen thừa → chạm chính xác)\n  var lw = 0, lh = 0;\n  function layout() {\n    var v = document.querySelector(".video"), c = document.querySelector(".touch-layer");\n    if (!v || !c || !c.width || !c.height) return;\n    var W0 = innerWidth, H0 = innerHeight, r = c.width / c.height, w = W0, h = w / r;\n    if (h > H0) { h = H0; w = h * r; }\n    var css = "position:fixed;left:" + Math.round((W0 - w) / 2) + "px;top:" + Math.round((H0 - h) / 2) + "px;width:" + Math.round(w) + "px;height:" + Math.round(h) + "px;margin:0;flex:none;background:#000";\n    if (v.style.cssText !== css) v.style.cssText = css;\n    if (c.width !== lw || c.height !== lh) { lw = c.width; lh = c.height; post({ t: "size", w: lw, h: lh }); }\n  }\n  setInterval(layout, 300); addEventListener("resize", layout);\n\n  // Lệnh từ trang blueroblox: bấm phím qua đường hình (tức thì)\n  var TITLES = { back: "Back", home: "Home", recents: "Overview", volup: "Volume up", voldown: "Volume down", power: "Power" };\n  addEventListener("message", function (e) {\n    if (PARENTS.indexOf(e.origin) < 0 || !e.data || !e.data.cpcmd) return;\n    var d = e.data;\n    if (d.cpcmd === "key") {\n      var b = document.querySelector(\'button[title="\' + TITLES[d.key] + \'"]\');\n      if (!b) return post({ t: "nokey", key: d.key, id: d.id });\n      b.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));\n      setTimeout(function () { b.dispatchEvent(new MouseEvent("mouseup", { bubbles: true })); }, 50);\n      post({ t: "keyok", id: d.id });\n    }\n  });\n  post({ t: "boot" });\n})();\n'.encode()
+INJECT_CSS = 'html,body{margin:0!important;padding:0!important;width:100%!important;height:100%!important;overflow:hidden!important;background:#000!important}html.cp-embed .control-buttons-list,html.cp-embed .more-box{display:none!important}html.cp-embed .device-view{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;display:block!important;background:#000!important}html.cp-embed .video-layer,html.cp-embed .touch-layer{position:absolute!important;left:0!important;top:0!important;width:100%!important;height:100%!important;max-width:none!important;max-height:none!important;object-fit:fill!important}'
+INJECT_TAG = ("<style>" + INJECT_CSS + "</style><script src=\"/__cp/inject.js?v=2\"></script>").encode()
+
 HOP = {"connection", "keep-alive", "proxy-authenticate", "proxy-authorization", "te", "trailers", "transfer-encoding", "upgrade"}
 
 
@@ -376,6 +406,13 @@ class H(BaseHTTPRequestHandler):
             self.proxy()
 
     def do_GET(self):
+        if self.path.startswith("/__cp/inject.js"):
+            self.send_response(200)
+            self.send_header("Content-Type", "application/javascript; charset=utf-8")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Content-Length", str(len(INJECT_JS)))
+            self.end_headers()
+            return self.wfile.write(INJECT_JS)
         self.api() if self.path.startswith("/cpapi/") else self.proxy()
 
     def do_HEAD(self):
@@ -423,12 +460,15 @@ class H(BaseHTTPRequestHandler):
         p = phone_of(me, pid)
         if not p: return self.send_json(404, {"error": "Không tìm thấy máy của bạn."})
         port, cont = p.get("port"), p.get("container")
+        locked = is_locked(p) and not me["admin"]
+        if locked and act != "info": return self.send_json(423, {"error": lock_text(p), "locked": True})
         if act == "info":
             st = out(adb(port, ["get-state"], 15)) if port and p["status"] == "active" else ""
             return self.send_json(200, {"name": p["name"], "ram": p["ram"], "cpu": p["cpu"], "res": p.get("res"),
                                         "status": p["status"], "expires_at": p.get("expires_at"), "online": st == "device",
                                         "fps": p.get("fps") or 30, "fps_range": fps_limits(), "busy": pid in _busy,
-                                        "maint": under, "maint_msg": maint_text() if under else None})
+                                        "maint": under, "maint_msg": maint_text() if under else None,
+                                        "locked": locked, "lock_msg": lock_text(p) if locked else None})
         if p["status"] != "active" or not port:
             return self.send_json(409, {"error": "Máy chưa chạy (đang tạo, tạm dừng hoặc đã huỷ)."})
 
@@ -591,7 +631,7 @@ class H(BaseHTTPRequestHandler):
     def pipe_http(self):
         n = int(self.headers.get("Content-Length") or 0)
         data = self.rfile.read(n) if n else None
-        hdr = {k: v for k, v in self.headers.items() if k.lower() not in HOP | {"cookie", "host", "content-length"}}
+        hdr = {k: v for k, v in self.headers.items() if k.lower() not in HOP | {"cookie", "host", "content-length", "accept-encoding", "if-none-match", "if-modified-since"}}
         hdr["Host"] = "%s:%d" % UPSTREAM
         c = http.client.HTTPConnection(*UPSTREAM, timeout=60)
         c.request(self.command, self.path, body=data, headers=hdr)
@@ -599,16 +639,24 @@ class H(BaseHTTPRequestHandler):
         body = r.read()
         c.close()
         self.send_response(r.status, r.reason)
+        html = "text/html" in (r.getheader("Content-Type") or "")
         for k, v in r.getheaders():
-            if k.lower() not in HOP | {"content-length"}: self.send_header(k, v)
-        if "text/html" in (r.getheader("Content-Type") or ""):
+            if k.lower() not in HOP | {"content-length"} and not (html and k.lower() in ("cache-control", "etag", "last-modified")): self.send_header(k, v)
+        if html:
             self.send_header("Content-Security-Policy", "frame-ancestors " + " ".join(sorted(ORIGINS | {SELF_ORIGIN})))
+            self.send_header("Cache-Control", "no-store")
+            if r.status == 200:
+                m = re.search(rb"<head[^>]*>", body, re.I)
+                body = (body[:m.end()] + INJECT_TAG + body[m.end():]) if m else (INJECT_TAG + body)
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         if self.command != "HEAD": self.wfile.write(body)
 
     def pipe_ws(self):
         up = socket.create_connection(UPSTREAM, timeout=10)
+        for s_ in (up, self.connection):          # gửi ngay từng gói nhỏ (chạm, phím) — không chờ gom
+            try: s_.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+            except OSError: pass
         lines = [f"{self.command} {self.path} HTTP/1.1"]
         for k, v in self.headers.items():
             if k.lower() == "cookie": continue
@@ -622,7 +670,7 @@ class H(BaseHTTPRequestHandler):
         def client_to_up():
             try:
                 while True:
-                    d = self.rfile.read1(65536)
+                    d = self.rfile.read1(262144)
                     if not d: break
                     up.sendall(d)
             except Exception:
@@ -635,7 +683,7 @@ class H(BaseHTTPRequestHandler):
         t.start()
         try:
             while True:
-                d = up.recv(65536)
+                d = up.recv(262144)
                 if not d: break
                 cli.sendall(d)
         except Exception:

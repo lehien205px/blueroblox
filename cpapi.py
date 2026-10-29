@@ -274,6 +274,81 @@ def deliver(port, path, name, jid=None):
         except OSError: pass
 
 
+
+# ---------------- Admin: cài 1 APK vào nhiều máy cùng lúc ----------------
+APK_EXT = (".apk", ".apks", ".apkm", ".xapk")
+ADMIN_FILES = {}          # mã file → (đường dẫn, tên)
+
+
+def pre_dir():
+    import glob
+    for d in [os.path.join(os.path.dirname(os.path.abspath(__file__)), "apk-cai-san"), os.path.join(HOME, "apk-cai-san")] + sorted(glob.glob("/home/*/apk-cai-san")):
+        if os.path.isdir(d): return d
+    d = os.path.join(HOME, "apk-cai-san"); os.makedirs(d, exist_ok=True); return d
+
+
+def stage_pkg(path, name):
+    """Chép gói vào container điều khiển 1 lần → trả về danh sách file .apk bên trong (để cài cho nhiều máy)."""
+    import zipfile, tempfile
+    tag = secrets.token_hex(5)
+    if name.lower().endswith(".apk"):
+        dst = f"/tmp/bulk_{tag}.apk"
+        r = subprocess.run(["docker", "cp", path, f"{WSNAME}:{dst}"], capture_output=True, timeout=900)
+        if r.returncode: raise RuntimeError("Không chép được file: " + out(r)[-200:])
+        return [dst], dst
+    d = tempfile.mkdtemp(prefix="bulk_", dir=UP_DIR)
+    try:
+        with zipfile.ZipFile(path) as z:
+            names = [n for n in z.namelist() if n.lower().endswith(".apk") and "/" not in n.strip("/")]
+            if not names: raise RuntimeError("Gói không có file .apk bên trong.")
+            for n in names: z.extract(n, d)
+        dst = f"/tmp/bulk_{tag}"
+        r = subprocess.run(["docker", "cp", d, f"{WSNAME}:{dst}"], capture_output=True, timeout=900)
+        if r.returncode: raise RuntimeError("Không chép được file: " + out(r)[-200:])
+        return [f"{dst}/{n}" for n in names], dst
+    except zipfile.BadZipFile:
+        raise RuntimeError("File gói hỏng hoặc bị mã hoá.")
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+
+
+def bulk_install(jid, fid, ids, every, keep):
+    path, name = ADMIN_FILES.get(fid, (None, None))
+    if not path or not os.path.exists(path): raise RuntimeError("File đã hết hạn, tải lên lại.")
+    q = "cloud_phones?status=eq.active&select=id,name,port,container" + ("" if every else "&id=in.(" + ",".join(ids) + ")")
+    rows = [r for r in (sb_get("/rest/v1/" + q) or []) if r.get("port")]
+    if not rows: raise RuntimeError("Không có máy đang chạy nào trong danh sách.")
+    if keep:
+        shutil.copy(path, os.path.join(pre_dir(), name)); JOBS[jid]["msg"] = "Đã thêm vào app cài sẵn cho máy mới…"
+    files, dst = stage_pkg(path, name)
+    ok, bad, lock = [], [], threading.Lock()
+    def one(r):
+        args = (["install", "-r", "-g", files[0]] if len(files) == 1 else ["install-multiple", "-r", "-g"] + files)
+        try:
+            res = adb(r["port"], args, timeout=900); o = out(res)
+            good = "Success" in o
+        except Exception as e:
+            good, o = False, str(e)
+        if good and r.get("container"):
+            mark = "touch /data/local/tmp/.cp_pre_" + re.sub(r"[^\w.-]", "_", name) + "; " if keep else ""
+            subprocess.run(["docker", "exec", r["container"], "/system/bin/sh", "-c",
+                            mark + "for p in $(pm list packages -3 | cut -d: -f2); do appops set $p REQUEST_INSTALL_PACKAGES allow; done"],
+                           capture_output=True, timeout=60)
+        with lock:
+            (ok if good else bad).append(r["name"] if good else f"{r['name']}: {o[-120:]}")
+            JOBS[jid]["msg"] = f"Đang cài {len(ok) + len(bad)}/{len(rows)} máy… (lỗi {len(bad)})"
+            JOBS[jid]["done"], JOBS[jid]["total"] = len(ok) + len(bad), len(rows)
+    try:
+        ths = []
+        for r in rows:                                        # cài song song tối đa 4 máy
+            while sum(t.is_alive() for t in ths) >= 4: time.sleep(0.3)
+            t = threading.Thread(target=one, args=(r,), daemon=True); t.start(); ths.append(t)
+        for t in ths: t.join()
+    finally:
+        subprocess.run(["docker", "exec", WSNAME, "rm", "-rf", dst], capture_output=True, timeout=60)
+    JOBS[jid]["fails"] = bad[:50]
+    return f"Đã cài {name} cho {len(ok)}/{len(rows)} máy" + (f" · lỗi {len(bad)} máy" if bad else "") + (" · máy mới tạo sẽ tự có" if keep else "")
+
 def public_host(host):
     try:
         infos = socket.getaddrinfo(host, None)
@@ -452,7 +527,55 @@ class H(BaseHTTPRequestHandler):
         if parts and parts[0] == "job":
             j = JOBS.get(q.get("id", ""))
             if not j or (j["owner"] != me["uid"] and not me["admin"]): return self.send_json(404, {"error": "Không có việc này."})
-            return self.send_json(200, {k: j[k] for k in ("state", "msg", "title")})
+            return self.send_json(200, {k: j[k] for k in ("state", "msg", "title", "file", "done", "total", "fails") if k in j})
+
+        if parts and parts[0] == "admin":
+            if not me["admin"]: return self.send_json(403, {"error": "Chỉ admin."})
+            act = parts[1] if len(parts) > 1 else ""
+            if act == "upload" and self.command == "POST":
+                upid = q.get("id", ""); name = safe_name(q.get("name", ""))
+                if not re.match(r"^[a-z0-9]{8,40}$", upid): return self.send_json(400, {"error": "Mã tải lên không hợp lệ."})
+                if not name.lower().endswith(APK_EXT): return self.send_json(400, {"error": "Chỉ nhận file .apk / .apks / .apkm / .xapk"})
+                total, off = int(q.get("total") or 0), int(q.get("off") or 0)
+                if total <= 0 or total > MAX_FILE: return self.send_json(400, {"error": "File rỗng hoặc lớn hơn 4GB."})
+                path = os.path.join(UP_DIR, f"admin_{upid}.part")
+                have = os.path.getsize(path) if os.path.exists(path) else 0
+                if off != have: return self.send_json(409, {"error": "Lệch vị trí", "size": have})
+                data = self.body(MAX_CHUNK)
+                if have + len(data) > total: return self.send_json(400, {"error": "Dữ liệu vượt kích thước file."})
+                with open(path, "ab") as f: f.write(data)
+                have += len(data)
+                if have < total: return self.send_json(200, {"size": have})
+                ADMIN_FILES[upid] = (path, name)
+                return self.send_json(200, {"size": have, "file": upid})
+            if act == "fromurl" and self.command == "POST":
+                link = str(self.jbody().get("url") or "").strip()
+                if not re.match(r"^https?://\S+$", link) or len(link) > 2000: return self.send_json(400, {"error": "Link phải bắt đầu bằng http:// hoặc https://"})
+                jid = new_job(me["uid"], link[-60:])
+                def work(j):
+                    path, name = download(link, j)
+                    if not name.lower().endswith(APK_EXT): os.remove(path); raise RuntimeError("Link không phải file APK.")
+                    fid = secrets.token_hex(8); ADMIN_FILES[fid] = (path, name); JOBS[j]["file"] = fid; JOBS[j]["title"] = name
+                    return "Đã tải " + name
+                run_job(jid, work)
+                return self.send_json(200, {"job": jid})
+            if act == "install" and self.command == "POST":
+                b = self.jbody(); fid = str(b.get("file") or "")
+                ids = [i for i in (b.get("ids") or []) if UUID.match(str(i))][:500]
+                every = bool(b.get("all"))
+                if fid not in ADMIN_FILES: return self.send_json(400, {"error": "File đã hết hạn, tải lên lại."})
+                if not every and not ids: return self.send_json(400, {"error": "Chưa chọn máy nào."})
+                jid = new_job(me["uid"], ADMIN_FILES[fid][1])
+                run_job(jid, lambda j: bulk_install(j, fid, ids, every, bool(b.get("keep"))))
+                return self.send_json(200, {"job": jid})
+            if act == "preset" and self.command == "GET":
+                d = pre_dir(); fs = sorted(f for f in os.listdir(d) if f.lower().endswith(APK_EXT))
+                return self.send_json(200, {"files": [{"name": f, "size": os.path.getsize(os.path.join(d, f))} for f in fs]})
+            if act == "preset-del" and self.command == "POST":
+                n = safe_name(self.jbody().get("name") or ""); fp = os.path.join(pre_dir(), n)
+                if n.lower().endswith(APK_EXT) and os.path.isfile(fp): os.remove(fp); return self.send_json(200, {"ok": True})
+                return self.send_json(404, {"error": "Không có file này."})
+            return self.send_json(404, {"error": "Không có chức năng này."})
 
         if len(parts) != 2: return self.send_json(404, {"error": "Không có chức năng này."})
         under = bool(maint().get("maint")) and not me["admin"]

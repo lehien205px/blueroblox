@@ -625,6 +625,12 @@ h1 em::after{background:linear-gradient(90deg,rgba(143,208,255,0),#8fd0ff 15%,#f
 .ntagree.on{border-color:var(--ok);background:rgba(60,224,176,.08)}
 #nt-ok[disabled]{opacity:.45;cursor:not-allowed}
 
+.tr-box{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:12px;border:1px dashed var(--line);border-radius:12px;background:rgba(80,140,255,.05)}
+.tr-box .tr-head{grid-column:1/-1;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.tr-box .tr-head .hint{margin-right:auto}
+.tr-box label.full{grid-column:1/-1}
+@media(max-width:640px){.tr-box{grid-template-columns:1fr}}
+
 </style>
 <script>
 // Đã điền sẵn cho blueroblox.shop
@@ -1011,7 +1017,7 @@ window.BR_CONFIG = {
       <div class="tbl"><table><thead><tr><th>Sản phẩm</th><th>Lượt bán</th><th>Doanh thu</th></tr></thead><tbody id="st-top"></tbody></table></div>
     </div>
     <div class="dbody" id="pane-prod" hidden>
-      <div style="display:flex;align-items:center;gap:10px"><h3 style="margin:0;font-size:17px">📦 Danh sách sản phẩm</h3><span class="hint" id="pf-count" style="margin-left:auto"></span></div>
+      <div style="display:flex;align-items:center;gap:10px"><h3 style="margin:0;font-size:17px">📦 Danh sách sản phẩm</h3><span class="hint" id="pf-count" style="margin-left:auto"></span><button class="btn ghost sm" type="button" id="pf-trall" title="Dịch tên, tính năng, mô tả của các sản phẩm chưa có bản tiếng Anh">🇬🇧 Dịch tất cả sang tiếng Anh</button></div>
       <div class="tbl" id="ptbl-wrap"><table><thead><tr><th>Sản phẩm</th><th>Mục</th><th>Giá</th><th>Còn</th><th></th></tr></thead><tbody id="ptbl"></tbody></table></div>
       <details id="pf-details" style="border:1px solid var(--line);border-radius:14px;background:var(--panel)">
         <summary id="pf-summary" style="cursor:pointer;list-style:none;padding:14px 18px;font-weight:800;font-size:15px;color:#cfe0ff">➕ Thêm sản phẩm mới <span class="hint" style="font-weight:500">(bấm để mở/đóng)</span></summary>
@@ -1027,6 +1033,10 @@ window.BR_CONFIG = {
         <label id="pf-ms-wrap">Số lượng còn bán<input id="pf-ms" type="number" min="0" step="1" value="10"></label>
         <label class="full">Tính năng (cách nhau bằng dấu phẩy — hiện dạng nhãn ngắn)<input id="pf-f" placeholder="8 vCPU, 16GB RAM, Windows"></label>
         <label class="full">📝 Mô tả / Nội dung (hiện dạng đoạn văn gọn dưới thẻ sản phẩm — xuống dòng tự do)<textarea id="pf-desc" rows="4" maxlength="1500" placeholder="VD: Clone NEW + bảo hành 2H + Face ID + Capcha Lock.&#10;Lưu ý: công cụ check cookie đang bị phát hiện, dùng trong 10 phút có thể khoá acc — không bảo hành nếu xảy ra."></textarea></label>
+        <div class="full tr-box"><div class="tr-head"><b>🇬🇧 Bản tiếng Anh</b><span class="hint">Khách chọn English sẽ thấy phần này. Để trống thì web tự dịch.</span><button class="btn ghost sm" type="button" id="pf-tr">🌐 Tự dịch từ tiếng Việt</button></div>
+          <label>Name (English)<input id="pf-n-en" maxlength="120" placeholder="VD: Roblox clone account"></label>
+          <label>Features (English, comma-separated)<input id="pf-f-en" placeholder="8 vCPU, 16GB RAM, Windows"></label>
+          <label class="full">Description (English)<textarea id="pf-desc-en" rows="3" maxlength="1500"></textarea></label></div>
         <label class="full">Ảnh sản phẩm (tuỳ chọn — để trống sẽ dùng ảnh động)<input id="pf-img-file" type="file" accept="image/*"></label>
         <div class="full" id="pf-img-row" hidden style="display:flex;gap:10px;align-items:center">
           <img id="pf-img-prev" alt="" style="width:88px;height:50px;object-fit:cover;border-radius:6px;border:1px solid var(--line)">
@@ -1161,6 +1171,10 @@ window.BR_CONFIG = {
         <label class="full">Tên sản phẩm<input id="cpa-cname" maxlength="80" placeholder="Điện thoại đám mây (Cloud Phone)"></label>
         <label class="full">Điểm nổi bật (cách nhau bằng dấu phẩy, tối đa 4)<input id="cpa-cfeats" maxlength="160" placeholder="Android 24/7, Chạy game, Điều khiển web"></label>
         <label class="full">Mô tả / Nội dung<textarea id="cpa-cdesc" rows="4" maxlength="1200" placeholder="Giới thiệu sản phẩm cho khách…"></textarea></label>
+        <div class="full tr-box"><div class="tr-head"><b>🇬🇧 Bản tiếng Anh</b><span class="hint">Để trống thì web tự dịch.</span><button class="btn ghost sm" type="button" id="cpa-tr">🌐 Tự dịch từ tiếng Việt</button></div>
+          <label class="full">Name (English)<input id="cpa-cname-en" maxlength="80" placeholder="Cloud Phone (Android)"></label>
+          <label class="full">Highlights (English, comma-separated)<input id="cpa-cfeats-en" maxlength="160" placeholder="Android 24/7, Run games, Web control"></label>
+          <label class="full">Description (English)<textarea id="cpa-cdesc-en" rows="3" maxlength="1200"></textarea></label></div>
         <h3>💲 Đơn giá &amp; giới hạn cấu hình</h3>
         <label>Giá RAM / 1GB / ngày (VND)<input id="cpa-ram" type="number" min="0" step="500"></label>
         <label>Giá CPU / 1 nhân / ngày (VND)<input id="cpa-cpu" type="number" min="0" step="500"></label>
@@ -1856,7 +1870,16 @@ if (!CFG.supabaseUrl || CFG.supabaseUrl.includes("YOUR-")) {
   document.body.insertAdjacentHTML("afterbegin",
     '<div style="background:#ff5d73;color:#fff;padding:10px 16px;font-weight:600;text-align:center">Chưa cấu hình Supabase. Mở file config.js và dán Project URL + anon key.</div>');
 }
-const sb = window.supabase.createClient(CFG.supabaseUrl || "https://invalid.supabase.co", CFG.supabaseAnonKey || "x");
+function safeLock(name, t, fn) {
+  const L = globalThis.navigator && navigator.locks;
+  if (!L) return fn();
+  if (t === 0) return L.request(name, { mode: "exclusive", ifAvailable: true }, async lk => {
+    if (!lk) { const e = new Error("lock busy"); e.isAcquireTimeout = true; throw e; } return await fn(); });
+  let ok = false; const ac = new AbortController(); const tm = setTimeout(() => ac.abort(), t > 0 ? Math.min(t, 4000) : 4000);
+  return L.request(name, { mode: "exclusive", signal: ac.signal }, async () => { ok = true; clearTimeout(tm); return await fn(); })
+    .catch(e => { if (!ok && e && e.name === "AbortError") return fn(); throw e; });
+}
+const sb = window.supabase.createClient(CFG.supabaseUrl || "https://invalid.supabase.co", CFG.supabaseAnonKey || "x", { auth: { lock: safeLock } });
 
 const CATS = [{ id: "all", name: "Tất cả" }, { id: "clone", name: "Clone Roblox" }, { id: "vps", name: "VPS GPU" }, { id: "cloud", name: "📱 ĐT đám mây" }];
 const HUES = { clone: 210, vps: 265 };
@@ -1927,6 +1950,30 @@ const EN = {
 };
 const t = (vi, key) => (LANG === "en" && EN[key]) ? EN[key] : vi;
 const L = (vi, en) => LANG === "en" ? en : vi;
+// ---- Bản tiếng Anh của sản phẩm: ưu tiên chữ admin nhập; chưa có thì tự dịch (lưu tạm trên máy khách) ----
+const TRC = (() => { try { return JSON.parse(localStorage.getItem("br_tr") || "{}"); } catch (e) { return {}; } })();
+const TRQ = new Set(); let trT = null;
+async function gTranslate(text, sl = "vi", tl = "en") {
+  if (!text || !text.trim()) return "";
+  const r = await fetch("https://translate.googleapis.com/translate_a/single?client=gtx&dt=t&sl=" + sl + "&tl=" + tl + "&q=" + encodeURIComponent(text));
+  if (!r.ok) throw new Error("translate " + r.status);
+  const j = await r.json(); return (j[0] || []).map(x => x[0]).join("");
+}
+function trAuto(v) {
+  if (!v || LANG !== "en" || !/[a-zA-ZÀ-ỹđĐ]{2}/.test(v)) return v;
+  if (TRC[v] != null) return TRC[v];
+  TRQ.add(v); clearTimeout(trT); trT = setTimeout(trFlush, 60); return v;
+}
+async function trFlush() {
+  const list = [...TRQ]; TRQ.clear(); let got = 0;
+  for (const v of list) { try { TRC[v] = await gTranslate(v); got++; } catch (e) { TRC[v] = v; } }
+  if (!got) return;
+  try { const k = Object.keys(TRC); if (k.length > 400) k.slice(0, k.length - 400).forEach(x => delete TRC[x]); localStorage.setItem("br_tr", JSON.stringify(TRC)); } catch (e) {}
+  try { renderGrid(); } catch (e) {} try { if (typeof sel !== "undefined" && sel) { const p = selP(); $("m-name").textContent = pName(p); $("m-desc").textContent = pDesc(p); } } catch (e) {}
+}
+const pName = p => LANG === "en" ? ((p.name_en || "").trim() || trAuto(p.name)) : p.name;
+const pDesc = p => LANG === "en" ? ((p.description_en || "").trim() || trAuto(p.description || "")) : (p.description || "");
+const pFeats = p => LANG === "en" && (p.features_en || []).length ? p.features_en : (p.features || []).map(f => LANG === "en" ? trAuto(f) : f);
 /* đơn vị tiền mặc định theo ngôn ngữ (EN → USD, VI → VND), nhớ lựa chọn của khách */
 try { const _c = localStorage.getItem("br_cur"); cur = _c ? (_c === "USD" ? "USD" : "VND") : (LANG === "en" ? "USD" : "VND"); } catch (e) {}
 function applyStatic() {
@@ -1983,7 +2030,7 @@ function renderSite() {
 function renderCats() { $("cats").innerHTML = CATS.map(c => { const n = c.id === "all" ? P.length : c.id === "cloud" ? "" : P.filter(p => p.cat === c.id).length; return `<button data-c="${c.id}" class="${c.id === cat ? "on" : ""}">${c.id === "all" ? t("Tất cả", "cat_all") : c.name}<small>${n}</small></button>`; }).join(""); }
 function renderGrid() {
   const q = $("q").value.trim().toLowerCase(), so = $("sort").value;
-  let l = P.filter(p => (cat === "all" || p.cat === cat) && String(p.name).toLowerCase().includes(q));
+  let l = P.filter(p => (cat === "all" || p.cat === cat) && (String(p.name) + " " + (p.name_en || "")).toLowerCase().includes(q));
   if (so === "asc") l.sort((a, b) => minPrice(a) - minPrice(b)); else if (so === "desc") l.sort((a, b) => minPrice(b) - minPrice(a)); else l.sort((a, b) => (b.hot ? 1 : 0) - (a.hot ? 1 : 0) || a.sort - b.sort);
   $("cat-title").textContent = cat === "all" ? t("Tất cả sản phẩm","all_products") : catName(cat);
   const cloudCard = ((cat === "all" || cat === "cloud") && !q) ? cloudGridCard() : "";
@@ -1991,8 +2038,8 @@ function renderGrid() {
   $("grid").innerHTML = cloudCard + l.map(p => {
     const s = +p.stock || 0, st = s === 0 ? ["out", t("Hết hàng","sold_out")] : s < 15 ? ["low", t("Còn","left") + " " + s] : ["ok", t("Còn","left") + " " + s];
     return `<article class="card"><div class="thumb">${p.image ? `<img class="thumb-img" src="${esc(p.image)}" alt="" loading="lazy">` : `<canvas data-id="${esc(p.id)}" data-c="${esc(p.thumb || p.cat)}"></canvas>`}<span class="tag">${esc(catName(p.cat).toUpperCase())}</span>${p.hot ? '<span class="hot">HOT</span>' : ""}</div>
-    <div class="body"><h4>${esc(p.name)}</h4><div class="feats">${(p.features || []).map(f => `<span>${esc(f)}</span>`).join("")}</div>
-    ${p.description ? `<p class="pdesc">${esc(p.description)}</p>` : ""}
+    <div class="body"><h4>${esc(pName(p))}</h4><div class="feats">${pFeats(p).map(f => `<span>${esc(f)}</span>`).join("")}</div>
+    ${p.description ? `<p class="pdesc">${esc(pDesc(p))}</p>` : ""}
     ${plansOf(p).length ? `<div class="days-chip">${t("Gói","plan")}: ${plansOf(p).map(x => x.days).join(" · ")} ${t("ngày","days")}</div>` : ""}
     <div class="row"><span class="price">${plansOf(p).length ? `<small style="font-size:12px;color:var(--muted);font-family:var(--body)">${t("từ","from")} </small>` : ""}${priceHtml(minPrice(p))}</span><span class="stock ${st[0]}">${st[1]}</span></div>
     <button class="btn" data-buy="${esc(p.id)}" ${s === 0 ? "disabled" : ""}>${s === 0 ? t("Hết hàng","sold_out") : t("Mua ngay","buy_now")}</button></div></article>`;
@@ -2043,7 +2090,7 @@ function setVpsMethod(m) {
 $("m-pin").oninput = () => upd();
 $("m-vps-opts").onclick = e => { const b = e.target.closest("button"); if (b) { setVpsMethod(b.dataset.m); $("m-err").textContent = ""; } };
 function openBuy(id) { sel = id; const p = selP(); const pl = plansOf(p); selDays = pl.length ? +(pl.find(x => +x.days === 30) || pl[0]).days : null;
-  $("m-name").textContent = p.name; $("m-desc").textContent = p.description || ""; show("m-desc", !!p.description); $("m-qty").value = 1; $("m-qty").max = p.stock; renderPlans(); upd();
+  $("m-name").textContent = pName(p); $("m-desc").textContent = pDesc(p); show("m-desc", !!p.description); $("m-qty").value = 1; $("m-qty").max = p.stock; renderPlans(); upd();
   show("m-vps", isVps(p)); $("m-pin").value = ""; setVpsMethod("farmv5"); show("modal"); }
 function closeBuy() { show("modal", false); sel = null; }
 async function doBuy() {
@@ -2082,7 +2129,8 @@ $("f-reg").onsubmit = e => { e.preventDefault(); busy($("rg-btn"), async () => {
   else { show("auth", false); toast(L("Tạo tài khoản thành công. Chào ", "Account created. Welcome ") + u + "!"); }
 }); };
 $("f-login").onsubmit = e => { e.preventDefault(); busy($("li-btn"), async () => {
-  const { error } = await sb.auth.signInWithPassword({ email: $("li-e").value.trim(), password: $("li-p").value });
+  const { error } = await Promise.race([sb.auth.signInWithPassword({ email: $("li-e").value.trim(), password: $("li-p").value }),
+    new Promise(r => setTimeout(() => r({ error: { message: L("Mạng chậm hoặc trang bị kẹt. Đóng các tab blueroblox khác rồi tải lại trang (Ctrl+F5).", "Slow network or stuck page. Close other blueroblox tabs and reload (Ctrl+F5).") } }), 20000))]);
   if (error) { $("li-err").textContent = /confirm/i.test(error.message) ? L("Email chưa được xác nhận. Kiểm tra hộp thư của bạn.", "Email not confirmed yet. Check your inbox.") : L("Sai email hoặc mật khẩu.", "Wrong email or password."); return; }
   await loadProfile();
   if (profile && profile.locked) { await sb.auth.signOut(); $("li-err").textContent = errMsg("LOCKED"); return; }
@@ -2649,10 +2697,10 @@ $("pf-img-file").onchange = () => {
 };
 $("pf-img-clear").onclick = () => { pfImage = ""; pfFile = null; $("pf-img-file").value = ""; show("pf-img-row", false); };
 function resetForm() { editId = null; $("pf").reset(); $("pf-plans").innerHTML = ""; $("pf-ms").value = 10; $("pf-mode").value = "auto"; $("pf-thumb").value = ""; syncMode(); pfImage = ""; pfFile = null; $("pf-img-file").value = ""; show("pf-img-row", false); syncPlanUI(); $("pf-o").value = P.length ? Math.max(...P.map(p => +p.sort || 0)) + 1 : 1; $("pf-title").textContent = "Thêm sản phẩm"; $("pf-save").textContent = "Thêm sản phẩm"; if ($("pf-summary")) $("pf-summary").firstChild.textContent = "➕ Thêm sản phẩm mới "; }
-function fillForm(p) { editId = p.id; $("pf-n").value = p.name; $("pf-c").value = p.cat; $("pf-vnd").value = p.price; $("pf-o").value = p.sort; $("pf-f").value = (p.features || []).join(", "); $("pf-desc").value = p.description || ""; $("pf-h").checked = !!p.hot; $("pf-ms").value = +p.stock || 0; $("pf-mode").value = p.manual ? "manual" : "auto"; $("pf-thumb").value = p.thumb || ""; syncMode(); pfImage = p.image || ""; pfFile = null; $("pf-img-file").value = ""; if (pfImage) { $("pf-img-prev").src = pfImage; show("pf-img-row"); } else show("pf-img-row", false); $("pf-plans").innerHTML = ""; plansOf(p).forEach(x => planRow(x.days, x.price)); syncPlanUI(); $("pf-title").textContent = "Sửa sản phẩm"; $("pf-save").textContent = "Lưu thay đổi"; if ($("pf-summary")) $("pf-summary").firstChild.textContent = "✏️ Đang sửa sản phẩm "; if ($("pf-details")) $("pf-details").open = true; $("pf-details") ? $("pf-details").scrollIntoView({ behavior: "smooth", block: "start" }) : ($("pane-prod").scrollTop = 0); setTimeout(() => $("pf-n").focus(), 150); }
+function fillForm(p) { editId = p.id; $("pf-n").value = p.name; $("pf-c").value = p.cat; $("pf-vnd").value = p.price; $("pf-o").value = p.sort; $("pf-f").value = (p.features || []).join(", "); $("pf-desc").value = p.description || ""; $("pf-n-en").value = p.name_en || ""; $("pf-f-en").value = (p.features_en || []).join(", "); $("pf-desc-en").value = p.description_en || ""; $("pf-h").checked = !!p.hot; $("pf-ms").value = +p.stock || 0; $("pf-mode").value = p.manual ? "manual" : "auto"; $("pf-thumb").value = p.thumb || ""; syncMode(); pfImage = p.image || ""; pfFile = null; $("pf-img-file").value = ""; if (pfImage) { $("pf-img-prev").src = pfImage; show("pf-img-row"); } else show("pf-img-row", false); $("pf-plans").innerHTML = ""; plansOf(p).forEach(x => planRow(x.days, x.price)); syncPlanUI(); $("pf-title").textContent = "Sửa sản phẩm"; $("pf-save").textContent = "Lưu thay đổi"; if ($("pf-summary")) $("pf-summary").firstChild.textContent = "✏️ Đang sửa sản phẩm "; if ($("pf-details")) $("pf-details").open = true; $("pf-details") ? $("pf-details").scrollIntoView({ behavior: "smooth", block: "start" }) : ($("pane-prod").scrollTop = 0); setTimeout(() => $("pf-n").focus(), 150); }
 $("pf").onsubmit = e => { e.preventDefault(); busy($("pf-save"), async () => {
   const body = { cat: $("pf-c").value, name: $("pf-n").value.trim(), price: Math.max(0, Math.round(+$("pf-vnd").value || 0)), sort: Math.round(+$("pf-o").value || 100),
-    features: $("pf-f").value.split(",").map(s => s.trim()).filter(Boolean).slice(0, 6), description: $("pf-desc").value.trim() || null, hot: $("pf-h").checked,
+    features: $("pf-f").value.split(",").map(s => s.trim()).filter(Boolean).slice(0, 6), description: $("pf-desc").value.trim() || null, name_en: $("pf-n-en").value.trim() || null, features_en: $("pf-f-en").value.split(",").map(s => s.trim()).filter(Boolean).slice(0, 6), description_en: $("pf-desc-en").value.trim() || null, hot: $("pf-h").checked,
     manual: $("pf-mode").value === "manual", manual_stock: Math.max(0, Math.round(+$("pf-ms").value || 0)), thumb: $("pf-thumb").value || null };
   if (!body.name) return toast("Hãy nhập tên sản phẩm.", 1);
   try { body.plans = readPlans(); } catch (err) { return toast(err.message, 1); }
@@ -2665,7 +2713,7 @@ $("pf").onsubmit = e => { e.preventDefault(); busy($("pf-save"), async () => {
     body.image = sb.storage.from("products").getPublicUrl(path).data.publicUrl;
   } else body.image = pfImage || null;
   const { error } = editId ? await sb.from("products").update(body).eq("id", editId) : await sb.from("products").insert(body);
-  if (error) return toast(errMsg(error), 1);
+  if (error) return toast(/_en/.test(error.message || "") ? "Chưa chạy file SQL product-english.sql trên Supabase." : errMsg(error), 1);
   toast(editId ? "Đã lưu thay đổi." : "Đã thêm sản phẩm."); resetForm(); await loadProducts();
 }); };
 $("pf-reset").onclick = resetForm;
@@ -3329,6 +3377,13 @@ async function cpLoadPricing() {
 const cpN = v => +v || 0;
 function cpPerDay(ram, cpu, pr) { pr = pr || CPpricing || CP_DEF; return ram * cpN(pr.price_ram_gb_day) + cpu * cpN(pr.price_cpu_day); }
 function cpPrice() { return cv(cpPerDay(cpSel.ram, cpSel.cpu) * cpSel.days) * (cpSel.qty || 1); }
+function cpCardShow() {
+  const c = cpCard(), p = CPpricing || {}; if (LANG !== "en") return c;
+  const fe = (p.card_feats_en || "").trim();
+  return { name: (p.card_name_en || "").trim() || (p.card_name ? trAuto(c.name) : "Cloud Phone (Android)"),
+    desc: (p.card_desc_en || "").trim() || (p.card_desc ? trAuto(c.desc) : "Rent an Android phone running in the cloud — choose RAM, CPU and days. Install games, keep accounts online 24/7 and control it from any browser."),
+    feats: fe ? fe.split(",").map(s => s.trim()).filter(Boolean).slice(0, 4) : p.card_feats ? c.feats.map(trAuto) : ["Android 24/7", "Run games", "Web control"] };
+}
 function cpCard() {
   const p = CPpricing || {};
   return { name: (p.card_name || "").trim() || CP_CARD_DEF.name, desc: (p.card_desc || "").trim() || CP_CARD_DEF.desc,
@@ -3512,7 +3567,7 @@ async function cpCancel(id) {
 
 /* ===== THẺ "ĐT đám mây" ở lưới sản phẩm (tên/nội dung admin sửa được) ===== */
 function cloudGridCard() {
-  const c = cpCard(), p = CPpricing || CP_DEF, from = cpPerDay(p.min_ram, p.min_cpu), s = CPstatus;
+  const c = cpCardShow(), p = CPpricing || CP_DEF, from = cpPerDay(p.min_ram, p.min_cpu), s = CPstatus;
   const st = !s ? ["ok", L("Còn hàng", "In stock")] : s.maint ? ["wt", "Bảo trì"] : s.online === false ? ["wt", "Tạm ngưng"]
     : (+s.free_ram < p.min_ram || +s.free_cpu < p.min_cpu) ? ["out", L("Hết hàng", "Sold out")] : ["ok", L("Còn hàng", "In stock")];
   return `<article class="card" style="cursor:pointer" data-cpbuy="1">
@@ -3553,7 +3608,7 @@ function cpaAnalyze() {
 async function loadCloudAdm() {
   if (!isAdmin()) return;
   CPpricing = null; const pr = await cpLoadPricing(), c = cpCard();
-  $("cpa-cname").value = c.name; $("cpa-cfeats").value = c.feats.join(", "); $("cpa-cdesc").value = c.desc;
+  $("cpa-cname").value = c.name; $("cpa-cfeats").value = c.feats.join(", "); $("cpa-cdesc").value = c.desc; $("cpa-cname-en").value = pr.card_name_en || ""; $("cpa-cfeats-en").value = pr.card_feats_en || ""; $("cpa-cdesc-en").value = pr.card_desc_en || "";
   $("cpa-ram").value = pr.price_ram_gb_day; $("cpa-cpu").value = pr.price_cpu_day;
   $("cpa-minram").value = pr.min_ram; $("cpa-maxram").value = pr.max_ram;
   $("cpa-mincpu").value = pr.min_cpu; $("cpa-maxcpu").value = pr.max_cpu;
@@ -3567,9 +3622,10 @@ $("cpa-save") && ($("cpa-save").onclick = () => busy($("cpa-save"), async () => 
   const f = cpaForm();
   if (f.min_ram > f.max_ram || f.min_cpu > f.max_cpu || f.min_days > f.max_days || f.min_fps > f.max_fps) return toast("Giá trị tối thiểu không được lớn hơn tối đa.", 1);
   const body = { ...f, card_name: $("cpa-cname").value.trim() || null, card_desc: $("cpa-cdesc").value.trim() || null,
-    card_feats: $("cpa-cfeats").value.trim() || null, updated_at: new Date().toISOString() };
+    card_feats: $("cpa-cfeats").value.trim() || null, card_name_en: $("cpa-cname-en").value.trim() || null, card_desc_en: $("cpa-cdesc-en").value.trim() || null, card_feats_en: $("cpa-cfeats-en").value.trim() || null, updated_at: new Date().toISOString() };
   const { error } = await sb.from("cloudphone_pricing").update(body).eq("id", 1);
   if (error) {
+    if (/_en/.test(error.message || "")) return toast("Chưa chạy file SQL product-english.sql trên Supabase.", 1);
     if (/card_/.test(error.message || "")) return toast("Chưa chạy file SQL cloud-phones-v3.sql trên Supabase.", 1);
     if (/_fps/.test(error.message || "")) return toast("Chưa chạy file SQL cloud-phones-v4.sql trên Supabase.", 1);
     return toast(errMsg(error), 1);
@@ -3975,6 +4031,35 @@ $("nf") && ($("nf").onsubmit = async e => {
   fillNotice();
 });
 $("nf-preview") && ($("nf-preview").onclick = () => { const keep = { ...SITE }; Object.assign(SITE, nfPatch()); showNotice(true); SITE = keep; });
+
+// ---- Admin: nút tự dịch sang tiếng Anh ----
+async function trFill(pairs, btn) {
+  const old = btn.textContent; btn.disabled = true; btn.textContent = "Đang dịch…";
+  try { for (const [src, dst, list] of pairs) { const v = $(src).value.trim(); if (!v) continue;
+      $(dst).value = list ? (await Promise.all(v.split(",").map(x => x.trim()).filter(Boolean).map(x => gTranslate(x)))).join(", ") : await gTranslate(v); }
+    toast("Đã dịch xong — xem lại rồi bấm Lưu.");
+  } catch (e) { toast("Không dịch tự động được (mạng chặn). Bạn tự gõ tiếng Anh vào ô nhé.", 1); }
+  btn.disabled = false; btn.textContent = old;
+}
+$("pf-tr") && ($("pf-tr").onclick = () => trFill([["pf-n", "pf-n-en"], ["pf-f", "pf-f-en", 1], ["pf-desc", "pf-desc-en"]], $("pf-tr")));
+$("cpa-tr") && ($("cpa-tr").onclick = () => trFill([["cpa-cname", "cpa-cname-en"], ["cpa-cfeats", "cpa-cfeats-en", 1], ["cpa-cdesc", "cpa-cdesc-en"]], $("cpa-tr")));
+$("pf-trall") && ($("pf-trall").onclick = () => busy($("pf-trall"), async () => {
+  const todo = P.filter(p => !(p.name_en || "").trim() || (p.description && !(p.description_en || "").trim()) || ((p.features || []).length && !(p.features_en || []).length));
+  if (!todo.length) return toast("Tất cả sản phẩm đã có tiếng Anh.");
+  let ok = 0;
+  for (const p of todo) {
+    try {
+      const body = {};
+      if (!(p.name_en || "").trim()) body.name_en = await gTranslate(p.name);
+      if (p.description && !(p.description_en || "").trim()) body.description_en = await gTranslate(p.description);
+      if ((p.features || []).length && !(p.features_en || []).length) body.features_en = await Promise.all(p.features.map(f => gTranslate(f)));
+      const { error } = await sb.from("products").update(body).eq("id", p.id);
+      if (error) { if (/_en/.test(error.message || "")) return toast("Chưa chạy file SQL product-english.sql trên Supabase.", 1); throw error; }
+      Object.assign(p, body); ok++;
+    } catch (e) { if (/translate|fetch/i.test(String(e && e.message))) return toast("Không dịch tự động được (mạng chặn). Hãy nhập tay ở từng sản phẩm.", 1); }
+  }
+  toast("Đã dịch " + ok + "/" + todo.length + " sản phẩm sang tiếng Anh."); try { renderGrid(); renderTable(); } catch (e) {}
+}));
 
 </script>
 </body>

@@ -737,6 +737,7 @@ window.BR_CONFIG = {
         <div class="qr" id="cr-qr"></div>
         <div class="kv">
           <div><span data-i18n="cr_coin">Loại coin</span><b id="cr-type"></b></div>
+          <div id="cr-break-row" style="grid-column:1/-1;background:rgba(47,123,255,.1);border:1px solid rgba(47,123,255,.25);border-radius:10px;padding:9px 11px;font-size:13px;line-height:1.75"><span id="cr-break"></span></div>
           <div><span id="cr-send-label">Số tiền cần gửi</span><b id="cr-amt" class="hl"></b><button data-copy="cr-amt-raw" data-i18n="copy_btn">Chép</button></div>
           <div><span data-i18n="cr_network" id="cr-net-label">Mạng lưới</span><b id="cr-net"></b></div>
           <div><span data-i18n="cr_addr">Địa chỉ ví</span><b id="cr-addr" style="font-size:11px"></b><button data-copy="cr-addr" data-i18n="copy_btn">Chép</button></div>
@@ -1930,9 +1931,14 @@ $("tp-make").onclick = () => busy($("tp-make"), async () => {
       $("cr-net").textContent = CO.net;
       $("cr-amt").textContent = j.pay_amount + " " + CO.name; $("cr-amt-raw").textContent = String(j.pay_amount);
       $("cr-addr").textContent = j.pay_address;
+      // Bảng tổng: tiền nạp + phí = tổng cần gửi (để khách gửi đủ, không bị thiếu phí mạng)
+      const vndTxt = vnd(curTop.amount), usdTxt = j.usd != null ? ("$" + (+j.usd).toLocaleString("en-US")) : "";
+      $("cr-break").innerHTML = en
+        ? (`💰 Top-up: <b>${vndTxt}</b>${usdTxt ? " (" + usdTxt + ")" : ""}<br>➕ Network &amp; processing fee included<br>= <b style="color:#7fe0a0">Total to send: ${j.pay_amount} ${CO.name}</b>`)
+        : (`💰 Tiền nạp: <b>${vndTxt}</b>${usdTxt ? " (" + usdTxt + ")" : ""}<br>➕ Đã gồm phí mạng &amp; xử lý<br>= <b style="color:#7fe0a0">TỔNG cần gửi: ${j.pay_amount} ${CO.name}</b>`);
       $("cr-note").innerHTML = en
-        ? ("Send the <b>exact " + CO.name + " amount</b> on the <b>" + CO.net + " network</b> to the address above. Auto-credited after network confirmation (a few minutes). <b style=\"color:#ff8a8a\">Wrong coin or network will LOSE funds!</b>")
-        : ("Gửi <b>đúng số " + CO.name + "</b> trên <b>mạng " + CO.net + "</b> tới địa chỉ trên. Tiền tự cộng sau khi mạng xác nhận (vài phút). <b style=\"color:#ff8a8a\">Gửi sai coin hoặc sai mạng sẽ MẤT TIỀN!</b>");
+        ? ("Send <b>at least " + j.pay_amount + " " + CO.name + "</b> on the <b>" + CO.net + " network</b>. If your wallet subtracts a network fee, <b>add a little extra</b> so the full amount arrives. Auto-credited after confirmation. <b style=\"color:#ff8a8a\">Wrong coin/network = LOSE funds!</b>")
+        : ("Gửi <b>tối thiểu " + j.pay_amount + " " + CO.name + "</b> trên <b>mạng " + CO.net + "</b>. Nếu ví của bạn <b>trừ phí mạng</b> vào số gửi, hãy <b>gửi dư một chút</b> để về đủ. Tiền tự cộng sau khi xác nhận. <b style=\"color:#ff8a8a\">Sai coin/mạng = MẤT TIỀN!</b>");
       try { const qr = qrcode(0, "M"); qr.addData(j.pay_address); qr.make(); $("cr-qr").innerHTML = qr.createSvgTag(5, 0); } catch (e) { $("cr-qr").innerHTML = ""; }
       $("cr-wait").className = "wait"; $("cr-wait-t").textContent = t("Đang chờ xác nhận trên blockchain…", "cr_wait");
       show("tp-step1", false); show("tp-crypto"); pollCrypto(String(j.payment_id || ""));

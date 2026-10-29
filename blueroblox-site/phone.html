@@ -172,6 +172,15 @@ textarea.in{min-height:110px;resize:vertical}
 .toast{position:fixed;left:50%;top:calc(var(--top) + 12px);transform:translateX(-50%);z-index:60;background:var(--panel2);border:1px solid var(--line2);padding:10px 16px;border-radius:12px;box-shadow:0 14px 30px -14px #000;max-width:calc(100vw - 32px)}
 .toast.bad{border-color:rgba(255,107,129,.5);color:#ffd4db}
 .toast[hidden]{display:none}
+.clipbar{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:58;display:flex;align-items:center;gap:10px;
+  width:min(520px,calc(100vw - 24px));padding:10px 12px;border-radius:14px;background:var(--panel2);border:1px solid var(--line2);box-shadow:0 14px 30px -14px #000}
+.clipbar[hidden]{display:none}
+.clipbar .ct{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.clipbar .ct small{color:var(--muted);font-size:12px}
+.clipbar .ct span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:14px}
+.clipbar .x{all:unset;cursor:pointer;color:var(--muted);padding:4px 6px;border-radius:6px}
+.clipbar .x:focus-visible{outline:2px solid var(--sky)}
+.cliptxt{width:100%;min-height:110px;resize:vertical}
 
 /* ---------- màn nhỏ ---------- */
 @media (max-width:860px){
@@ -270,6 +279,7 @@ body.focus .exitfocus{display:block}
       <button class="tb" data-act="fromurl"><svg class="ic" viewBox="0 0 24 24"><path d="M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 00-5.7 0l-3 3a4 4 0 005.7 5.7l1-1"/></svg>Cài từ link</button>
       <button class="tb" data-act="apps"><svg class="ic" viewBox="0 0 24 24"><rect x="4" y="4" width="6" height="6" rx="1.5"/><rect x="14" y="4" width="6" height="6" rx="1.5"/><rect x="4" y="14" width="6" height="6" rx="1.5"/><rect x="14" y="14" width="6" height="6" rx="1.5"/></svg>Ứng dụng</button>
       <button class="tb" data-act="text"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 10h.01M11 10h.01M15 10h.01M7 14h10"/></svg>Dán chữ</button>
+      <button class="tb" data-act="copyout"><svg class="ic" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 00-1-1H5a1 1 0 00-1 1v10a1 1 0 001 1h3"/></svg>Copy từ máy</button>
       <button class="tb" data-act="openurl"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 010 18M12 3a14 14 0 000 18"/></svg>Mở web</button>
       <h6>Máy</h6>
       <button class="tb danger" data-act="reboot"><svg class="ic" viewBox="0 0 24 24"><path d="M21 12a9 9 0 11-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>Khởi động lại</button>
@@ -297,6 +307,10 @@ body.focus .exitfocus{display:block}
   <div class="acts"><button class="btn gh" id="dlgno">Đóng</button><button class="btn" id="dlgok">Gửi</button></div>
 </div></div>
 <div class="toast" id="toast" hidden></div>
+<div class="clipbar" id="clipbar" hidden role="status" aria-live="polite">
+  <div class="ct"><small id="clipsm">📋 Máy ảo vừa copy</small><span id="cliptx"></span></div>
+  <button class="btn sm" id="clipcp" type="button">Copy về máy tôi</button><button class="x" id="clipx" type="button" aria-label="Ẩn">✕</button>
+</div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script>
@@ -314,7 +328,16 @@ const mb = n => n >= 1073741824 ? (n / 1073741824).toFixed(2) + " GB" : (n / 104
 const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} } };
 const small = () => innerWidth <= 860;
 
-const sb = window.supabase.createClient(CFG.supabaseUrl, CFG.supabaseAnonKey);
+function safeLock(name, t, fn) {
+  const L = globalThis.navigator && navigator.locks;
+  if (!L) return fn();
+  if (t === 0) return L.request(name, { mode: "exclusive", ifAvailable: true }, async lk => {
+    if (!lk) { const e = new Error("lock busy"); e.isAcquireTimeout = true; throw e; } return await fn(); });
+  let ok = false; const ac = new AbortController(); const tm = setTimeout(() => ac.abort(), t > 0 ? Math.min(t, 4000) : 4000);
+  return L.request(name, { mode: "exclusive", signal: ac.signal }, async () => { ok = true; clearTimeout(tm); return await fn(); })
+    .catch(e => { if (!ok && e && e.name === "AbortError") return fn(); throw e; });
+}
+const sb = window.supabase.createClient(CFG.supabaseUrl, CFG.supabaseAnonKey, { auth: { lock: safeLock } });
 let token = "", me = null, phones = [], cur = null, underMaint = false;
 let player = store.get("cp_player") === "broadway" ? "broadway" : "webcodecs";
 let quality = ["eco", "bal", "hd"].includes(store.get("cp_q")) ? store.get("cp_q") : "bal";
@@ -408,6 +431,18 @@ class Conn {
     else if (d.t === "size") { this.size = [d.w, d.h]; this.h.size && this.h.size(); }
     else if (d.t === "stat") { this.kbps = d.kbps; if ((!this.ok || this.soft) && d.kbps > 0) this.arm(20000); this.h.stat && this.h.stat(); }
     else if (d.t === "keyok" || d.t === "nokey") { const cb = this.cb && this.cb[d.id]; if (cb) { delete this.cb[d.id]; cb(d.t === "keyok"); } }
+    else if (d.t === "clipset" || d.t === "clipget") { const cb = this.cb && this.cb[d.id]; if (cb) { delete this.cb[d.id]; cb(!!d.ok); } }
+    else if (d.t === "clipcap") { this.clip = true; }
+    else if (d.t === "clip") { this.h.clip && this.h.clip(d.text || ""); }
+    else if (d.t === "pasteKey") { this.h.pasteKey && this.h.pasteKey(); }
+  }
+  cmd(cpcmd, extra) {   // gửi lệnh vào trình phát hình, chờ trả lời (tối đa 1,5 giây)
+    return new Promise(res => {
+      if (!this.ok || this.legacy || !this.f.contentWindow) return res(false);
+      const id = Math.random().toString(36).slice(2); this.cb = this.cb || {}; this.cb[id] = res;
+      this.f.contentWindow.postMessage({ cpcmd, id, ...(extra || {}) }, PHONE);
+      setTimeout(() => { if (this.cb[id]) { delete this.cb[id]; res(false); } }, 1500);
+    });
   }
   key(name) {   // bấm phím qua đường hình (tức thì); không được thì nhờ server
     return new Promise(res => {
@@ -427,6 +462,35 @@ async function pressKey(conn, p, code) {
   try { await api(p.id + "/key", { method: "POST", json: { code } }); } catch (e) { toast(e.message, 1); }
 }
 
+/* ---------- Copy / dán giữa máy ảo và máy bạn ---------- */
+let clipWant = false, clipLast = "";
+async function copyText(t) {
+  try { await navigator.clipboard.writeText(t); return true; } catch (e) {}
+  try { const a = document.createElement("textarea"); a.value = t; a.style.position = "fixed"; a.style.opacity = "0"; document.body.appendChild(a); a.select(); const ok = document.execCommand("copy"); a.remove(); return ok; } catch (e) { return false; }
+}
+async function showClip(text) {
+  if (!text) return;
+  const asked = clipWant; clipWant = false; clipLast = text;
+  $("cliptx").textContent = text.length > 140 ? text.slice(0, 140) + "…" : text;
+  $("clipsm").textContent = "📋 Máy ảo vừa copy";
+  $("clipbar").hidden = false; clearTimeout(showClip.t);
+  if (await copyText(text)) { $("clipsm").textContent = "✓ Đã copy về máy bạn — dán ở đâu cũng được"; }
+  showClip.t = setTimeout(() => { $("clipbar").hidden = true; }, asked ? 12000 : 8000);
+}
+$("clipcp").onclick = async () => { if (await copyText(clipLast)) { $("clipsm").textContent = "✓ Đã copy về máy bạn"; } else ask({ title: "Chữ từ máy ảo", desc: "Nhấn giữ để chọn rồi Copy.", body: `<textarea class="in cliptxt" readonly>${esc(clipLast)}</textarea>`, noOk: true, onOk: () => true }); };
+$("clipx").onclick = () => { $("clipbar").hidden = true; };
+async function pasteToPhone(t) {
+  if (!cur) return false;
+  if (await main.cmd("clipset", { text: t })) {           // đặt chữ vào bộ nhớ copy của máy ảo (có dấu được) rồi bấm Dán
+    await sleep(250);
+    try { await api(cur.id + "/key", { method: "POST", json: { code: 279 } }); toast("Đã dán vào máy."); }
+    catch (e) { toast("Đã chép vào bộ nhớ của máy — nhấn giữ ô nhập trên máy rồi chọn Dán.", 0); }
+    return true;
+  }
+  try { await api(cur.id + "/text", { method: "POST", json: { text: t } }); toast("Đã dán vào máy (chữ không dấu)."); return true; }
+  catch (e) { toast(e.message, 1); return false; }
+}
+
 /* ---------- 1 máy ---------- */
 const main = new Conn($("scr"), $("veil"), {
   connecting(n, raw) { setState("wait", n ? "Đang kết nối lại…" : "Đang kết nối…"); veil(true, n ? `Đang kết nối lại (lần ${n})…` : "Đang mở màn hình máy…", n ? (raw ? "Chuyển sang chế độ hình gốc cho chắc chắn…" : "Hình bị gián đoạn, đang tự nối lại.") : ""); },
@@ -434,6 +498,8 @@ const main = new Conn($("scr"), $("veil"), {
   progress(txt) { if (!$("veil").hidden) $("veild").textContent = txt; },
   fail(why) { setState("bad", "Không kết nối được"); veil(true, why || "Không kết nối được màn hình", '<button class="btn sm" id="vretry">Thử lại</button>', false); const b = $("vretry"); if (b) b.onclick = () => { main.tries = 0; main.open(cur, quality); }; },
   size() { fit(); info(); }, stat: () => info(),
+  clip(text) { showClip(text); },
+  pasteKey() { if (cur) api(cur.id + "/key", { method: "POST", json: { code: 279 } }).catch(() => {}); },
 });
 function aspect() { const s = main.size; if (s) return s; return resOf(cur); }
 function fit() {
@@ -853,9 +919,20 @@ const ACT = {
     } catch (e) { $("applist").innerHTML = `<p style="color:var(--bad)">${esc(e.message)}</p>`; }
   },
   text() {
-    ask({ title: "Dán chữ vào máy", desc: "Bấm vào ô nhập trên máy trước, rồi dán chữ ở đây (tài khoản, mật khẩu, link…). Chỉ chữ <b>không dấu</b>; chữ có dấu hãy gõ thẳng trên màn hình máy.",
-      body: '<textarea class="in" id="f-text" maxlength="2000" placeholder="Nội dung cần dán…"></textarea>', ok: "Dán vào máy",
-      onOk: async () => { const t = $("f-text").value; if (!t) return false; try { await api(cur.id + "/text", { method: "POST", json: { text: t } }); toast("Đã dán vào máy."); } catch (e) { toast(e.message, 1); return false; } } });
+    ask({ title: "Dán chữ vào máy", desc: "Bấm vào ô nhập trên máy trước, rồi dán chữ ở đây (tài khoản, mật khẩu, link…). Có dấu cũng được. Mẹo: bấm vào màn hình máy rồi nhấn <b>Ctrl+V</b> là dán luôn.",
+      body: '<textarea class="in cliptxt" id="f-text" maxlength="20000" placeholder="Nội dung cần dán…"></textarea><button type="button" class="btn sm gh" id="f-fromclip" style="margin-top:8px">📋 Lấy chữ bạn đã copy</button>', ok: "Dán vào máy",
+      onOk: async () => { const t = $("f-text").value; if (!t) return false; return await pasteToPhone(t); } });
+    $("f-fromclip").onclick = async () => {
+      try { const t = await navigator.clipboard.readText(); if (t) $("f-text").value = t; else toast("Bộ nhớ copy đang trống.", 1); }
+      catch (e) { toast("Trình duyệt không cho đọc bộ nhớ copy — hãy nhấn giữ ô trên rồi chọn Dán.", 1); }
+    };
+  },
+  async copyout() {
+    if (!main.ok) { toast("Máy chưa kết nối xong.", 1); return; }
+    clipWant = true; setTimeout(() => { clipWant = false; }, 4000);
+    const ok = await main.cmd("clipget");
+    if (!ok) { clipWant = false; toast("Chưa lấy được — trên máy hãy bôi đen chữ và bấm Copy, chữ sẽ tự hiện ở đây.", 1); return; }
+    setTimeout(() => { if (clipWant) { clipWant = false; toast("Bộ nhớ copy của máy đang trống. Bôi đen chữ trên máy rồi bấm Copy.", 1); } }, 3000);
   },
   openurl() {
     ask({ title: "Mở trang web trên máy", desc: "Máy sẽ mở link này bằng trình duyệt.", body: '<input class="in" id="f-open" type="url" inputmode="url" placeholder="https://…">', ok: "Mở trên máy",
@@ -964,7 +1041,13 @@ addEventListener("dragenter", e => { if (!hasFiles(e) || document.body.classList
 addEventListener("dragover", e => { if (hasFiles(e)) e.preventDefault(); });
 addEventListener("dragleave", e => { if (!hasFiles(e)) return; if (--dragN <= 0) { dragN = 0; document.body.classList.remove("dragging"); $("drop").classList.remove("on"); } });
 addEventListener("drop", e => { if (!hasFiles(e)) return; e.preventDefault(); dragN = 0; document.body.classList.remove("dragging"); $("drop").classList.remove("on"); addFiles([...e.dataTransfer.files]); });
-document.addEventListener("paste", e => { const fs = [...(e.clipboardData && e.clipboardData.files || [])]; if (fs.length && $("dlg").hidden) addFiles(fs); });
+document.addEventListener("paste", e => {
+  const fs = [...(e.clipboardData && e.clipboardData.files || [])];
+  if (fs.length && $("dlg").hidden) { addFiles(fs); return; }
+  const el = document.activeElement, typing = el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable);
+  const t = e.clipboardData && e.clipboardData.getData("text/plain");
+  if (t && !typing && $("dlg").hidden && cur && main.ok) { e.preventDefault(); pasteToPhone(t); }
+});
 
 /* ---------- khởi động trang ---------- */
 (async function init() {

@@ -4245,6 +4245,20 @@ $("apk-go").onclick = async () => {
   $("appbar-x").onclick = () => { show("appbar", false); try { localStorage.setItem("br_appbar", String(info.version)); } catch (e) {} };
 })();
 
+// ---- Mở từ app Android: blueroblox.shop/?topup=1 → mở luôn bảng nạp tiền (chưa đăng nhập thì mở đăng nhập trước) ----
+(function topupFromApp() {
+  let want = false; try { want = new URLSearchParams(location.search).get("topup") === "1"; } catch (e) {}
+  if (!want) return;
+  try { history.replaceState(null, "", location.pathname + location.hash); } catch (e) {}
+  let n = 0;
+  const t = setInterval(() => {
+    if (++n > 40) return clearInterval(t);
+    if (!window.__siteLoaded) return;
+    clearInterval(t);
+    if (profile) openTopup(); else { openAuth("login"); const iv = setInterval(() => { if (profile) { clearInterval(iv); show("auth", false); openTopup(); } }, 700); setTimeout(() => clearInterval(iv), 600000); }
+  }, 300);
+})();
+
 </script>
 </body>
 </html>

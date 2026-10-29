@@ -233,11 +233,18 @@ def auto_dpi(res):
     w, h = (int(x) for x in res.split("x"))
     return max(160, min(640, round(min(w, h) / 2.25)))     # 720→320, 1080→480, 540→240
 
+def mem_args(ram):
+    """RAM cho máy: khách được đúng số GB đã thuê + 1GB dư cho hệ thống/luồng hình, kèm vùng đệm swap.
+    Android trong container không biết giới hạn RAM → nếu chạm trần, lõi Android bị tắt → văng hết app, màn đen.
+    Chừa dư + cho phép tràn sang swap thì máy chậm lại một chút thay vì văng."""
+    r = float(ram)
+    return [f"--memory={r + 1:g}g", f"--memory-swap={r * 2 + 2:g}g", f"--memory-reservation={r:g}g"]
+
 def docker_run(name, ram, cpu, port, res, fps, dpi=0):
     w, h = res.split("x")
     data = os.path.join(DATA_ROOT, name); os.makedirs(data, exist_ok=True)
     return sh(["docker", "run", "-itd", "--privileged", "--restart", "unless-stopped", "--name", name,
-               f"--memory={ram}g", f"--cpus={cpu}",
+               *mem_args(ram), f"--cpus={cpu}",
                "-v", f"{data}:/data", "-p", f"127.0.0.1:{port}:5555", IMAGE,   # chỉ mở trong server, không lộ ra internet
                f"androidboot.redroid_width={w}", f"androidboot.redroid_height={h}",
                f"androidboot.redroid_dpi={int(dpi) or auto_dpi(res)}", f"androidboot.redroid_fps={fps}"] + ARM)
@@ -257,7 +264,35 @@ def cmd_reconfig(a):
         print("LỖI:", (r.stderr or r.stdout).strip()); sys.exit(4)
     p["res"], p["fps"], p["dpi"] = res, fps, dpi; save(st)
     ok = wait_boot(a.name, p["port"])
+    s = f"127.0.0.1:{p['port']}"                 # bỏ kích thước đổi nhanh trước đó → dùng đúng cấu hình mới
+    sh(["docker", "exec", WSNAME, "adb", "-s", s, "shell", "wm", "size", "reset"])
+    sh(["docker", "exec", WSNAME, "adb", "-s", s, "shell", "wm", "density", "reset"])
     print(f"✅ '{a.name}' → {res} · {fps} FPS" + ("" if ok else " (đang kết nối lại)"))
+
+def cmd_liveres(a):
+    """Đổi độ phân giải NGAY khi máy đang chạy (wm size/density) — app đang mở KHÔNG bị tắt."""
+    st = load(); p = next((x for x in st["phones"] if x["name"] == a.name), None)
+    if not p: print("Không có máy tên này."); sys.exit(1)
+    if not re.match(r"^\d{3,4}x\d{3,4}$", a.res): print("LỖI: --res phải dạng 720x1280."); sys.exit(1)
+    dpi = auto_dpi(a.res)
+    s = f"127.0.0.1:{p['port']}"
+    r1 = sh(["docker", "exec", WSNAME, "adb", "-s", s, "shell", "wm", "size", a.res])
+    r2 = sh(["docker", "exec", WSNAME, "adb", "-s", s, "shell", "wm", "density", str(dpi)])
+    if r1.returncode or r2.returncode:
+        print("LỖI:", ((r1.stderr or "") + (r2.stderr or "")).strip()); sys.exit(4)
+    p["res"], p["dpi"] = a.res, dpi; save(st)
+    print(f"✅ '{a.name}' → {a.res} (dpi {dpi}) — không khởi động lại")
+
+def cmd_memfix(a):
+    """Nới RAM cho các máy đang chạy (không cần khởi động lại) + báo máy nào từng bị tắt vì hết RAM."""
+    st = load()
+    running = set((sh(["docker", "ps", "--format", "{{.Names}}"]).stdout or "").split())
+    for p in st["phones"]:
+        if p["name"] not in running: continue
+        r = sh(["docker", "update"] + mem_args(p["ram"]) + [p["name"]])
+        info = sh(["docker", "inspect", "-f", "{{.State.OOMKilled}} {{.RestartCount}} {{.State.StartedAt}}", p["name"]]).stdout.strip()
+        print(f"   {'✓' if r.returncode == 0 else '!'} {p['name']} RAM {p['ram']}GB (+1GB dư)  | OOM/restart/bật lúc: {info}"
+              + ("" if r.returncode == 0 else "  LỖI: " + (r.stderr or "").strip()[:120]))
 
 def cmd_waitboot(a):
     st = load(); p = next((x for x in st["phones"] if x["name"] == a.name), None)
@@ -353,6 +388,8 @@ def main():
     g = sub.add_parser("reconfig"); g.add_argument("name"); g.add_argument("--fps", type=int, default=0); g.add_argument("--res", default=""); g.set_defaults(f=cmd_reconfig)
     sub.add_parser("capacity").set_defaults(f=cmd_capacity)
     sub.add_parser("perms").set_defaults(f=cmd_perms)
+    sub.add_parser("memfix").set_defaults(f=cmd_memfix)
+    lr = sub.add_parser("liveres"); lr.add_argument("name"); lr.add_argument("--res", required=True); lr.set_defaults(f=cmd_liveres)
     pi = sub.add_parser("preinstall"); pi.add_argument("name", nargs="?", default=""); pi.add_argument("--all", action="store_true"); pi.add_argument("--force", action="store_true"); pi.set_defaults(f=cmd_preinstall)
     a = ap.parse_args()
     if not getattr(a, "cmd", None): ap.print_help(); sys.exit(0)

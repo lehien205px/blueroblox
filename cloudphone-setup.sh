@@ -47,6 +47,15 @@ if [[ "$LV" == /dev/mapper/* ]] && lvs "$LV" >/dev/null 2>&1; then
   else ok "Ổ đã dùng hết dung lượng"; fi
 else ok "Không dùng LVM — bỏ qua"; fi
 df -h / | tail -1 | awk '{print "   Ổ /: tổng "$2", trống "$4}'
+SWAP_MB=$(free -m | awk '/^Swap:/{print $2}')
+if [ "${SWAP_MB:-0}" -lt 8000 ] && [ ! -f /swapfile-cloud ]; then      # vùng đệm khi máy ảo dùng sát hết RAM → chậm chứ không văng app
+  fallocate -l 16G /swapfile-cloud 2>/dev/null || dd if=/dev/zero of=/swapfile-cloud bs=1M count=16384 status=none
+  if chmod 600 /swapfile-cloud && mkswap /swapfile-cloud >/dev/null && swapon /swapfile-cloud; then
+    grep -q swapfile-cloud /etc/fstab || echo "/swapfile-cloud none swap sw 0 0" >> /etc/fstab
+    ok "Đã thêm 16GB swap (vùng đệm RAM)"
+  else warn "Không tạo được swap — bỏ qua"; rm -f /swapfile-cloud; fi
+else ok "Swap: ${SWAP_MB}MB"; fi
+sysctl -q vm.swappiness=10 && echo "vm.swappiness=10" > /etc/sysctl.d/99-cloudphone.conf
 
 # ---------------------------------------------------------------------
 step "3/9 Binder cho Android (tự nạp mỗi lần khởi động)"
@@ -179,7 +188,8 @@ case "\${1:-}" in
   list)    run python3 "\$H/phonectl.py" list ;;
   apps)    run python3 "\$H/phonectl.py" preinstall --all; run python3 "\$H/phonectl.py" perms; echo "✓ Xong (máy nào đã có app thì bỏ qua)" ;;
   perms)   run python3 "\$H/phonectl.py" perms && echo "✓ Đã mở quyền cài APK cho mọi máy" ;;
-  *) echo "cloudphone [status|update|restart|logs [cpapi|cloudphoned]|list|apps|perms]" ;;
+  memfix)  run python3 "\$H/phonectl.py" memfix ;;
+  *) echo "cloudphone [status|update|restart|logs [cpapi|cloudphoned]|list|apps|perms|memfix]" ;;
 esac
 EOF
 chmod +x /usr/local/bin/cloudphone

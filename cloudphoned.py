@@ -309,6 +309,9 @@ if __name__ == "__main__":
     try: sys.stdout.reconfigure(line_buffering=True)   # in log ngay để xem bằng journalctl
     except Exception: pass
     print(f"cloudphoned chạy — đọc {SB} mỗi {POLL}s. Ctrl+C để dừng.")
+    try:                                    # nới RAM cho máy đang chạy (chống văng app khi hết RAM)
+        r = phonectl(["memfix"]); print(r.stdout.strip())
+    except Exception as e: print("lỗi memfix:", e)
     n = 0
     while True:
         try: tick()

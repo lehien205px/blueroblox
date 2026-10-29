@@ -100,6 +100,13 @@ def is_running(name):
     r = sh(["docker", "inspect", "-f", "{{.State.Running}}", name])
     return (r.stdout or "").strip() == "true"
 
+TUNE = ("settings put global window_animation_scale 0.5; settings put global transition_animation_scale 0.5; "
+        "settings put global animator_duration_scale 0.5; settings put global package_verifier_enable 0; "
+        "settings put global verifier_verify_adb_installs 0; settings put global stay_on_while_plugged_in 7; "
+        "settings put system screen_off_timeout 2147483647")
+def tune(name):
+    """Cho máy mượt hơn: giảm hiệu ứng chuyển cảnh, cài APK không phải chờ quét, màn hình không tự tắt."""
+    sh(["docker", "exec", name, "/system/bin/sh", "-c", TUNE])
 def wait_boot(name, port):
     """Chờ Android khởi động xong rồi mới kết nối (kết nối sớm → màn đen)."""
     t0 = time.time()
@@ -107,6 +114,7 @@ def wait_boot(name, port):
         r = sh(["docker", "exec", name, "/system/bin/getprop", "sys.boot_completed"])
         if (r.stdout or "").strip() == "1": break
         time.sleep(5)
+    tune(name)
     time.sleep(3)
     for _ in range(5):
         adb_connect(port)

@@ -250,8 +250,9 @@ def safe_name(n):
 
 def deliver(port, path, name, jid=None):
     """File đã nằm trên server → đưa vào máy: APK thì cài, file khác vào thư mục Download."""
-    tmp = "/tmp/cpup_" + secrets.token_hex(6)
     ext = name.lower().rsplit(".", 1)[-1] if "." in name else ""
+    ext = re.sub(r"[^a-z0-9]", "", ext)[:10]
+    tmp = "/tmp/cpup_" + secrets.token_hex(6) + ("." + ext if ext else "")   # adb install bắt buộc tên file đuôi .apk
     try:
         if jid: JOBS[jid]["msg"] = "Đang chép vào máy…"
         r = subprocess.run(["docker", "cp", path, f"{WSNAME}:{tmp}"], capture_output=True, timeout=900)

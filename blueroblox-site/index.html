@@ -158,6 +158,7 @@ select{width:auto}
 .body h4{margin:0;font-size:15.5px;font-weight:700;line-height:1.35}
 .feats{display:flex;flex-wrap:wrap;gap:6px}
 .feats span{font-size:11.5px;color:#c4cfee;background:rgba(143,208,255,.07);border:1px solid var(--line);padding:2px 8px;border-radius:99px}
+.pdesc{margin:8px 0 0;font-size:12.5px;line-height:1.55;color:#a9b6d6;white-space:pre-line;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
 .days-chip{font-size:12px;color:var(--gold-hi);font-weight:600}
 .row{display:flex;align-items:baseline;justify-content:space-between;margin-top:auto;gap:8px}
 .price{font-size:21px;font-weight:800;letter-spacing:-.02em;color:var(--gold-hi);font-variant-numeric:tabular-nums}
@@ -640,6 +641,7 @@ window.BR_CONFIG = {
   <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="m-title">
     <h3 id="m-title" data-i18n="buy_title">Mua sản phẩm</h3>
     <div id="m-name" style="color:var(--muted);font-size:14px"></div>
+    <div id="m-desc" style="font-size:13px;line-height:1.6;color:#b9c6e6;white-space:pre-line;margin:4px 0 2px"></div>
     <div id="m-plans-box" hidden style="display:grid;gap:8px"><span style="font-size:13px;color:var(--muted)" data-i18n="rent_period">Chọn thời gian thuê</span><div class="amts plans" id="m-plans"></div></div>
     <div id="m-vps" class="vps-pick" hidden>
       <span class="hint" data-i18n="vps_how">Cách nhận VPS</span>
@@ -913,7 +915,8 @@ window.BR_CONFIG = {
         <label class="chk"><input id="pf-h" type="checkbox"> Gắn nhãn HOT</label>
         <label>Kiểu giao hàng<select id="pf-mode" style="width:100%"><option value="auto">Tự động — kho tài khoản (.txt)</option><option value="manual">Thủ công — chỉ số lượng (VPS)</option></select></label>
         <label id="pf-ms-wrap">Số lượng còn bán<input id="pf-ms" type="number" min="0" step="1" value="10"></label>
-        <label class="full">Tính năng (cách nhau bằng dấu phẩy)<input id="pf-f" placeholder="8 vCPU, 16GB RAM, Windows"></label>
+        <label class="full">Tính năng (cách nhau bằng dấu phẩy — hiện dạng nhãn ngắn)<input id="pf-f" placeholder="8 vCPU, 16GB RAM, Windows"></label>
+        <label class="full">📝 Mô tả / Nội dung (hiện dạng đoạn văn gọn dưới thẻ sản phẩm — xuống dòng tự do)<textarea id="pf-desc" rows="4" maxlength="1500" placeholder="VD: Clone NEW + bảo hành 2H + Face ID + Capcha Lock.&#10;Lưu ý: công cụ check cookie đang bị phát hiện, dùng trong 10 phút có thể khoá acc — không bảo hành nếu xảy ra."></textarea></label>
         <label class="full">Ảnh sản phẩm (tuỳ chọn — để trống sẽ dùng ảnh động)<input id="pf-img-file" type="file" accept="image/*"></label>
         <div class="full" id="pf-img-row" hidden style="display:flex;gap:10px;align-items:center">
           <img id="pf-img-prev" alt="" style="width:88px;height:50px;object-fit:cover;border-radius:6px;border:1px solid var(--line)">
@@ -1731,6 +1734,7 @@ function renderGrid() {
     const s = +p.stock || 0, st = s === 0 ? ["out", t("Hết hàng","sold_out")] : s < 15 ? ["low", t("Còn","left") + " " + s] : ["ok", t("Còn","left") + " " + s];
     return `<article class="card"><div class="thumb">${p.image ? `<img class="thumb-img" src="${esc(p.image)}" alt="" loading="lazy">` : `<canvas data-id="${esc(p.id)}" data-c="${esc(p.thumb || p.cat)}"></canvas>`}<span class="tag">${esc(catName(p.cat).toUpperCase())}</span>${p.hot ? '<span class="hot">HOT</span>' : ""}</div>
     <div class="body"><h4>${esc(p.name)}</h4><div class="feats">${(p.features || []).map(f => `<span>${esc(f)}</span>`).join("")}</div>
+    ${p.description ? `<p class="pdesc">${esc(p.description)}</p>` : ""}
     ${plansOf(p).length ? `<div class="days-chip">${t("Gói","plan")}: ${plansOf(p).map(x => x.days).join(" · ")} ${t("ngày","days")}</div>` : ""}
     <div class="row"><span class="price">${plansOf(p).length ? `<small style="font-size:12px;color:var(--muted);font-family:var(--body)">${t("từ","from")} </small>` : ""}${fmt(minPrice(p))}</span><span class="stock ${st[0]}">${st[1]}</span></div>
     <button class="btn" data-buy="${esc(p.id)}" ${s === 0 ? "disabled" : ""}>${s === 0 ? t("Hết hàng","sold_out") : t("Mua ngay","buy_now")}</button></div></article>`;
@@ -1780,7 +1784,7 @@ function setVpsMethod(m) {
 $("m-pin").oninput = () => upd();
 $("m-vps-opts").onclick = e => { const b = e.target.closest("button"); if (b) { setVpsMethod(b.dataset.m); $("m-err").textContent = ""; } };
 function openBuy(id) { sel = id; const p = selP(); const pl = plansOf(p); selDays = pl.length ? +(pl.find(x => +x.days === 30) || pl[0]).days : null;
-  $("m-name").textContent = p.name; $("m-qty").value = 1; $("m-qty").max = p.stock; renderPlans(); upd();
+  $("m-name").textContent = p.name; $("m-desc").textContent = p.description || ""; show("m-desc", !!p.description); $("m-qty").value = 1; $("m-qty").max = p.stock; renderPlans(); upd();
   show("m-vps", isVps(p)); $("m-pin").value = ""; setVpsMethod("farmv5"); show("modal"); }
 function closeBuy() { show("modal", false); sel = null; }
 async function doBuy() {
@@ -2385,10 +2389,10 @@ $("pf-img-file").onchange = () => {
 };
 $("pf-img-clear").onclick = () => { pfImage = ""; pfFile = null; $("pf-img-file").value = ""; show("pf-img-row", false); };
 function resetForm() { editId = null; $("pf").reset(); $("pf-plans").innerHTML = ""; $("pf-ms").value = 10; $("pf-mode").value = "auto"; $("pf-thumb").value = ""; syncMode(); pfImage = ""; pfFile = null; $("pf-img-file").value = ""; show("pf-img-row", false); syncPlanUI(); $("pf-o").value = P.length ? Math.max(...P.map(p => +p.sort || 0)) + 1 : 1; $("pf-title").textContent = "Thêm sản phẩm"; $("pf-save").textContent = "Thêm sản phẩm"; }
-function fillForm(p) { editId = p.id; $("pf-n").value = p.name; $("pf-c").value = p.cat; $("pf-vnd").value = p.price; $("pf-o").value = p.sort; $("pf-f").value = (p.features || []).join(", "); $("pf-h").checked = !!p.hot; $("pf-ms").value = +p.stock || 0; $("pf-mode").value = p.manual ? "manual" : "auto"; $("pf-thumb").value = p.thumb || ""; syncMode(); pfImage = p.image || ""; pfFile = null; $("pf-img-file").value = ""; if (pfImage) { $("pf-img-prev").src = pfImage; show("pf-img-row"); } else show("pf-img-row", false); $("pf-plans").innerHTML = ""; plansOf(p).forEach(x => planRow(x.days, x.price)); syncPlanUI(); $("pf-title").textContent = "Sửa sản phẩm"; $("pf-save").textContent = "Lưu thay đổi"; $("pane-prod").scrollTop = 0; $("pf-n").focus(); }
+function fillForm(p) { editId = p.id; $("pf-n").value = p.name; $("pf-c").value = p.cat; $("pf-vnd").value = p.price; $("pf-o").value = p.sort; $("pf-f").value = (p.features || []).join(", "); $("pf-desc").value = p.description || ""; $("pf-h").checked = !!p.hot; $("pf-ms").value = +p.stock || 0; $("pf-mode").value = p.manual ? "manual" : "auto"; $("pf-thumb").value = p.thumb || ""; syncMode(); pfImage = p.image || ""; pfFile = null; $("pf-img-file").value = ""; if (pfImage) { $("pf-img-prev").src = pfImage; show("pf-img-row"); } else show("pf-img-row", false); $("pf-plans").innerHTML = ""; plansOf(p).forEach(x => planRow(x.days, x.price)); syncPlanUI(); $("pf-title").textContent = "Sửa sản phẩm"; $("pf-save").textContent = "Lưu thay đổi"; $("pane-prod").scrollTop = 0; $("pf-n").focus(); }
 $("pf").onsubmit = e => { e.preventDefault(); busy($("pf-save"), async () => {
   const body = { cat: $("pf-c").value, name: $("pf-n").value.trim(), price: Math.max(0, Math.round(+$("pf-vnd").value || 0)), sort: Math.round(+$("pf-o").value || 100),
-    features: $("pf-f").value.split(",").map(s => s.trim()).filter(Boolean).slice(0, 6), hot: $("pf-h").checked,
+    features: $("pf-f").value.split(",").map(s => s.trim()).filter(Boolean).slice(0, 6), description: $("pf-desc").value.trim() || null, hot: $("pf-h").checked,
     manual: $("pf-mode").value === "manual", manual_stock: Math.max(0, Math.round(+$("pf-ms").value || 0)), thumb: $("pf-thumb").value || null };
   if (!body.name) return toast("Hãy nhập tên sản phẩm.", 1);
   try { body.plans = readPlans(); } catch (err) { return toast(err.message, 1); }

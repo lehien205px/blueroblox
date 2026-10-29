@@ -535,6 +535,11 @@ h1 em::after{background:linear-gradient(90deg,rgba(143,208,255,0),#8fd0ff 15%,#f
 #biz-tabs button{font-size:13.5px;padding:7px 12px}
 .bizpane{display:grid;gap:14px}
 
+.cpl{display:block;font-size:13px;color:var(--muted);margin:14px 0 6px}
+.cpx{margin-top:8px}
+#cp-resq{grid-template-columns:repeat(4,1fr)}
+#cp-resq button{font-size:12px;padding:9px 4px}
+
 </style>
 <script>
 // Đã điền sẵn cho blueroblox.shop
@@ -1042,19 +1047,27 @@ window.BR_CONFIG = {
       </div>
     </div>
     <div class="dbody" id="pane-cloud" hidden>
-      <div class="note">Quản lý <b>điện thoại đám mây</b>: chỉnh giá/cấu hình & xem máy khách đang thuê. (Khách chỉ dùng & quản lý máy của họ.)</div>
+      <div class="note">Quản lý <b>điện thoại đám mây</b>: sửa thẻ sản phẩm, đơn giá, giới hạn cấu hình và xem máy khách đang thuê. Lưu xong, khách mở form thuê là thấy giá mới ngay.</div>
       <div class="f" style="grid-template-columns:1fr 1fr">
-        <h3>💲 Giá &amp; giới hạn cấu hình</h3>
-        <label>Giá RAM / 1GB / ngày (VND)<input id="cpa-ram" type="number" step="500"></label>
-        <label>Giá CPU / 1 nhân / ngày (VND)<input id="cpa-cpu" type="number" step="500"></label>
-        <label>RAM tối thiểu (GB)<input id="cpa-minram" type="number"></label>
-        <label>RAM tối đa (GB)<input id="cpa-maxram" type="number"></label>
-        <label>CPU tối thiểu (nhân)<input id="cpa-mincpu" type="number"></label>
-        <label>CPU tối đa (nhân)<input id="cpa-maxcpu" type="number"></label>
-        <label>Số ngày tối thiểu<input id="cpa-mindays" type="number"></label>
-        <label>Số ngày tối đa<input id="cpa-maxdays" type="number"></label>
-        <div class="acts full"><button class="btn" type="button" id="cpa-save">Lưu giá</button><span class="hint" id="cpa-eg"></span></div>
+        <h3>🏷️ Thẻ sản phẩm hiển thị ở cửa hàng</h3>
+        <label class="full">Tên sản phẩm<input id="cpa-cname" maxlength="80" placeholder="Điện thoại đám mây (Cloud Phone)"></label>
+        <label class="full">Điểm nổi bật (cách nhau bằng dấu phẩy, tối đa 4)<input id="cpa-cfeats" maxlength="160" placeholder="Android 24/7, Chạy game, Điều khiển web"></label>
+        <label class="full">Mô tả / Nội dung<textarea id="cpa-cdesc" rows="4" maxlength="1200" placeholder="Giới thiệu sản phẩm cho khách…"></textarea></label>
+        <h3>💲 Đơn giá &amp; giới hạn cấu hình</h3>
+        <label>Giá RAM / 1GB / ngày (VND)<input id="cpa-ram" type="number" min="0" step="500"></label>
+        <label>Giá CPU / 1 nhân / ngày (VND)<input id="cpa-cpu" type="number" min="0" step="500"></label>
+        <label>RAM tối thiểu (GB)<input id="cpa-minram" type="number" min="1"></label>
+        <label>RAM tối đa (GB)<input id="cpa-maxram" type="number" min="1"></label>
+        <label>CPU tối thiểu (nhân)<input id="cpa-mincpu" type="number" min="1"></label>
+        <label>CPU tối đa (nhân)<input id="cpa-maxcpu" type="number" min="1"></label>
+        <label>Số ngày tối thiểu<input id="cpa-mindays" type="number" min="1"></label>
+        <label>Số ngày tối đa<input id="cpa-maxdays" type="number" min="1"></label>
+        <div class="acts full"><button class="btn" type="button" id="cpa-save">Lưu tất cả</button><span class="hint" id="cpa-msg"></span></div>
       </div>
+      <h3 style="margin:4px 0 0">📊 Phân tích giá (theo đơn giá đang nhập)</h3>
+      <div class="hint">Công thức: <b>(RAM × giá RAM + CPU × giá CPU) × số ngày</b>. Bảng tự cập nhật khi bạn sửa ô giá phía trên.</div>
+      <div class="tbl"><table><thead><tr><th>Cấu hình</th><th class="num">1 ngày</th><th class="num">7 ngày</th><th class="num">30 ngày</th><th class="num">90 ngày</th></tr></thead><tbody id="cpa-ana"></tbody></table></div>
+      <div class="hint" id="cpa-sum"></div>
       <div style="display:flex;align-items:center;gap:10px"><h3 style="margin:0">Máy khách đang thuê</h3><span class="hint" id="cpa-count" style="margin-left:auto"></span></div>
       <div class="tbl"><table><thead><tr><th>Máy</th><th>Khách</th><th>Cấu hình</th><th>Trạng thái</th><th>Hết hạn</th><th></th></tr></thead><tbody id="cpa-tbl"></tbody></table></div>
     </div>
@@ -1110,6 +1123,44 @@ window.BR_CONFIG = {
         <div class="acts full"><button class="btn" type="submit" id="sf-save">Lưu nội dung</button></div>
       </form>
     </div>
+  </div>
+</div>
+<!-- ĐIỆN THOẠI ĐÁM MÂY — của tôi -->
+<div class="modal" id="cpdlg" hidden>
+  <div class="dlg wide" role="dialog" aria-modal="true" aria-labelledby="cp-title">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <h3 id="cp-title" style="margin:0">📱 Điện thoại đám mây của tôi</h3>
+      <button class="btn sm" id="cp-new" style="margin-left:auto">+ Thuê máy mới</button>
+      <button class="btn ghost sm" id="cp-close">Đóng</button>
+    </div>
+    <div class="note">Máy Android chạy trên cloud 24/7. Bấm <b>Điều khiển</b> để mở máy trong trình duyệt. Hết hạn máy sẽ tạm dừng — gia hạn trong <b>30 phút</b>, quá thời gian đó máy và toàn bộ dữ liệu bị xoá.</div>
+    <div class="olist" id="cp-list"></div>
+  </div>
+</div>
+<!-- ĐIỆN THOẠI ĐÁM MÂY — thuê máy mới -->
+<div class="modal" id="cporderdlg" hidden>
+  <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="cpo-title">
+    <h3 id="cpo-title">Thuê điện thoại đám mây</h3>
+    <div class="hint" id="cp-rate"></div>
+    <label class="cpl" for="cp-ram-x">RAM (GB)</label>
+    <div class="amts" id="cp-ram"></div>
+    <input class="in cpx" id="cp-ram-x" type="number" min="1" step="1" inputmode="numeric" placeholder="Hoặc tự nhập số GB, VD 32">
+    <label class="cpl" for="cp-cpu-x">CPU (số nhân)</label>
+    <div class="amts" id="cp-cpu"></div>
+    <input class="in cpx" id="cp-cpu-x" type="number" min="1" step="1" inputmode="numeric" placeholder="Hoặc tự nhập số nhân, VD 12">
+    <label class="cpl" for="cp-days-x">Số ngày thuê</label>
+    <div class="amts" id="cp-days"></div>
+    <input class="in cpx" id="cp-days-x" type="number" min="1" step="1" inputmode="numeric" placeholder="Hoặc tự nhập số ngày, VD 45">
+    <label class="cpl" for="cp-res">Độ phân giải (rộng x cao)</label>
+    <div class="amts" id="cp-resq"></div>
+    <input class="in cpx" id="cp-res" type="text" autocomplete="off" placeholder="Hoặc tự nhập, VD 1080x2400">
+    <div class="hint" id="cp-lim" style="margin-top:8px"></div>
+    <div class="sum" style="margin-top:12px"><span>Cách tính</span><span id="cp-calc" style="font-family:var(--mono);font-size:12px;text-align:right"></span></div>
+    <div class="sum"><span>Tổng thanh toán</span><b id="cp-total"></b></div>
+    <div class="sum"><span>Số dư hiện tại</span><span id="cp-bal" style="font-family:var(--mono)"></span></div>
+    <div class="note" style="margin-top:10px">Mỗi máy là một điện thoại Android <b>mới tinh</b>, không có dữ liệu hay tài khoản Gmail của ai. Hết hạn máy tạm dừng; không gia hạn trong <b>30 phút</b> thì máy và toàn bộ dữ liệu bị xoá.</div>
+    <div class="err" id="cp-err"></div>
+    <div class="acts"><button class="btn ghost" type="button" id="cp-ocancel">Đóng</button><button class="btn" type="button" id="cp-obuy">Thanh toán &amp; tạo máy</button></div>
   </div>
 </div>
 <div class="toast" id="toast" hidden></div>
@@ -3061,85 +3112,181 @@ $("tg-test") && ($("tg-test").onclick = async () => {
 
 
 /* ===================== ĐIỆN THOẠI ĐÁM MÂY (khách) ===================== */
-const CP_RAM = [2, 3, 4, 6, 8, 12, 16], CP_CPU = [2, 4, 6, 8], CP_DAYS = [7, 15, 30, 60, 90];
-const CP_RES = [["720x1280", "Dọc thường (HD)"], ["1080x1920", "Dọc nét (FHD)"], ["1080x2340", "Dọc dài (FHD+)"], ["1280x720", "Ngang (HD)"]];
+const CP_RAM = [2, 4, 6, 8, 12, 16, 24, 32], CP_CPU = [2, 4, 6, 8], CP_DAYS = [7, 15, 30, 60];
+const CP_RES = [["720x1280", "HD dọc"], ["1080x1920", "FHD dọc"], ["1080x2340", "FHD+ dọc"], ["1280x720", "HD ngang"]];
+const CP_GRACE_MIN = 30;
+const CP_DEF = { price_ram_gb_day: 2500, price_cpu_day: 2000, min_ram: 1, max_ram: 16, min_cpu: 1, max_cpu: 8, min_days: 1, max_days: 90 };
+const CP_CARD_DEF = { name: "Điện thoại đám mây (Cloud Phone)", feats: "Android 24/7, Chạy game, Điều khiển web",
+  desc: "Thuê điện thoại Android chạy trên cloud — tự chọn RAM, CPU, số ngày. Cài game, treo acc, điều khiển mọi nơi qua trình duyệt." };
 let CPpricing = null, cpSel = { ram: 2, cpu: 2, days: 7, res: "720x1280" }, myCloud = [], cpPollT = null;
-function cpDaysLeft(exp) { if (!exp) return null; return Math.ceil((new Date(exp).getTime() - Date.now()) / 86400000); }
+Object.assign(ERR, { BAD_RAM: "RAM nằm ngoài giới hạn cho phép.", BAD_CPU: "Số nhân CPU nằm ngoài giới hạn cho phép.", BAD_DAYS: "Số ngày nằm ngoài giới hạn cho phép.",
+  BAD_RES: "Độ phân giải không hợp lệ (dạng 720x1280).", PHONE_GONE: "Máy đã bị xoá vì hết hạn quá 30 phút — hãy thuê máy mới.", NO_PHONE: "Không tìm thấy máy." });
+
+// Luôn đọc giá mới nhất từ máy chủ (admin vừa sửa là khách thấy ngay)
+async function cpLoadPricing() {
+  try {
+    const { data, error } = await sb.from("cloudphone_pricing").select("*").eq("id", 1).maybeSingle();
+    if (!error && data) { CPpricing = { ...CP_DEF }; for (const k in data) if (data[k] != null) CPpricing[k] = data[k]; }
+  } catch (e) {}
+  if (!CPpricing) CPpricing = { ...CP_DEF };
+  return CPpricing;
+}
+const cpN = v => +v || 0;
+function cpPerDay(ram, cpu, pr) { pr = pr || CPpricing || CP_DEF; return ram * cpN(pr.price_ram_gb_day) + cpu * cpN(pr.price_cpu_day); }
+function cpPrice() { return cpPerDay(cpSel.ram, cpSel.cpu) * cpSel.days; }
+function cpCard() {
+  const p = CPpricing || {};
+  return { name: (p.card_name || "").trim() || CP_CARD_DEF.name, desc: (p.card_desc || "").trim() || CP_CARD_DEF.desc,
+    feats: ((p.card_feats || "").trim() || CP_CARD_DEF.feats).split(",").map(s => s.trim()).filter(Boolean).slice(0, 4) };
+}
+function cpNormRes(v) { return String(v || "").toLowerCase().replace(/\s+/g, "").replace(/[*×:]/g, "x"); }
+function cpCheck() {
+  const p = CPpricing || CP_DEF;
+  if (!(cpSel.ram >= p.min_ram && cpSel.ram <= p.max_ram)) return `RAM phải từ ${p.min_ram} đến ${p.max_ram} GB.`;
+  if (!(cpSel.cpu >= p.min_cpu && cpSel.cpu <= p.max_cpu)) return `CPU phải từ ${p.min_cpu} đến ${p.max_cpu} nhân.`;
+  if (!(cpSel.days >= p.min_days && cpSel.days <= p.max_days)) return `Số ngày phải từ ${p.min_days} đến ${p.max_days}.`;
+  const m = /^(\d{3,4})x(\d{3,4})$/.exec(cpSel.res);
+  if (!m || +m[1] < 320 || +m[2] < 320 || +m[1] > 4096 || +m[2] > 4096) return "Độ phân giải phải dạng rộng x cao, VD 720x1280 (mỗi cạnh 320–4096).";
+  return "";
+}
+
+/* ---- Link điều khiển: thêm tham số ws= (thiếu nó trang điều khiển bị đen) ---- */
+function cpLinks(p) {
+  try {
+    const u = new URL(p.stream_url);
+    const hp = new URLSearchParams(u.hash.replace(/^#!?/, ""));
+    const udid = hp.get("udid"); if (!udid) return { main: p.stream_url };
+    if (hp.get("ws")) return { main: p.stream_url };
+    const ws = (u.protocol === "https:" ? "wss:" : "ws:") + "//" + u.host + "/?action=proxy-adb&remote=" + encodeURIComponent("tcp:8886") + "&udid=" + encodeURIComponent(udid);
+    const mk = pl => u.origin + "/#!action=stream&udid=" + encodeURIComponent(udid) + "&player=" + pl + "&ws=" + encodeURIComponent(ws);
+    return { main: mk("webcodecs"), alt: mk("broadway") };
+  } catch (e) { return { main: p.stream_url }; }
+}
+
+/* ---- Danh sách máy của khách ---- */
+function cpGraceLeft(p) { if (!p.expires_at) return null; return Math.ceil((new Date(p.expires_at).getTime() + CP_GRACE_MIN * 60000 - Date.now()) / 60000); }
 function cpPill(p) {
-  const m = { pending: ["wt", "⏳ Đang tạo…"], active: ["ok", "● Đang chạy"], error: ["bad", "⚠ " + (p.error ? "Lỗi" : "Lỗi")], expired: ["bad", "Hết hạn"], cancelling: ["wt", "Đang huỷ…"], cancelled: ["", "Đã huỷ"] };
+  const m = { pending: ["wt", "⏳ Đang tạo…"], active: ["ok", "● Đang chạy"], error: ["bad", "⚠ Lỗi"], expired: ["bad", "⏸ Hết hạn"], cancelling: ["wt", "Đang huỷ…"], cancelled: ["", "Đã huỷ"] };
   const s = m[p.status] || ["", p.status]; return `<span class="pill ${s[0]}">${esc(s[1])}</span>`;
 }
 async function openCloud() {
   if (!profile) { openAuth("login"); return; }
   $("cp-list").innerHTML = `<div class="empty">${L("Đang tải…", "Loading…")}</div>`; show("cpdlg");
-  const { data } = await sb.from("cloud_phones").select("*").eq("user_id", profile.id).order("created_at", { ascending: false });
+  const [{ data }] = await Promise.all([sb.from("cloud_phones").select("*").eq("user_id", profile.id).order("created_at", { ascending: false }), cpLoadPricing()]);
   myCloud = (data || []).filter(p => p.status !== "cancelled");
   renderCloud();
   clearTimeout(cpPollT);
-  if (myCloud.some(p => ["pending", "cancelling"].includes(p.status))) cpPollT = setTimeout(() => { if (!$("cpdlg").hidden) openCloud(); }, 5000);
+  if (myCloud.some(p => ["pending", "cancelling", "expired"].includes(p.status))) cpPollT = setTimeout(() => { if (!$("cpdlg").hidden) openCloud(); }, 6000);
 }
 function renderCloud() {
   if (!myCloud.length) { $("cp-list").innerHTML = `<div class="empty">${L('Bạn chưa thuê máy nào. Bấm "+ Thuê máy mới" để bắt đầu.', 'No cloud phones yet.')}</div>`; return; }
   $("cp-list").innerHTML = myCloud.map(p => {
-    const dl = cpDaysLeft(p.expires_at), left = dl == null ? "" : (dl >= 0 ? "còn " + dl + "n" : "HẾT HẠN");
-    const canCtrl = p.status === "active" && p.stream_url;
+    const exp = p.expires_at ? new Date(p.expires_at) : null, ms = exp ? exp.getTime() - Date.now() : 0;
+    const left = !exp ? "" : ms > 0 ? (ms >= 86400000 ? "còn " + Math.floor(ms / 86400000) + " ngày" : "còn " + Math.max(1, Math.ceil(ms / 3600000)) + " giờ") : "";
+    const g = cpGraceLeft(p);
+    const lk = p.status === "active" && p.stream_url ? cpLinks(p) : null;
+    const canRenew = p.status === "active" || (p.status === "expired" && g > 0);
     return `<div class="vmi"><div class="top"><div class="nm">📱 ${esc(p.name)}<small>${p.ram}GB · ${p.cpu} nhân · ${esc(p.res || "")}</small></div>${cpPill(p)}</div>
-      ${p.expires_at ? `<div class="exp">${L("Hết hạn", "Expires")}: ${new Date(p.expires_at).toLocaleString(LANG === "en" ? "en-GB" : "vi-VN")}${left ? " · " + left : ""}</div>` : ""}
+      ${exp ? `<div class="exp">${L("Hết hạn", "Expires")}: ${exp.toLocaleString(LANG === "en" ? "en-GB" : "vi-VN")}${left ? " · " + left : ""}</div>` : ""}
+      ${p.status === "expired" ? `<div class="exp" style="color:var(--bad)">${g > 0 ? `Máy đã tạm dừng. Gia hạn trong <b>${g} phút</b> nữa để giữ dữ liệu, quá hạn máy sẽ bị xoá.` : "Đã quá 30 phút — máy đang bị xoá."}</div>` : ""}
+      ${p.status === "pending" ? `<div class="exp">Máy đang khởi động (khoảng 2–3 phút), trang tự cập nhật.</div>` : ""}
       ${p.status === "error" && p.error ? `<div class="exp" style="color:var(--bad)">${esc(p.error)}</div>` : ""}
       <div class="acts">
-        ${canCtrl ? `<a class="btn sm" href="${esc(p.stream_url)}" target="_blank" rel="noopener">▶ Điều khiển</a>` : `<button class="btn sm" disabled>${p.status === "pending" ? "Đang tạo…" : "Chưa sẵn sàng"}</button>`}
-        <button class="btn ghost sm" data-cprenew="${p.id}">🔄 Gia hạn</button>
+        ${lk ? `<a class="btn sm" href="${esc(lk.main)}" target="_blank" rel="noopener">▶ Điều khiển</a>${lk.alt ? `<a class="btn ghost sm" href="${esc(lk.alt)}" target="_blank" rel="noopener" title="Dùng khi chế độ chính bị màn hình đen">Chế độ 2</a>` : ""}`
+           : `<button class="btn sm" disabled>${p.status === "pending" ? "Đang tạo…" : p.status === "expired" ? "Đã tạm dừng" : "Chưa sẵn sàng"}</button>`}
+        ${canRenew ? `<button class="btn ghost sm" data-cprenew="${p.id}">🔄 Gia hạn</button>` : ""}
         <button class="btn ghost sm" data-cprename="${p.id}">✏️ Đổi tên</button>
-        <button class="btn danger sm" data-cpcancel="${p.id}">🗑️ Huỷ</button>
+        ${["active", "expired", "error"].includes(p.status) ? `<button class="btn danger sm" data-cpcancel="${p.id}">🗑️ Huỷ</button>` : ""}
       </div></div>`;
   }).join("");
 }
-$("cp-close") && ($("cp-close").onclick = () => { clearTimeout(cpPollT); show("cpdlg", false); });
-$("nav-cloud") && ($("nav-cloud").onclick = openCloud);
-$("cp-new") && ($("cp-new").onclick = openCpOrder);
-$("cp-list") && ($("cp-list").onclick = e => {
-  const rn = e.target.closest("[data-cprenew]"), rm = e.target.closest("[data-cprename]"), cc = e.target.closest("[data-cpcancel]");
-  if (rn) cpRenew(rn.dataset.cprenew);
-  if (rm) cpRename(rm.dataset.cprename);
-  if (cc) cpCancel(cc.dataset.cpcancel);
-});
+
+/* ---- Form thuê máy mới ---- */
 function cpChips(id, arr, key, suf) {
   $(id).innerHTML = arr.map(v => `<button type="button" data-v="${v}" class="${cpSel[key] === v ? "on" : ""}">${v}${suf || ""}</button>`).join("");
-  $(id).onclick = e => { const b = e.target.closest("button"); if (!b) return; cpSel[key] = +b.dataset.v; $(id).querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b)); cpOrderUpd(); };
+}
+function cpResChips() {
+  $("cp-resq").innerHTML = CP_RES.map(r => `<button type="button" data-v="${r[0]}" class="${cpSel.res === r[0] ? "on" : ""}" title="${r[0]}">${r[1]}</button>`).join("");
 }
 async function openCpOrder() {
   if (!profile) { openAuth("login"); return; }
-  if (!CPpricing) { const { data } = await sb.from("cloudphone_pricing").select("*").eq("id", 1).maybeSingle(); CPpricing = data || { price_ram_gb_day: 2500, price_cpu_day: 2000 }; }
-  cpSel = { ram: 2, cpu: 2, days: 7, res: "720x1280" };
-  cpChips("cp-ram", CP_RAM, "ram", "GB"); cpChips("cp-cpu", CP_CPU, "cpu", ""); cpChips("cp-days", CP_DAYS, "days", "n");
-  $("cp-res").innerHTML = CP_RES.map(r => `<option value="${r[0]}">${r[1]} — ${r[0]}</option>`).join("");
-  $("cp-res").onchange = () => { cpSel.res = $("cp-res").value; };
+  CPpricing = null; await cpLoadPricing();
+  const p = CPpricing;
+  const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
+  cpSel = { ram: clamp(2, p.min_ram, p.max_ram), cpu: clamp(2, p.min_cpu, p.max_cpu), days: clamp(7, p.min_days, p.max_days), res: "720x1280" };
+  cpChips("cp-ram", CP_RAM.filter(v => v >= p.min_ram && v <= p.max_ram), "ram", "GB");
+  cpChips("cp-cpu", CP_CPU.filter(v => v >= p.min_cpu && v <= p.max_cpu), "cpu", "");
+  cpChips("cp-days", CP_DAYS.filter(v => v >= p.min_days && v <= p.max_days), "days", " ngày");
+  cpResChips();
+  ["cp-ram-x", "cp-cpu-x", "cp-days-x"].forEach(id => { $(id).value = ""; });
+  $("cp-ram-x").max = p.max_ram; $("cp-cpu-x").max = p.max_cpu; $("cp-days-x").max = p.max_days;
+  $("cp-res").value = "";
+  $("cp-rate").innerHTML = `Đơn giá: <b>${vnd(p.price_ram_gb_day)}</b> / 1GB RAM / ngày · <b>${vnd(p.price_cpu_day)}</b> / 1 nhân CPU / ngày`;
+  $("cp-lim").textContent = `Cho phép: RAM ${p.min_ram}–${p.max_ram} GB · CPU ${p.min_cpu}–${p.max_cpu} nhân · ${p.min_days}–${p.max_days} ngày`;
   $("cp-err").textContent = ""; cpOrderUpd(); show("cporderdlg");
 }
-function cpPrice() { return ((cpSel.ram * (+CPpricing.price_ram_gb_day)) + (cpSel.cpu * (+CPpricing.price_cpu_day))) * cpSel.days; }
 function cpOrderUpd() {
-  const price = cpPrice();
-  $("cp-total").textContent = fmt(price);
+  const price = cpPrice(), p = CPpricing || CP_DEF, bad = cpCheck();
+  $("cp-calc").textContent = `(${cpSel.ram}GB×${vnd(p.price_ram_gb_day)} + ${cpSel.cpu} nhân×${vnd(p.price_cpu_day)}) × ${cpSel.days} ngày`;
+  $("cp-total").textContent = bad ? "—" : fmt(price);
   $("cp-bal").textContent = profile ? fmt(profile.balance) : "—";
-  $("cp-err").textContent = profile && profile.balance < price ? L("Số dư không đủ. Cần nạp thêm ", "Need ") + fmt(price - profile.balance) + "." : "";
-  $("cp-obuy").textContent = profile && profile.balance < price ? t("Nạp tiền", "topup") : "Thanh toán & tạo máy";
+  $("cp-err").textContent = bad || (profile && profile.balance < price ? L("Số dư không đủ. Cần nạp thêm ", "Need ") + fmt(price - profile.balance) + "." : "");
+  $("cp-obuy").textContent = !bad && profile && profile.balance < price ? "Nạp tiền" : "Thanh toán & tạo máy";
 }
-$("cp-ocancel") && ($("cp-ocancel").onclick = () => show("cporderdlg", false));
-$("cp-obuy") && ($("cp-obuy").onclick = () => busy($("cp-obuy"), async () => {
+async function cpBuy() {
+  const bad = cpCheck(); if (bad) { $("cp-err").textContent = bad; return; }
   const price = cpPrice();
   if (profile.balance < price) { show("cporderdlg", false); openTopup(Math.max(+SITE.minTop || 10000, Math.ceil((price - profile.balance) / 1000) * 1000)); return; }
   const { error } = await sb.rpc("cloudphone_order_custom", { p_ram: cpSel.ram, p_cpu: cpSel.cpu, p_days: cpSel.days, p_res: cpSel.res, p_name: null });
   if (error) { $("cp-err").textContent = errMsg(error); return; }
   show("cporderdlg", false); await loadProfile(); renderUser();
-  toast(L("Đã tạo đơn! Máy đang khởi tạo (~2–3 phút).", "Order placed! Creating…")); openCloud();
-}));
+  toast(L("Đã tạo đơn! Máy đang khởi tạo (khoảng 2–3 phút).", "Order placed! Creating…"));
+  notifyTg && notifyTg(`📱 <b>Đơn ĐT đám mây mới</b>\n${cpSel.ram}GB / ${cpSel.cpu} nhân / ${cpSel.days} ngày / ${cpSel.res}\nGiá: ${vnd(price)}`);
+  openCloud();
+}
+
+// Gắn sự kiện kiểu "uỷ quyền" trên document → nút luôn bấm được dù HTML nằm ở đâu
+document.addEventListener("click", e => {
+  const t = e.target;
+  if (t.closest("#cp-ocancel")) { show("cporderdlg", false); return; }
+  if (t.closest("#cp-obuy")) { const b = $("cp-obuy"); if (!b.disabled) busy(b, cpBuy); return; }
+  if (t.closest("#cp-close")) { clearTimeout(cpPollT); show("cpdlg", false); return; }
+  if (t.closest("#cp-new")) { openCpOrder(); return; }
+  const chip = t.closest("#cp-ram button, #cp-cpu button, #cp-days button, #cp-resq button");
+  if (chip) {
+    const box = chip.parentElement, key = { "cp-ram": "ram", "cp-cpu": "cpu", "cp-days": "days", "cp-resq": "res" }[box.id];
+    cpSel[key] = key === "res" ? chip.dataset.v : +chip.dataset.v;
+    box.querySelectorAll("button").forEach(x => x.classList.toggle("on", x === chip));
+    const x = key === "res" ? $("cp-res") : $("cp-" + key + "-x"); if (x) x.value = "";
+    cpOrderUpd(); return;
+  }
+  const rn = t.closest("[data-cprenew]"), rm = t.closest("[data-cprename]"), cc = t.closest("[data-cpcancel]");
+  if (rn) cpRenew(rn.dataset.cprenew); else if (rm) cpRename(rm.dataset.cprename); else if (cc) cpCancel(cc.dataset.cpcancel);
+});
+document.addEventListener("input", e => {
+  const id = e.target.id;
+  const key = { "cp-ram-x": "ram", "cp-cpu-x": "cpu", "cp-days-x": "days" }[id];
+  if (key) {
+    const v = parseInt(e.target.value, 10);
+    if (v > 0) { cpSel[key] = v; $("cp-" + key).querySelectorAll("button").forEach(b => b.classList.toggle("on", +b.dataset.v === v)); }
+    cpOrderUpd();
+  } else if (id === "cp-res") {
+    const v = cpNormRes(e.target.value);
+    if (v) { cpSel.res = v; $("cp-resq").querySelectorAll("button").forEach(b => b.classList.toggle("on", b.dataset.v === v)); }
+    cpOrderUpd();
+  } else if (/^cpa-(ram|cpu|minram|maxram|mincpu|maxcpu|mindays|maxdays)$/.test(id)) cpaAnalyze();
+});
+document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("cporderdlg").hidden) show("cporderdlg", false); });
+$("nav-cloud") && ($("nav-cloud").onclick = openCloud);
+
 async function cpRenew(id) {
   const p = myCloud.find(x => x.id === id); if (!p) return;
-  const rate = CPpricing || { price_ram_gb_day: 2500, price_cpu_day: 2000 };
-  const per = (p.ram * rate.price_ram_gb_day) + (p.cpu * rate.price_cpu_day);
-  const ans = prompt(`Gia hạn "${p.name}" bao nhiêu ngày?  (giá ${fmt(per)}/ngày)`, "30");
+  await cpLoadPricing();
+  const per = cpPerDay(p.ram, p.cpu);
+  const ans = prompt(`Gia hạn "${p.name}" thêm bao nhiêu ngày?\nGiá: ${vnd(per)} / ngày`, "30");
   if (ans === null) return; const d = parseInt(ans, 10);
   if (!d || d < 1) { toast("Số ngày không hợp lệ.", 1); return; }
+  if (!confirm(`Gia hạn ${d} ngày, trừ ${vnd(per * d)} từ số dư?`)) return;
   const { error } = await sb.rpc("cloudphone_renew", { p_id: id, p_days: d });
   if (error) { toast(errMsg(error), 1); return; }
   await loadProfile(); renderUser(); toast(L("Đã gia hạn +" + d + " ngày.", "Renewed.")); openCloud();
@@ -3151,95 +3298,86 @@ async function cpRename(id) {
   if (error) { toast(errMsg(error), 1); return; } openCloud();
 }
 async function cpCancel(id) {
-  if (!confirm(L("Huỷ máy này? Máy sẽ bị XOÁ và KHÔNG hoàn tiền.", "Cancel this phone? It will be deleted."))) return;
+  if (!confirm(L("Huỷ máy này? Máy và toàn bộ dữ liệu sẽ bị XOÁ, không hoàn tiền.", "Cancel this phone? It will be deleted."))) return;
   const { error } = await sb.rpc("cloudphone_cancel", { p_id: id });
   if (error) { toast(errMsg(error), 1); return; }
   toast(L("Đang huỷ máy…", "Cancelling…")); openCloud();
 }
 
-
-/* ===== THẺ "ĐT đám mây" ở lưới sản phẩm ===== */
+/* ===== THẺ "ĐT đám mây" ở lưới sản phẩm (tên/nội dung admin sửa được) ===== */
 function cloudGridCard() {
+  const c = cpCard(), p = CPpricing || CP_DEF, from = cpPerDay(p.min_ram, p.min_cpu);
   return `<article class="card" style="cursor:pointer" data-cpbuy="1">
     <div class="thumb"><canvas data-id="cloudphone" data-c="vps"></canvas><span class="tag">ĐT ĐÁM MÂY</span><span class="hot">MỚI</span></div>
-    <div class="body"><h4>Điện thoại đám mây (Cloud Phone)</h4>
-    <div class="feats"><span>Android 24/7</span><span>Chạy game</span><span>Điều khiển web</span></div>
-    <p class="pdesc">Thuê điện thoại Android chạy trên cloud — tự chọn RAM/CPU/số ngày. Cài game, farm acc, điều khiển mọi nơi qua trình duyệt.</p>
-    <div class="row"><span class="price"><small style="font-size:12px;color:var(--muted);font-family:var(--body)">tự chọn </small>cấu hình</span><span class="stock ok">${L("Còn hàng","In stock")}</span></div>
-    <button class="btn" data-cpbuy="1">${L("Thuê ngay","Rent now")}</button></div></article>`;
+    <div class="body"><h4>${esc(c.name)}</h4>
+    <div class="feats">${c.feats.map(f => `<span>${esc(f)}</span>`).join("")}</div>
+    <p class="pdesc">${esc(c.desc)}</p>
+    <div class="row"><span class="price"><small style="font-size:12px;color:var(--muted);font-family:var(--body)">từ </small>${fmt(from)}<small style="font-size:12px;color:var(--muted);font-family:var(--body)">/ngày</small></span><span class="stock ok">${L("Còn hàng", "In stock")}</span></div>
+    <button class="btn" data-cpbuy="1">${L("Thuê ngay", "Rent now")}</button></div></article>`;
 }
+cpLoadPricing().then(() => { try { renderGrid(); } catch (e) {} });
 
-/* ===== ADMIN: giá/cấu hình + máy khách ===== */
+/* ===== ADMIN: thẻ sản phẩm + giá + phân tích + máy khách ===== */
 function cpaStatus(p) {
-  const m = { pending: ["wt", "Đang tạo"], active: ["ok", "Đang chạy"], error: ["bad", "Lỗi"], expired: ["bad", "Hết hạn"], cancelling: ["wt", "Đang huỷ"], cancelled: ["", "Đã huỷ"] };
+  const m = { pending: ["wt", "Đang tạo"], active: ["ok", "Đang chạy"], error: ["bad", "Lỗi"], expired: ["bad", "Hết hạn (chờ 30p)"], cancelling: ["wt", "Đang huỷ"], cancelled: ["", "Đã huỷ"] };
   const s = m[p.status] || ["", p.status]; return `<span class="pill ${s[0]}">${esc(s[1])}</span>`;
 }
-function cpaEg() { const r = +$("cpa-ram").value || 0, c = +$("cpa-cpu").value || 0; if ($("cpa-eg")) $("cpa-eg").textContent = `VD 4GB/4 nhân/30 ngày = ${vnd((4 * r + 4 * c) * 30)}`; }
+function cpaForm() {
+  const n = id => +$(id).value || 0;
+  return { price_ram_gb_day: n("cpa-ram"), price_cpu_day: n("cpa-cpu"), min_ram: n("cpa-minram") || 1, max_ram: n("cpa-maxram") || 16,
+    min_cpu: n("cpa-mincpu") || 1, max_cpu: n("cpa-maxcpu") || 8, min_days: n("cpa-mindays") || 1, max_days: n("cpa-maxdays") || 90 };
+}
+function cpaAnalyze() {
+  if (!$("cpa-ana")) return;
+  const f = cpaForm();
+  const cfg = [[f.min_ram, f.min_cpu], [2, 2], [4, 4], [6, 4], [8, 6], [16, 8], [32, 16], [f.max_ram, f.max_cpu]];
+  const seen = new Set(), rows = cfg.filter(([r, c]) => { const k = r + "/" + c; if (seen.has(k)) return false; seen.add(k); return true; }).sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  $("cpa-ana").innerHTML = rows.map(([r, c]) => {
+    const d = cpPerDay(r, c, f), over = r > f.max_ram || c > f.max_cpu || r < f.min_ram || c < f.min_cpu;
+    const tag = r === f.min_ram && c === f.min_cpu ? " <span class='pill'>rẻ nhất</span>" : r === f.max_ram && c === f.max_cpu ? " <span class='pill'>to nhất</span>" : over ? " <span class='pill bad'>vượt giới hạn</span>" : "";
+    return `<tr${over ? " style='opacity:.5'" : ""}><td><b>${r}GB RAM · ${c} nhân</b>${tag}<div class="hint">${r}×${vnd(f.price_ram_gb_day)} + ${c}×${vnd(f.price_cpu_day)}</div></td>
+      <td class="num">${vnd(d)}</td><td class="num">${vnd(d * 7)}</td><td class="num">${vnd(d * 30)}</td><td class="num">${vnd(d * 90)}</td></tr>`;
+  }).join("");
+  $("cpa-sum").innerHTML = `Khách trả thấp nhất: <b>${vnd(cpPerDay(f.min_ram, f.min_cpu, f) * f.min_days)}</b> (${f.min_ram}GB/${f.min_cpu} nhân/${f.min_days} ngày) · cao nhất: <b>${vnd(cpPerDay(f.max_ram, f.max_cpu, f) * f.max_days)}</b> (${f.max_ram}GB/${f.max_cpu} nhân/${f.max_days} ngày)`;
+}
 async function loadCloudAdm() {
   if (!isAdmin()) return;
-  const { data: pr } = await sb.from("cloudphone_pricing").select("*").eq("id", 1).maybeSingle();
-  if (pr) {
-    $("cpa-ram").value = pr.price_ram_gb_day; $("cpa-cpu").value = pr.price_cpu_day;
-    $("cpa-minram").value = pr.min_ram; $("cpa-maxram").value = pr.max_ram;
-    $("cpa-mincpu").value = pr.min_cpu; $("cpa-maxcpu").value = pr.max_cpu;
-    $("cpa-mindays").value = pr.min_days; $("cpa-maxdays").value = pr.max_days; cpaEg();
-  }
+  CPpricing = null; const pr = await cpLoadPricing(), c = cpCard();
+  $("cpa-cname").value = c.name; $("cpa-cfeats").value = c.feats.join(", "); $("cpa-cdesc").value = c.desc;
+  $("cpa-ram").value = pr.price_ram_gb_day; $("cpa-cpu").value = pr.price_cpu_day;
+  $("cpa-minram").value = pr.min_ram; $("cpa-maxram").value = pr.max_ram;
+  $("cpa-mincpu").value = pr.min_cpu; $("cpa-maxcpu").value = pr.max_cpu;
+  $("cpa-mindays").value = pr.min_days; $("cpa-maxdays").value = pr.max_days;
+  $("cpa-msg").textContent = ""; cpaAnalyze();
   const { data } = await sb.from("cloud_phones").select("*").order("created_at", { ascending: false });
-  const rows = data || [];
-  if ($("cpa-count")) $("cpa-count").textContent = rows.filter(r => r.status !== "cancelled").length + " máy";
+  const rows = (data || []).filter(r => r.status !== "cancelled");
+  $("cpa-count").textContent = rows.length + " máy · đang chạy " + rows.filter(r => r.status === "active").length;
   $("cpa-tbl").innerHTML = rows.length ? rows.map(p => {
     const exp = p.expires_at ? new Date(p.expires_at).toLocaleString(LANG === "en" ? "en-GB" : "vi-VN") : "—";
-    return `<tr><td><b>${esc(p.name)}</b><div class="hint">${esc(p.container || "")}</div></td><td>${esc(uname(p.user_id))}</td><td class="num">${p.ram}GB/${p.cpu}</td><td>${cpaStatus(p)}</td><td class="num">${exp}</td>
-    <td style="text-align:right;white-space:nowrap">${["active", "pending", "error"].includes(p.status) ? `<button class="btn danger sm" data-cparm="${p.id}">Thu hồi</button>` : ""}</td></tr>`;
+    return `<tr><td><b>${esc(p.name)}</b><div class="hint">${esc(p.container || "")}${p.port ? " · cổng " + p.port : ""}</div></td><td>${esc(uname(p.user_id))}</td><td class="num">${p.ram}GB/${p.cpu} · ${esc(p.res || "")}</td><td>${cpaStatus(p)}${p.error ? `<div class="hint" style="color:var(--bad)">${esc(p.error)}</div>` : ""}</td><td class="num">${exp}</td>
+    <td style="text-align:right;white-space:nowrap">${["active", "pending", "error", "expired"].includes(p.status) ? `<button class="btn danger sm" data-cparm="${p.id}">Thu hồi</button>` : ""}</td></tr>`;
   }).join("") : `<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px">Chưa có máy nào.</td></tr>`;
 }
-["cpa-ram", "cpa-cpu"].forEach(id => $(id) && $(id).addEventListener("input", cpaEg));
 $("cpa-save") && ($("cpa-save").onclick = () => busy($("cpa-save"), async () => {
-  const body = { price_ram_gb_day: +$("cpa-ram").value || 0, price_cpu_day: +$("cpa-cpu").value || 0,
-    min_ram: +$("cpa-minram").value || 1, max_ram: +$("cpa-maxram").value || 16,
-    min_cpu: +$("cpa-mincpu").value || 1, max_cpu: +$("cpa-maxcpu").value || 8,
-    min_days: +$("cpa-mindays").value || 1, max_days: +$("cpa-maxdays").value || 90, updated_at: new Date().toISOString() };
+  const f = cpaForm();
+  if (f.min_ram > f.max_ram || f.min_cpu > f.max_cpu || f.min_days > f.max_days) return toast("Giá trị tối thiểu không được lớn hơn tối đa.", 1);
+  const body = { ...f, card_name: $("cpa-cname").value.trim() || null, card_desc: $("cpa-cdesc").value.trim() || null,
+    card_feats: $("cpa-cfeats").value.trim() || null, updated_at: new Date().toISOString() };
   const { error } = await sb.from("cloudphone_pricing").update(body).eq("id", 1);
-  if (error) return toast(errMsg(error), 1); toast("Đã lưu giá & giới hạn."); CPpricing = null;
+  if (error) {
+    if (/card_/.test(error.message || "")) return toast("Chưa chạy file SQL cloud-phones-v3.sql trên Supabase.", 1);
+    return toast(errMsg(error), 1);
+  }
+  toast("Đã lưu. Khách mở form thuê sẽ thấy giá mới ngay."); $("cpa-msg").textContent = "✓ Đã lưu lúc " + new Date().toLocaleTimeString("vi-VN");
+  CPpricing = null; await cpLoadPricing(); try { renderGrid(); } catch (e) {}
 }));
 $("cpa-tbl") && ($("cpa-tbl").onclick = async e => {
   const b = e.target.closest("[data-cparm]"); if (!b) return;
-  if (!confirm("Thu hồi (xoá) máy này của khách? Máy sẽ bị xoá khỏi server.")) return;
+  if (!confirm("Thu hồi (xoá) máy này của khách? Máy và dữ liệu sẽ bị xoá khỏi server.")) return;
   const { error } = await sb.from("cloud_phones").update({ status: "cancelling", updated_at: new Date().toISOString() }).eq("id", b.dataset.cparm);
   if (error) return toast(errMsg(error), 1); toast("Đang thu hồi…"); loadCloudAdm();
 });
 
 </script>
-
-<!-- ĐIỆN THOẠI ĐÁM MÂY — của tôi -->
-<div class="modal" id="cpdlg" hidden>
-  <div class="dlg wide" role="dialog" aria-modal="true" aria-labelledby="cp-title">
-    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-      <h3 id="cp-title" style="margin:0">📱 Điện thoại đám mây của tôi</h3>
-      <button class="btn sm" id="cp-new" style="margin-left:auto">+ Thuê máy mới</button>
-      <button class="btn ghost sm" id="cp-close">Đóng</button>
-    </div>
-    <div class="note">Máy Android chạy trên cloud 24/7. Bấm <b>Điều khiển</b> để mở máy trong trình duyệt. Gần hết hạn nhớ gia hạn kẻo máy bị xoá.</div>
-    <div class="olist" id="cp-list"></div>
-  </div>
-</div>
-<!-- ĐIỆN THOẠI ĐÁM MÂY — thuê máy mới -->
-<div class="modal" id="cporderdlg" hidden>
-  <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="cpo-title">
-    <h3 id="cpo-title">Thuê điện thoại đám mây</h3>
-    <label style="font-size:13px;color:var(--muted)">RAM (GB)</label>
-    <div class="amts" id="cp-ram"></div>
-    <label style="font-size:13px;color:var(--muted);margin-top:10px;display:block">CPU (số nhân)</label>
-    <div class="amts" id="cp-cpu"></div>
-    <label style="font-size:13px;color:var(--muted);margin-top:10px;display:block">Số ngày thuê</label>
-    <div class="amts" id="cp-days"></div>
-    <label style="font-size:13px;color:var(--muted);margin-top:10px;display:block">Độ phân giải</label>
-    <select class="in" id="cp-res" style="width:100%"></select>
-    <div class="sum" style="margin-top:14px"><span>Tổng thanh toán</span><b id="cp-total"></b></div>
-    <div class="sum"><span>Số dư hiện tại</span><span id="cp-bal" style="font-family:var(--mono)"></span></div>
-    <div class="err" id="cp-err"></div>
-    <div class="acts"><button class="btn ghost" id="cp-ocancel">Đóng</button><button class="btn" id="cp-obuy">Thanh toán &amp; tạo máy</button></div>
-  </div>
-</div>
 </body>
 </html>

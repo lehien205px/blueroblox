@@ -5,6 +5,13 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>BLUEROBLOX – Clone Roblox & VPS GPU</title>
 <meta name="description" content="Shop Clone Roblox và VPS GPU giá rẻ, giao tự động 24/7, nạp tiền tự động qua ngân hàng.">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="BlueRoblox">
+<meta name="theme-color" content="#060a1c">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap">
 <style>
@@ -669,6 +676,10 @@ h1 em::after{background:linear-gradient(90deg,rgba(143,208,255,0),#8fd0ff 15%,#f
 .appnews p{margin:8px 0}
 .ansteps{text-align:left;margin:10px 0 0;padding-left:22px;color:var(--muted);font-size:14px;line-height:1.6}
 .appnews .acts{justify-content:center}
+
+#iosguide{z-index:72}
+.iossteps li{margin:4px 0}
+html.pwa .appbar{display:none!important}
 
 </style>
 <script>
@@ -1384,6 +1395,21 @@ window.BR_CONFIG = {
     <p class="hint">Dùng chung tài khoản và số dư với web. <span id="an-v"></span></p>
     <ol class="ansteps"><li>Mở trang này trên điện thoại Android, bấm <b>Tải app</b>.</li><li>Mở file vừa tải → cho phép <b>cài từ nguồn này</b> → <b>Cài đặt</b>.</li><li>Đăng nhập bằng tài khoản web.</li></ol>
     <div class="acts"><button class="btn ghost" type="button" id="an-later">Để sau</button><a class="btn" id="an-dl" href="/download/blueroblox-cloud.apk" download>Tải app Android</a></div>
+  </div>
+</div>
+<div class="modal" id="iosguide" hidden>
+  <div class="dlg appnews" role="dialog" aria-modal="true" aria-labelledby="ig-title">
+    <img src="/apple-touch-icon.png" alt="" width="72" height="72" style="border-radius:16px">
+    <h3 id="ig-title">📱 Cài BlueRoblox lên iPhone</h3>
+    <p>Thêm vào màn hình chính để dùng như <b>app thật</b>: mở toàn màn hình, thuê, gia hạn và điều khiển điện thoại đám mây ngay trên iPhone. Miễn phí, không cần App Store.</p>
+    <ol class="ansteps iossteps">
+      <li>Mở trang này bằng <b>Safari</b> (hoặc Chrome).</li>
+      <li>Bấm nút <b>Chia sẻ</b> <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px"><path d="M12 3v12M8 7l4-4 4 4"/><path d="M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7"/></svg> ở thanh dưới (Chrome: góc trên bên phải).</li>
+      <li>Kéo xuống, chọn <b>Thêm vào MH chính</b> (Add to Home Screen) → bấm <b>Thêm</b>.</li>
+      <li>Mở biểu tượng <b>BlueRoblox</b> trên màn hình chính và đăng nhập.</li>
+    </ol>
+    <p class="hint">Cần iOS 16.4 trở lên để xem hình máy mượt nhất.</p>
+    <div class="acts"><button class="btn" type="button" id="ig-ok">Đã hiểu</button></div>
   </div>
 </div>
 <div class="appbar" id="appbar" hidden role="region" aria-label="Tải app Android">
@@ -3649,7 +3675,7 @@ function cloudGridCard() {
     <p class="pdesc">${esc(c.desc)}</p>
     <div class="row"><span class="price"><small style="font-size:12px;color:var(--muted);font-family:var(--body)">từ </small>${priceHtml(from)}<small style="font-size:12px;color:var(--muted);font-family:var(--body)">/ngày</small></span><span class="stock ${st[0]}">${st[1]}</span></div>
     <button class="btn" data-cpbuy="1"${st[0] !== "ok" && !isAdmin() ? " disabled" : ""}>${st[0] === "ok" || isAdmin() ? L("Thuê ngay", "Rent now") : st[1]}</button>
-    ${APP_INFO ? `<a class="btn ghost appdl" href="/download/blueroblox-cloud.apk" download>📱 ${L("Tải app Android", "Get Android app")}</a>` : ""}</div></article>`;
+    ${APP_INFO ? (APP_INFO.ios ? `<a class="btn ghost appdl" href="#" data-iosguide="1">📱 ${L("Cài app lên iPhone", "Install on iPhone")}</a>` : `<a class="btn ghost appdl" href="/download/blueroblox-cloud.apk" download>📱 ${L("Tải app Android", "Get Android app")}</a>`) : ""}</div></article>`;
 }
 Promise.all([cpLoadPricing(), cpLoadStatus()]).then(() => { try { renderGrid(); } catch (e) {} });
 setInterval(() => { if (document.visibilityState === "visible") cpLoadStatus().then(() => { try { renderGrid(); } catch (e) {} }); }, 60000);
@@ -4253,8 +4279,30 @@ $("apk-go").onclick = async () => {
 
 // ---- Nút tải app Android (chỉ hiện khi đã có file APK trên web, và không hiện bên trong app) ----
 let APP_INFO = null;
+const IS_IOS = /iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+const IS_STANDALONE = !!(navigator.standalone || (window.matchMedia && matchMedia("(display-mode: standalone)").matches));
+function openIosGuide() { show("iosguide"); }
 (async function appPromo() {
-  if (/BlueRobloxApp\//.test(navigator.userAgent)) return;          // đang ở trong app → không quảng bá
+  if (/BlueRobloxApp\//.test(navigator.userAgent) || IS_STANDALONE) return;      // đang ở trong app / app web → không quảng bá
+  if (IS_IOS) {                                   // iPhone: hướng dẫn "Thêm vào màn hình chính" thay cho file APK
+    APP_INFO = { ios: true };
+    show("ft-app"); const fa = $("ft-app").querySelector("a"); fa.textContent = L("📱 Cài app lên iPhone", "📱 Install on iPhone"); fa.removeAttribute("download"); fa.href = "#"; fa.onclick = e => { e.preventDefault(); openIosGuide(); };
+    document.querySelectorAll(".appbox").forEach(b => {
+      b.hidden = false;
+      b.querySelector("span").innerHTML = "📱 <b>" + L("Dùng như app trên iPhone", "Use it like an app on iPhone") + "</b> — " + L("thêm vào màn hình chính, mở toàn màn hình, thuê và điều khiển máy ngay trên iPhone.", "add to Home Screen and control your phones full-screen.");
+      const a = b.querySelector("a"); a.textContent = L("Cách cài", "How to install"); a.removeAttribute("download"); a.href = "#"; a.onclick = e => { e.preventDefault(); openIosGuide(); };
+    });
+    try { renderGrid(); } catch (e) {}
+    let seenI = false; try { seenI = localStorage.getItem("br_iosnews") === "1"; } catch (e) {}
+    if (!seenI) {
+      const t = setInterval(() => {
+        if (!window.__siteLoaded || !$("noticedlg").hidden || !$("maintov").hidden) return;
+        clearInterval(t); openIosGuide(); try { localStorage.setItem("br_iosnews", "1"); } catch (e) {}
+      }, 1500);
+      setTimeout(() => clearInterval(t), 120000);
+    }
+    return;
+  }
   let info = null;
   try { const r = await fetch("/download/app.json", { cache: "no-store" }); if (r.ok) info = await r.json(); } catch (e) {}
   if (!info || !info.version) return;
@@ -4264,10 +4312,9 @@ let APP_INFO = null;
   show("ft-app"); $("ft-app").querySelector("a").textContent = label;
   document.querySelectorAll(".appbox").forEach(b => { b.hidden = false; const v = b.querySelector(".appv"); if (v) v.textContent = "v" + info.version + mb; });
   try { renderGrid(); } catch (e) {}
-  const ios = /iPhone|iPad|iPod/i.test(navigator.userAgent), android = /Android/i.test(navigator.userAgent);
-  // Thông báo 1 lần cho mỗi khách (mỗi phiên bản app): có app Android
+  const android = /Android/i.test(navigator.userAgent);
   let seen = false; try { seen = localStorage.getItem("br_appnews") === "1"; } catch (e) {}
-  if (!seen && !ios) {
+  if (!seen) {
     const t = setInterval(() => {
       if (!window.__siteLoaded || !$("noticedlg").hidden || !$("maintov").hidden) return;     // chờ đóng bảng thông báo / nội quy
       clearInterval(t);
@@ -4283,6 +4330,30 @@ let APP_INFO = null;
   show("appbar");
   $("appbar-x").onclick = () => { show("appbar", false); try { localStorage.setItem("br_appbar", String(info.version)); } catch (e) {} };
 })();
+$("ig-ok").onclick = () => show("iosguide", false);
+$("iosguide").onclick = e => { if (e.target.id === "iosguide") show("iosguide", false); };
+document.addEventListener("click", e => { const g = e.target.closest("[data-iosguide]"); if (g) { e.preventDefault(); openIosGuide(); } });
+
+// ---- Mở từ biểu tượng trên màn hình chính (app web iPhone/Android) ----
+if (IS_STANDALONE) {
+  document.documentElement.classList.add("pwa");
+  // trong app web, link mở tab mới sẽ văng ra Safari → mở ngay trong app
+  document.addEventListener("click", e => {
+    const a = e.target.closest('a[target="_blank"]'); if (!a) return;
+    try { const u = new URL(a.href, location.href); if (u.origin === location.origin) { e.preventDefault(); location.href = u.href; } } catch (er) {}
+  }, true);
+  let want = false; try { want = new URLSearchParams(location.search).get("pwa") === "1"; } catch (e) {}
+  if (want) {
+    try { history.replaceState(null, "", location.pathname + location.hash); } catch (e) {}
+    let n = 0;
+    const t = setInterval(() => {
+      if (++n > 40) return clearInterval(t);
+      if (!window.__siteLoaded) return;
+      clearInterval(t);
+      if (profile) openCloud(); else { openAuth("login"); const iv = setInterval(() => { if (profile) { clearInterval(iv); show("auth", false); openCloud(); } }, 700); setTimeout(() => clearInterval(iv), 600000); }
+    }, 300);
+  }
+}
 function appNewsClose() { show("appnews", false); try { localStorage.setItem("br_appnews", "1"); } catch (e) {} }
 $("an-later").onclick = appNewsClose;
 $("an-dl").onclick = () => setTimeout(appNewsClose, 300);

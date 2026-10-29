@@ -6,6 +6,12 @@
 <meta name="theme-color" content="#060a1c">
 <title>Điều khiển máy – BLUEROBLOX</title>
 <link rel="icon" href="logo.webp">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="BlueRoblox">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap">
 <style>
@@ -1078,7 +1084,23 @@ document.addEventListener("paste", e => {
   if (t && !typing && $("dlg").hidden && cur && main.ok) { e.preventDefault(); pasteToPhone(t); }
 });
 
-if (!/BlueRobloxApp\//.test(navigator.userAgent)) fetch("/download/app.json", { cache: "no-store" }).then(r => r.ok ? r.json() : null).then(i => { if (i && i.version) ["dm-app", "getapp", "appcta"].forEach(id => { $(id).hidden = false; }); }).catch(() => {});
+(function appLinks() {     // nút tải app: Android → file APK · iPhone → hướng dẫn thêm vào màn hình chính
+  const standalone = !!(navigator.standalone || (window.matchMedia && matchMedia("(display-mode: standalone)").matches));
+  if (/BlueRobloxApp\//.test(navigator.userAgent) || standalone) return;
+  const ios = /iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const ids = ["dm-app", "getapp", "appcta"];
+  if (ios) {
+    const guide = e => { e.preventDefault(); ask({ title: "📱 Cài BlueRoblox lên iPhone", noOk: true, onOk: () => true,
+      desc: "Dùng như app thật: mở toàn màn hình, điều khiển máy ngay trên iPhone. Miễn phí, không cần App Store.",
+      body: '<ol style="margin:0;padding-left:20px;line-height:1.7"><li>Mở trang này bằng <b>Safari</b> (hoặc Chrome).</li><li>Bấm nút <b>Chia sẻ</b> (ô vuông có mũi tên lên) ở thanh dưới — Chrome: góc trên bên phải.</li><li>Chọn <b>Thêm vào MH chính</b> → <b>Thêm</b>.</li><li>Mở biểu tượng <b>BlueRoblox</b> trên màn hình chính và đăng nhập.</li></ol>' }); };
+    ids.forEach(id => { const el = $(id); el.removeAttribute("download"); el.href = "#"; el.onclick = guide; el.hidden = false; });
+    $("getapp").querySelector(".gl").textContent = "Cài app iPhone"; $("getapp").querySelector(".gs").textContent = "Cài app";
+    $("appcta").querySelector("b").textContent = "📱 App cho iPhone"; $("appcta").querySelector("span").textContent = "Thêm vào màn hình chính, mở toàn màn hình như app thật"; $("appcta").querySelector("i").textContent = "Xem cách cài";
+    $("dm-app").textContent = "📱 Cài app lên iPhone — dùng như app thật";
+    return;
+  }
+  fetch("/download/app.json", { cache: "no-store" }).then(r => r.ok ? r.json() : null).then(i => { if (i && i.version) ids.forEach(id => { $(id).hidden = false; }); }).catch(() => {});
+})();
 /* ---------- khởi động trang ---------- */
 (async function init() {
   setTools(false); syncMobile();

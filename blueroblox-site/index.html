@@ -720,6 +720,32 @@ html.pwa .appbar{display:none!important}
   .top nav a svg.ic{width:17px;height:17px}
 }
 
+/* ===== ô liên hệ / thông báo ở đầu trang ===== */
+.hero .notice{display:grid!important;gap:10px;margin-top:22px;max-width:540px}
+.notice .nh{margin:0;display:flex;align-items:center;gap:9px;font-weight:700;font-size:15px;color:#fff;padding:0 2px 2px}
+.notice .nh i{width:9px;height:9px;border-radius:50%;background:#3ce0b0;box-shadow:0 0 0 0 rgba(60,224,176,.6);animation:npulse 2s infinite}
+@keyframes npulse{70%{box-shadow:0 0 0 9px rgba(60,224,176,0)}100%{box-shadow:0 0 0 0 rgba(60,224,176,0)}}
+.notice .nc{--c:#8fd0ff;position:relative;display:flex!important;align-items:center;gap:14px;padding:12px 14px!important;border-radius:16px;text-decoration:none;color:var(--fg);
+  background:linear-gradient(100deg,color-mix(in srgb,var(--c) 16%,#0e1638),#0e1638 70%);border:1px solid color-mix(in srgb,var(--c) 40%,transparent);transition:transform .15s,border-color .2s,box-shadow .2s}
+.notice .nc::before{display:none!important}
+.notice a.nc:hover{transform:translateY(-1px);border-color:var(--c);box-shadow:0 10px 26px -14px var(--c)}
+.notice a.nc:focus-visible{outline:2px solid var(--c);outline-offset:2px}
+.nc-pol{--c:#ffc861!important}.nc-dc{--c:#7983ff!important}.nc-zl{--c:#2f8bff!important}
+.nc .ni{flex:none;display:grid;place-items:center;width:42px;height:42px;border-radius:12px;background:var(--c);color:#0b1336}
+.nc .ni svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.nc .nt{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.nc .nt b{font-size:15.5px;font-weight:700;color:#fff;margin:0}
+.nc .nt small{font-size:13.5px;color:#b9c6ea;line-height:1.4;overflow-wrap:anywhere}
+.nc .na{flex:none;display:inline-flex;align-items:center;gap:4px;padding:8px 12px 8px 14px;border-radius:999px;background:var(--c);color:#0b1336;font-weight:700;font-size:13.5px;white-space:nowrap}
+.nc .na svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
+@media (max-width:620px){
+  .hero .notice{margin-top:16px}
+  .notice .nc{gap:11px;padding:10px 11px!important}
+  .nc .ni{width:36px;height:36px;border-radius:10px}.nc .ni svg{width:19px;height:19px}
+  .nc .na{padding:7px 10px;font-size:12.5px}
+}
+@media (prefers-reduced-motion:reduce){.notice .nh i{animation:none}}
+
 </style>
 <script>
 // Đã điền sẵn cho blueroblox.shop
@@ -764,11 +790,7 @@ window.BR_CONFIG = {
       <a class="btn gold lg" href="#shop"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3h2l2.6 13h10L21 7H6"/><circle cx="9" cy="20" r="1.5"/><circle cx="18" cy="20" r="1.5"/></svg><span data-i18n="buy_now">Mua ngay</span></a>
       <button class="btn ghost lg" id="hero-topup" type="button"><svg class="ic" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.4"/></svg><span data-i18n="nav_topup">Nạp tiền</span></button>
     </div>
-    <div class="stats">
-      <div><b id="st-a"></b><span data-i18n="stat_sold">Clone đã bán</span></div>
-      <div><b id="st-b"></b><span data-i18n="stat_vps">VPS đang chạy</span></div>
-      <div><b>24/7</b><span data-i18n="stat_sup">Hỗ trợ</span></div>
-    </div>
+    <div style="display:none"><b id="st-a"></b><b id="st-b"></b></div>
     <div class="notice" id="notices"></div>
   </div>
   <div class="stage" aria-hidden="true">
@@ -2153,12 +2175,35 @@ function drawThumb(cv, seed, h) {
   x.save(); x.translate(w / 2, ht / 2); x.rotate(.2); x.fillStyle = `hsl(${h} 95% 60%)`; x.fillRect(-38, -38, 76, 76); x.fillStyle = `hsl(${h} 80% 12%)`; x.fillRect(-12, -12, 24, 24); x.restore();
 }
 const seedOf = id => [...String(id)].reduce((a, c) => a + c.charCodeAt(0), 0);
+const NICON = {
+  pol: '<svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6l8-3z"/><path d="M9 12l2 2 4-4"/></svg>',
+  dc: '<svg viewBox="0 0 24 24"><path d="M21 12a8 8 0 01-11.6 7.1L4 20l1-4.6A8 8 0 1121 12z"/><path d="M8.5 12h.01M12 12h.01M15.5 12h.01"/></svg>',
+  zl: '<svg viewBox="0 0 24 24"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 005 5L15 13l5 2v4a2 2 0 01-2 2A16 16 0 013 6a2 2 0 012-2"/></svg>',
+  info: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg>' };
+/* Ô thông báo ở đầu trang: tự nhận ra Discord / Zalo / Chính sách để thành nút bấm được */
+function noticeCard(n, vi) {
+  n = String(n).trim(); const all = n + " " + String(vi || "");     // bản tiếng Anh có thể thiếu link/số → lấy từ bản tiếng Việt
+  const url = (all.match(/https?:\/\/[^\s]+/) || [])[0], phone = (all.match(/(?:\+?84|0)[\d .]{8,13}\d/) || [])[0];
+  const m = n.match(/^([^:]{1,30}:|[A-ZÀ-Ỹ\s]{4,}(?=\s))/u);
+  let title = m ? m[0].replace(/\s*:\s*$/, "").trim() : "", body = (m ? n.slice(m[0].length) : n).trim();
+  if (title && title === title.toUpperCase()) title = title.charAt(0) + title.slice(1).toLowerCase();
+  title = title.replace(/zalo/i, "Zalo").replace(/discord/i, "Discord");
+  let kind = "info", href = "", cta = "";
+  if (/discord/i.test(all) && url) { kind = "dc"; href = url; cta = L("Vào Discord", "Join Discord"); body = url.replace(/^https?:\/\//, ""); title = title || "Discord"; }
+  else if (/zalo/i.test(all) && phone) { const ph = phone.replace(/[ .]/g, ""); kind = "zl"; href = "https://zalo.me/" + ph.replace(/^\+?84/, "0"); cta = L("Nhắn Zalo", "Chat on Zalo"); body = phone; title = title || "Zalo"; }
+  else if (/chính sách|policy|bảo hành|warranty/i.test(all)) { kind = "pol"; href = "#policy"; cta = L("Xem", "Read"); }
+  else if (url) { href = url; cta = L("Mở", "Open"); }
+  if (!title) { title = body; body = ""; }
+  const inner = `<span class="ni">${NICON[kind]}</span><span class="nt"><b>${esc(title)}</b>${body ? `<small>${esc(body)}</small>` : ""}</span>${cta ? `<span class="na">${esc(cta)}<svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span>` : ""}`;
+  return href ? `<a class="nc nc-${kind}" href="${esc(href)}"${href[0] === "#" ? "" : ' target="_blank" rel="noopener"'}>${inner}</a>` : `<div class="nc nc-${kind}">${inner}</div>`;
+}
 function renderSite() {
   $("h-eyebrow").textContent = String(ST("eyebrow") || "").replace(/^\s*\/\/\s*/, "");
   $("h-title").innerHTML = esc(ST("h1a")) + " <em>" + esc(ST("h1b")) + "</em>";
   $("h-desc").textContent = ST("desc");
   $("st-a").textContent = SITE.sta; $("st-b").textContent = SITE.stb;
-  $("notices").innerHTML = [ST("n1"), ST("n2"), ST("n3")].filter(Boolean).map(n => { const m = String(n).match(/^([^:]{1,30}:|[A-ZÀ-Ỹ\s]{4,}(?=\s))/u); return m ? `<div><b style="color:var(--gold)">${esc(m[0])}</b>${esc(n.slice(m[0].length))}</div>` : `<div>${esc(n)}</div>`; }).join("");
+  const cards = ["n1", "n2", "n3"].filter(k => ST(k)).map(k => noticeCard(ST(k), SITE[k] || "")).join("");
+  $("notices").innerHTML = cards ? `<p class="nh"><i></i><span>${L("Hỗ trợ 24/7 · liên hệ nhanh", "24/7 support · reach us fast")}</span></p>` + cards : "";
   $("ft-about").textContent = ST("about"); $("policy-text").textContent = ST("policy");
   $("ct-zalo").textContent = SITE.zalo ? "Zalo: " + SITE.zalo : ""; $("ct-email").textContent = SITE.email ? "Email: " + SITE.email : ""; $("ct-discord").textContent = SITE.discord ? "Discord: " + SITE.discord : "";
   const jd = SITE.joinDc && /^https?:\/\//i.test(SITE.joinDc); $("join-wrap").hidden = !jd; if (jd) $("join-band").href = SITE.joinDc;

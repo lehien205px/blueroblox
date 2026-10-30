@@ -246,6 +246,15 @@ body.focus .frame iframe,body.focus .frame .veil{border-radius:0;inset:0}
 body.focus .info{display:none}
 .exitfocus{position:fixed;top:10px;right:10px;z-index:36;display:none;padding:8px 12px;border-radius:10px;background:rgba(14,22,56,.85);border:1px solid var(--line2);font-size:13px}
 body.focus .exitfocus{display:block}
+.langsw{display:inline-flex;flex:none;padding:3px;border-radius:999px;background:linear-gradient(135deg,#ffc861,#ff8a3d);box-shadow:0 0 0 3px rgba(255,200,97,.18),0 6px 18px -6px rgba(255,160,60,.7)}
+.langsw button{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:999px;font-weight:700;font-size:14px;color:#3a2200;white-space:nowrap}
+.langsw button.on{background:#0e1638;color:#fff}
+.langsw button:not(.on):hover{background:rgba(255,255,255,.35)}
+.langsw .fl{font-size:17px;line-height:1}.langsw .ls{display:none}
+@media (max-width:1500px){.info{display:none!important}}
+@media (max-width:860px){.appcta{display:none!important}}
+@media (max-width:860px){.langsw{padding:2px}.langsw button{padding:4px 7px;font-size:12px;gap:3px}.langsw .ln{display:none}.langsw .ls{display:inline}.langsw .fl{font-size:17px}}
+@media (max-width:420px){.langsw .ls{display:none!important}.top .meta{display:none}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
 </head>
@@ -265,6 +274,7 @@ body.focus .exitfocus{display:block}
     <button id="v-one" class="on" title="Xem 1 máy"><svg class="ic sm" viewBox="0 0 24 24"><rect x="7" y="3" width="10" height="18" rx="2"/></svg><span style="min-width:0;padding:0;color:inherit;font:inherit">1 máy</span></button>
     <button id="v-multi" title="Xem nhiều máy cùng lúc"><svg class="ic sm" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="8" rx="1.5"/><rect x="14" y="3" width="7" height="8" rx="1.5"/><rect x="3" y="13" width="7" height="8" rx="1.5"/><rect x="14" y="13" width="7" height="8" rx="1.5"/></svg><span style="min-width:0;padding:0;color:inherit;font:inherit" id="multin">Nhiều máy</span></button>
   </div>
+  <div class="langsw" id="langsw" role="group" aria-label="Language / Ngôn ngữ"><button type="button" id="lang-vi" title="Tiếng Việt"><span class="fl">🇻🇳</span><span class="ln">Tiếng Việt</span><span class="ls">VI</span></button><button type="button" id="lang-en" title="English"><span class="fl">🇬🇧</span><span class="ln">English</span><span class="ls">EN</span></button></div>
   <div class="meta"><span class="spec" id="spec"></span><span id="left"></span></div>
   <div class="right">
     <span class="info" id="info" title="Độ phân giải máy · độ nét hình đang gửi · kích thước hiển thị · tốc độ mạng"></span>
@@ -347,12 +357,94 @@ body.focus .exitfocus{display:block}
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script>
 "use strict";
+/* ---------- Ngôn ngữ (dùng chung lựa chọn với trang chủ: br_lang) ---------- */
+let LANG = (() => { const q = new URLSearchParams(location.search).get("lang"); if (q === "en" || q === "vi") return q;
+  try { const v = localStorage.getItem("br_lang"); if (v === "en" || v === "vi") return v; } catch (e) {}
+  return /^vi/i.test(navigator.language || "") ? "vi" : "en"; })();
+const L = (vi, en) => LANG === "en" ? en : vi;
+// Chữ cố định trên trang (nút, tiêu đề…) → tiếng Anh
+const EN = {
+  "Cửa hàng": "Store", "Về cửa hàng": "Back to store", "Chọn máy": "Choose phone", "Máy của tôi": "My phone", "Máy của bạn": "Your phones",
+  "⊞ Mở tất cả": "⊞ Open all", "Tích chọn để mở nhiều máy cùng lúc": "Tick to open several phones at once", "Mở máy đã chọn": "Open selected",
+  "📱 Tải app Android — điều khiển máy ngay trên điện thoại": "📱 Get the Android app — control your phone from your mobile",
+  "Kiểu xem": "View mode", "Xem 1 máy": "View one phone", "1 máy": "1 phone", "Xem nhiều máy cùng lúc": "View several phones at once", "Nhiều máy": "Multi view",
+  "Độ phân giải máy · độ nét hình đang gửi · kích thước hiển thị · tốc độ mạng": "Phone resolution · stream resolution · display size · network speed",
+  "Phóng to": "Zoom in", "Thu nhỏ": "Zoom out", "Thu nhỏ (Ctrl −)": "Zoom out (Ctrl −)", "Phóng to (Ctrl +)": "Zoom in (Ctrl +)", "Vừa khung (Ctrl 0)": "Fit to window (Ctrl 0)", "Vừa": "Fit",
+  "Tải app Android BlueRoblox Cloud": "Download the BlueRoblox Cloud Android app", "Tải app Android": "Get Android app", "Tải app": "Get app",
+  "Tất cả máy (admin)": "All phones (admin)", "Đang kết nối…": "Connecting…", "📐 Khớp ngay": "📐 Fit now", "Để sau": "Later", "Xem & gia hạn": "View & renew",
+  "Màn hình điện thoại": "Phone screen", "Đang mở máy…": "Opening phone…", "Công cụ": "Tools",
+  "Điều khiển máy ngay trên điện thoại, báo trước khi hết hạn": "Control your phone from your mobile, with expiry reminders", "Tải app miễn phí": "Free download",
+  "Điều hướng": "Navigation", "Quay lại": "Back", "Màn chính": "Home", "Đa nhiệm": "Recents", "Tắt/mở màn": "Screen on/off",
+  "Âm thanh": "Sound", "Tăng âm": "Volume up", "Giảm âm": "Volume down", "Màn hình": "Display", "Chất lượng": "Quality", "FPS & độ nét": "FPS & resolution",
+  "Xoay": "Rotate", "Chụp màn": "Screenshot", "Toàn màn": "Full screen", "Tải lại hình": "Reload video", "Tệp & ứng dụng": "Files & apps",
+  "Tải file / APK": "Upload file / APK", "Cài từ link": "Install from link", "Ứng dụng": "Apps", "Dán chữ": "Paste text", "Copy từ máy": "Copy from phone",
+  "Mở web": "Open website", "Máy": "Phone", "Khởi động lại": "Restart", "Điều hướng nhanh": "Quick navigation", "Thoát toàn màn": "Exit full screen",
+  "Thả file vào đây": "Drop files here", "File APK sẽ tự cài · file khác lưu vào thư mục Download": "APK files install automatically · other files go to the Download folder",
+  "Đóng": "Close", "Gửi": "Send", "📋 Máy ảo vừa copy": "📋 The cloud phone just copied", "Copy về máy tôi": "Copy to my device", "Ẩn": "Hide",
+};
+const ORIG = new WeakMap();
+function trNode(n) {          // đổi 1 đoạn chữ cố định; nhớ bản tiếng Việt để đổi ngược lại
+  const vi = ORIG.has(n) ? ORIG.get(n) : n.nodeValue, k = vi.trim();
+  if (!EN[k]) return;
+  if (!ORIG.has(n)) ORIG.set(n, vi);
+  n.nodeValue = LANG === "en" ? vi.replace(k, EN[k]) : vi;
+}
+function applyStatic() {
+  document.documentElement.lang = LANG;
+  const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, { acceptNode: n => n.parentNode.closest("script,style,#dm-list,#grid,#tray,#dlgb,#dlgd") ? 2 : 1 });
+  for (let n; (n = w.nextNode());) trNode(n);
+  document.querySelectorAll("[title],[aria-label],[placeholder]").forEach(el => {
+    for (const a of ["title", "aria-label", "placeholder"]) {
+      if (!el.hasAttribute(a)) continue;
+      const key = "_o_" + a; if (el[key] == null) el[key] = el.getAttribute(a);
+      const vi = el[key]; if (EN[vi]) el.setAttribute(a, LANG === "en" ? EN[vi] : vi);
+    }
+  });
+  const sw = document.getElementById("langsw");
+  if (sw) { document.getElementById("lang-vi").classList.toggle("on", LANG === "vi"); document.getElementById("lang-en").classList.toggle("on", LANG === "en"); }
+}
+// Tin nhắn từ máy chủ (lỗi, tiến trình cài…) → tiếng Anh
+const SRV = [
+  [/^Hệ thống đang bảo trì/, "The system is under maintenance. Please come back later."],
+  [/^Máy đang bị khoá/, "This phone is locked. Contact support if needed."],
+  [/^Đang xử lý…/, "Processing…"], [/^Đang chép vào máy…/, "Copying to the phone…"], [/^Đang cài ứng dụng…/, "Installing app…"],
+  [/^Không chép được file vào máy: (.*)/, "Could not copy the file to the phone: $1"], [/^Không chép được file: (.*)/, "Could not copy the file: $1"],
+  [/^Cài APK lỗi: (.*)/, "APK install failed: $1"], [/^Đã cài xong (.*)/, "Installed $1"], [/^Đã lưu vào thư mục Download: (.*)/, "Saved to the Download folder: $1"],
+  [/^Gói không có file \.apk bên trong\./, "The package has no .apk inside."], [/^File gói hỏng hoặc bị mã hoá\./, "The package file is damaged or encrypted."],
+  [/^File đã hết hạn, tải lên lại\./, "The file expired, please upload it again."],
+  [/^Link chuyển hướng tới địa chỉ không hợp lệ/, "The link redirects to an invalid address"],
+  [/^Link không hợp lệ.*/, "Invalid link (only public http/https links)."], [/^File quá lớn.*/, "File too large (max 4GB)."],
+  [/^Đang tải về server… (\d+)MB/, "Downloading to server… $1MB"], [/^Dữ liệu quá lớn/, "Data too large"],
+  [/^Máy phản hồi quá lâu, thử lại\./, "The phone took too long to respond, try again."], [/^Lỗi máy chủ: (.*)/, "Server error: $1"],
+  [/^Nguồn không được phép\./, "Origin not allowed."], [/^Phiên đăng nhập hết hạn.*/, "Your session expired — reload the page and sign in again."],
+  [/^Không có việc này\./, "Job not found."], [/^Chỉ admin\./, "Admins only."], [/^Mã tải lên không hợp lệ\./, "Invalid upload id."],
+  [/^Chỉ nhận file \.apk.*/, "Only .apk / .apks / .apkm / .xapk files are accepted"], [/^File rỗng hoặc lớn hơn 4GB\./, "The file is empty or larger than 4GB."],
+  [/^Lệch vị trí/, "Upload offset mismatch"], [/^Dữ liệu vượt kích thước file\./, "Data exceeds the file size."],
+  [/^Link phải bắt đầu bằng http.*/, "The link must start with http:// or https://"], [/^Link không phải file APK\./, "The link is not an APK file."],
+  [/^Đã tải (.*)/, "Downloaded $1"], [/^Không có file này\./, "File not found."], [/^Không có chức năng này\./, "Unknown action."],
+  [/^Không tìm thấy máy của bạn\./, "Your phone was not found."], [/^Máy chưa chạy.*/, "The phone is not running (being created, paused or cancelled)."],
+  [/^Phím không hợp lệ\./, "Invalid key."], [/^Chưa nhập chữ\./, "No text entered."],
+  [/^Chỉ dán được chữ KHÔNG DẤU.*/, "Only plain text (no accents) can be pasted this way. Type accented text directly on the phone."],
+  [/^Không chụp được màn hình\./, "Could not take a screenshot."], [/^Tên ứng dụng không hợp lệ\./, "Invalid app name."],
+  [/^Server tạm hết dung lượng.*/, "The server is out of space, try again later."], [/^FPS không hợp lệ\./, "Invalid FPS."],
+  [/^FPS phải từ (\d+) đến (\d+)\./, "FPS must be between $1 and $2."], [/^Độ phân giải phải dạng.*/, "Resolution must be width x height, e.g. 1080x1920."],
+  [/^Máy đang được đổi cấu hình, đợi chút\./, "The phone is being reconfigured, please wait."], [/^Đang đổi kích thước màn hình…/, "Changing screen size…"],
+  [/^Đã đổi sang (\S+) — app đang chạy vẫn giữ nguyên\./, "Switched to $1 — running apps were kept."],
+  [/^Đang áp dụng và khởi động lại máy.*/, "Applying and restarting the phone (1–3 min)…"], [/^Đổi cấu hình lỗi: (.*)/, "Reconfiguration failed: $1"],
+  [/^Đã đổi sang (.*)\. Dữ liệu vẫn giữ nguyên\./, "Switched to $1. Your data was kept."], [/^Không xác định được máy\./, "Unknown phone."],
+  [/^Không khởi động lại được: (.*)/, "Could not restart: $1"], [/^Đang khởi động Android.*/, "Starting Android (1–3 min)…"],
+  [/^Máy đã khởi động lại xong\./, "The phone has restarted."], [/^Máy đã khởi động, đang kết nối lại…/, "The phone is up, reconnecting…"],
+  [/^Trình điều khiển tạm thời không phản hồi\./, "The controller is not responding right now."], [/^Hãy mở máy từ trang blueroblox\.shop\./, "Please open the phone from blueroblox.shop."],
+  [/^Đang bảo trì\./, "Under maintenance."], [/^Không được phép\./, "Not allowed."], [/^Đây không phải máy của bạn\./, "This is not your phone."],
+];
+const srv = m => { m = String(m ?? ""); if (LANG !== "en") return m; for (const [re, en] of SRV) if (re.test(m)) return m.replace(re, en); return m; };
 const CFG = { supabaseUrl: "https://nprftgodswlpzomcttal.supabase.co", supabaseAnonKey: "sb_publishable_qfNcnOMv70nq5LIlYXDJzg_UtdWHVze" };
 const PHONE = "https://phone.blueroblox.shop", API = PHONE + "/cpapi";
 const CHUNK = 8 * 1024 * 1024;
 const KEYNAME = { 4: "back", 3: "home", 187: "recents", 24: "volup", 25: "voldown", 26: "power" };
 const ZOOMS = [0.5, 0.67, 0.8, 1, 1.25, 1.5, 1.75, 2, 2.5];
-const QUAL = { eco: ["Tiết kiệm", "Nhẹ mạng, 30 FPS — hợp 4G/wifi yếu"], bal: ["Cân bằng", "Rõ nét, mượt — khuyên dùng"], hd: ["Siêu nét", "Đúng độ phân giải máy — cần mạng khoẻ"] };
+const mkQual = () => ({ eco: [L("Tiết kiệm", "Data saver"), L("Nhẹ mạng, 30 FPS — hợp 4G/wifi yếu", "Light, 30 FPS — for 4G / weak Wi-Fi")], bal: [L("Cân bằng", "Balanced"), L("Rõ nét, mượt — khuyên dùng", "Sharp and smooth — recommended")], hd: [L("Siêu nét", "Ultra sharp"), L("Đúng độ phân giải máy — cần mạng khoẻ", "Full phone resolution — needs a strong connection")] });
+let QUAL = mkQual();
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -383,7 +475,9 @@ let zoom = 1;
 /* ---------- giao diện chung ---------- */
 let toastT;
 function toast(msg, bad) { const t = $("toast"); t.textContent = msg; t.className = "toast" + (bad ? " bad" : ""); t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, bad ? 5200 : 2800); }
+let lastState = null;
 function setState(kind, txt) {
+  lastState = [kind, txt];
   document.documentElement.style.setProperty("--ring", kind === "ok" ? "var(--ok)" : kind === "bad" ? "var(--bad)" : "var(--wait)");
   $("statetxt").textContent = txt;
 }
@@ -393,7 +487,7 @@ function veilOn(el, on, title, desc, spin = true) {
   el.querySelector(".spin").style.display = spin ? "" : "none";
 }
 const veil = (...a) => veilOn($("veil"), ...a);
-function ask({ title, desc, body = "", ok = "Gửi", onOk, noOk }) {
+function ask({ title, desc, body = "", ok = L("Gửi", "Send"), onOk, noOk }) {
   $("dlgt").textContent = title; $("dlgd").innerHTML = desc || ""; $("dlgd").hidden = !desc; $("dlgb").innerHTML = body;
   $("dlgok").textContent = ok; $("dlgok").hidden = !!noOk; $("dlg").hidden = false;
   const first = $("dlgb").querySelector("input,textarea"); if (first) setTimeout(() => first.focus(), 30);
@@ -411,7 +505,7 @@ async function api(path, { method = "GET", json, body, blob, headers = {} } = {}
   if (blob && r.ok) return r.blob();
   let j = {}; try { j = await r.json(); } catch (e) {}
   if ((r.status === 503 && j.maint || r.status === 423) && !underMaint) setTimeout(checkInfo, 0);
-  if (!r.ok) { const err = new Error(j.error || ("Lỗi " + r.status)); err.status = r.status; err.data = j; throw err; }
+  if (!r.ok) { const err = new Error(srv(j.error) || (L("Lỗi ", "Error ") + r.status)); err.status = r.status; err.data = j; throw err; }
   return j;
 }
 async function refreshToken() {
@@ -457,7 +551,7 @@ class Conn {
     this.arm(30000);   // máy mới khởi động trình phát hình có thể chậm
     this.h.connecting && this.h.connecting(this.tries, this.raw);
   }
-  arm(ms) { clearTimeout(this.t); this.t = setTimeout(() => this.retry("Không nhận được hình"), ms); }
+  arm(ms) { clearTimeout(this.t); this.t = setTimeout(() => this.retry(L("Không nhận được hình", "No video received")), ms); }
   retry(why) {
     clearTimeout(this.t); this.ok = false; this.fails++;
     if (!this.raw && this.fails >= 2) this.raw = true;       // tối ưu không chạy được → dùng chế độ gốc (như bản đầu)
@@ -469,9 +563,9 @@ class Conn {
   msg(d) {
     if (d.n !== this.sid) return;                         // tin cũ của lần mở trước → bỏ qua
     if (d.t === "boot") { this.boot = true; return; }
-    if (d.t === "open") { if (!this.ok) { this.arm(30000); this.h.progress && this.h.progress("Đã kết nối, đang chờ hình đầu tiên…"); } return; }
+    if (d.t === "open") { if (!this.ok) { this.arm(30000); this.h.progress && this.h.progress(L("Đã kết nối, đang chờ hình đầu tiên…", "Connected, waiting for the first frame…")); } return; }
     if (d.t === "ok") { clearTimeout(this.t); const first = !this.ok || this.soft; this.ok = true; this.soft = false; this.tries = 0; this.fails = 0; if (first) this.h.ok && this.h.ok(); }
-    else if (d.t === "closed") { if (this.p) { if (this.h.closed) this.h.closed(() => this.retry("Mất kết nối hình")); else this.retry("Mất kết nối hình"); } }
+    else if (d.t === "closed") { if (this.p) { if (this.h.closed) this.h.closed(() => this.retry(L("Mất kết nối hình", "Video connection lost"))); else this.retry(L("Mất kết nối hình", "Video connection lost")); } }
     else if (d.t === "size") { this.size = [d.w, d.h]; this.h.size && this.h.size(); }
     else if (d.t === "stat") { this.kbps = d.kbps; if ((!this.ok || this.soft) && d.kbps > 0) this.arm(20000); this.h.stat && this.h.stat(); }
     else if (d.t === "keyok" || d.t === "nokey") { const cb = this.cb && this.cb[d.id]; if (cb) { delete this.cb[d.id]; cb(d.t === "keyok"); } }
@@ -516,22 +610,22 @@ async function showClip(text) {
   if (!text) return;
   const asked = clipWant; clipWant = false; clipLast = text;
   $("cliptx").textContent = text.length > 140 ? text.slice(0, 140) + "…" : text;
-  $("clipsm").textContent = "📋 Máy ảo vừa copy";
+  $("clipsm").textContent = L("📋 Máy ảo vừa copy", "📋 The cloud phone just copied");
   $("clipbar").hidden = false; clearTimeout(showClip.t);
-  if (await copyText(text)) { $("clipsm").textContent = "✓ Đã copy về máy bạn — dán ở đâu cũng được"; }
+  if (await copyText(text)) { $("clipsm").textContent = L("✓ Đã copy về máy bạn — dán ở đâu cũng được", "✓ Copied to your device — paste it anywhere"); }
   showClip.t = setTimeout(() => { $("clipbar").hidden = true; }, asked ? 12000 : 8000);
 }
-$("clipcp").onclick = async () => { if (await copyText(clipLast)) { $("clipsm").textContent = "✓ Đã copy về máy bạn"; } else ask({ title: "Chữ từ máy ảo", desc: "Nhấn giữ để chọn rồi Copy.", body: `<textarea class="in cliptxt" readonly>${esc(clipLast)}</textarea>`, noOk: true, onOk: () => true }); };
+$("clipcp").onclick = async () => { if (await copyText(clipLast)) { $("clipsm").textContent = L("✓ Đã copy về máy bạn", "✓ Copied to your device"); } else ask({ title: L("Chữ từ máy ảo", "Text from the cloud phone"), desc: L("Nhấn giữ để chọn rồi Copy.", "Press and hold to select, then Copy."), body: `<textarea class="in cliptxt" readonly>${esc(clipLast)}</textarea>`, noOk: true, onOk: () => true }); };
 $("clipx").onclick = () => { $("clipbar").hidden = true; };
 async function pasteToPhone(t) {
   if (!cur) return false;
   if (await main.cmd("clipset", { text: t })) {           // đặt chữ vào bộ nhớ copy của máy ảo (có dấu được) rồi bấm Dán
     await sleep(250);
-    try { await api(cur.id + "/key", { method: "POST", json: { code: 279 } }); toast("Đã dán vào máy."); }
-    catch (e) { toast("Đã chép vào bộ nhớ của máy — nhấn giữ ô nhập trên máy rồi chọn Dán.", 0); }
+    try { await api(cur.id + "/key", { method: "POST", json: { code: 279 } }); toast(L("Đã dán vào máy.", "Pasted into the phone.")); }
+    catch (e) { toast(L("Đã chép vào bộ nhớ của máy — nhấn giữ ô nhập trên máy rồi chọn Dán.", "Copied to the phone's clipboard — press and hold the text field on the phone, then tap Paste."), 0); }
     return true;
   }
-  try { await api(cur.id + "/text", { method: "POST", json: { text: t } }); toast("Đã dán vào máy (chữ không dấu)."); return true; }
+  try { await api(cur.id + "/text", { method: "POST", json: { text: t } }); toast(L("Đã dán vào máy (chữ không dấu).", "Pasted into the phone.")); return true; }
   catch (e) { toast(e.message, 1); return false; }
 }
 
@@ -547,18 +641,18 @@ window.cpApp = {
 
 /* ---------- 1 máy ---------- */
 const main = new Conn($("scr"), $("veil"), {
-  connecting(n, raw) { setState("wait", n ? "Đang kết nối lại…" : "Đang kết nối…"); veil(true, n ? `Đang kết nối lại (lần ${n})…` : "Đang mở màn hình máy…", n ? (raw ? "Chuyển sang chế độ hình gốc cho chắc chắn…" : "Hình bị gián đoạn, đang tự nối lại.") : ""); },
-  ok() { veil(false); setState("ok", "Đang chạy"); },
+  connecting(n, raw) { setState("wait", n ? L("Đang kết nối lại…", "Reconnecting…") : L("Đang kết nối…", "Connecting…")); veil(true, n ? L(`Đang kết nối lại (lần ${n})…`, `Reconnecting (attempt ${n})…`) : L("Đang mở màn hình máy…", "Opening the phone screen…"), n ? (raw ? L("Chuyển sang chế độ hình gốc cho chắc chắn…", "Switching to basic video mode to be safe…") : L("Hình bị gián đoạn, đang tự nối lại.", "The video was interrupted, reconnecting automatically.")) : ""); },
+  ok() { veil(false); setState("ok", L("Đang chạy", "Running")); },
   progress(txt) { if (!$("veil").hidden) $("veild").textContent = txt; },
-  fail(why) { setState("bad", "Không kết nối được"); veil(true, why || "Không kết nối được màn hình", '<button class="btn sm" id="vretry">Thử lại</button>', false); const b = $("vretry"); if (b) b.onclick = () => { main.tries = 0; main.open(cur, quality); }; },
+  fail(why) { setState("bad", L("Không kết nối được", "Can't connect")); veil(true, why || L("Không kết nối được màn hình", "Can't connect to the screen"), '<button class="btn sm" id="vretry">' + L("Thử lại", "Try again") + '</button>', false); const b = $("vretry"); if (b) b.onclick = () => { main.tries = 0; main.open(cur, quality); }; },
   size() { try { if (cur && main.size) localStorage.setItem("cp_sz_" + cur.id + "_" + cur.res, main.size[0] + "x" + main.size[1]); } catch (e) {} fit(); info(); }, stat: () => info(),
   clip(text) { showClip(text); },
   async closed(go) {           // rớt hình: nếu máy vừa được mở ở nơi khác (tab / máy / app khác) thì dừng, không giành nhau
     try {
       const i = await api(cur.id + "/info");
       if (i.viewer && i.viewer !== PAGE_ID) {
-        main.stop(); setState("wait", "Đang mở ở nơi khác");
-        veil(true, "Máy đang được mở ở nơi khác", "Máy này vừa được mở trên tab, máy tính hoặc app khác. Mỗi máy chỉ xem được ở 1 nơi để hình luôn mượt.<br><button class=\"btn sm\" id=\"vhere\">Mở ở đây</button>", false);
+        main.stop(); setState("wait", L("Đang mở ở nơi khác", "Open elsewhere"));
+        veil(true, L("Máy đang được mở ở nơi khác", "This phone is open somewhere else"), L("Máy này vừa được mở trên tab, máy tính hoặc app khác. Mỗi máy chỉ xem được ở 1 nơi để hình luôn mượt.", "It was just opened in another tab, computer or the app. Each phone can be viewed in one place at a time to keep the video smooth.") + "<br><button class=\"btn sm\" id=\"vhere\">" + L("Mở ở đây", "Open here") + "</button>", false);
         const b = $("vhere"); if (b) b.onclick = () => { main.tries = 0; main.open(cur, quality); };
         return;
       }
@@ -594,12 +688,12 @@ function info() {
   if (!cur) { $("info").textContent = ""; return; }
   const [rw, rh] = resOf(cur), s = main.size, fr = $("frame");
   const dw = Math.round(fr.clientWidth - 14), dh = Math.round(fr.clientHeight - 14);
-  const parts = [`Máy ${rw}×${rh}`];
-  if (s) parts.push(`hình ${s[0]}×${s[1]}`);
+  const parts = [`${L("Máy", "Phone")} ${rw}×${rh}`];
+  if (s) parts.push(`${L("hình", "video")} ${s[0]}×${s[1]}`);
   const land = s ? s[0] > s[1] : rw > rh, base = land ? Math.max(rw, rh) : Math.min(rw, rh);
-  parts.push(`hiển thị ${dw}×${dh} (${Math.round(dw / base * 100)}%)`);
+  parts.push(`${L("hiển thị", "display")} ${dw}×${dh} (${Math.round(dw / base * 100)}%)`);
   if (main.ok && main.kbps) parts.push((main.kbps / 1000).toFixed(1) + " Mbps");
-  if (main.ok && main.legacy && !$("adminlink").hidden) parts.push("⚠ chế độ gốc — server chưa chạy cpapi mới");
+  if (main.ok && main.legacy && !$("adminlink").hidden) parts.push(L("⚠ chế độ gốc — server chưa chạy cpapi mới", "⚠ basic mode — server is not running the new cpapi"));
   $("info").textContent = parts.join(" · ");
 }
 addEventListener("resize", () => { fit(); if (document.body.classList.contains("multi")) layoutGrid(); });
@@ -619,11 +713,12 @@ document.addEventListener("keydown", e => {
 function leftText(p) {
   if (!p || !p.expires_at) return "";
   const ms = new Date(p.expires_at) - Date.now();
-  if (ms <= 0) return "Đã hết hạn";
+  if (ms <= 0) return L("Đã hết hạn", "Expired");
   const d = Math.floor(ms / 86400000), h = Math.floor(ms % 86400000 / 3600000), m = Math.floor(ms % 3600000 / 60000);
+  if (LANG === "en") return (d ? d + "d " + h + "h" : h ? h + "h " + m + "m" : m + " min") + " left";
   return "Còn " + (d ? d + " ngày " + h + " giờ" : h ? h + " giờ " + m + " phút" : m + " phút");
 }
-const fdate = s => s ? new Date(s).toLocaleString("vi-VN", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit", year: "numeric" }) : "—";
+const fdate = s => s ? new Date(s).toLocaleString(LANG === "en" ? "en-GB" : "vi-VN", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit", year: "numeric" }) : "—";
 function graceLeft(p) { return p.expires_at ? Math.ceil((new Date(p.expires_at).getTime() + 30 * 60000 - Date.now()) / 60000) : 0; }
 function expLevel(p) {
   if (p.status === "expired") return "bad";
@@ -632,11 +727,11 @@ function expLevel(p) {
   return ms < 86400000 ? "bad" : ms < 3 * 86400000 ? "warn" : "ok";
 }
 function expText(p) {
-  if (p.status === "expired") { const g = graceLeft(p); return g > 0 ? `⛔ Đã hết hạn — gia hạn trong ${g} phút nữa kẻo bị xoá` : "⛔ Đã quá 30 phút, máy đang bị xoá"; }
-  if (p.status === "pending") return "⏳ Đang tạo máy…";
+  if (p.status === "expired") { const g = graceLeft(p); return g > 0 ? L(`⛔ Đã hết hạn — gia hạn trong ${g} phút nữa kẻo bị xoá`, `⛔ Expired — renew within ${g} min or it will be deleted`) : L("⛔ Đã quá 30 phút, máy đang bị xoá", "⛔ Over 30 minutes, the phone is being deleted"); }
+  if (p.status === "pending") return L("⏳ Đang tạo máy…", "⏳ Creating phone…");
   if (!p.expires_at) return "";
   const lv = expLevel(p);
-  return `${lv === "bad" ? "⚠️ " : lv === "warn" ? "⏰ " : ""}Hết hạn ${fdate(p.expires_at)} · ${leftText(p).toLowerCase()}`;
+  return `${lv === "bad" ? "⚠️ " : lv === "warn" ? "⏰ " : ""}${L("Hết hạn", "Expires")} ${fdate(p.expires_at)} · ${leftText(p).toLowerCase()}`;
 }
 function canRenew(p) {
   const locked = p.locked && (!p.locked_until || new Date(p.locked_until) > new Date());
@@ -649,9 +744,9 @@ function renderExpBar() {
   if (!soon.length) return;
   const first = soon.sort((a, b) => new Date(a.expires_at) - new Date(b.expires_at))[0];
   $("exptxt").textContent = soon.length === 1
-    ? (first.status === "expired" ? `⛔ ${first.name} đã hết hạn — gia hạn trong ${graceLeft(first)} phút nữa để giữ dữ liệu.` : `⏰ ${first.name} sắp hết hạn (${leftText(first).toLowerCase()}).`)
-    : `${bad ? "⛔" : "⏰"} ${soon.length} máy sắp hết hạn hoặc đã hết hạn — gần nhất: ${first.name} (${first.status === "expired" ? "đã hết hạn" : leftText(first).toLowerCase()}).`;
-  $("expgo").textContent = soon.length === 1 ? "Gia hạn ngay" : "Xem & gia hạn";
+    ? (first.status === "expired" ? L(`⛔ ${first.name} đã hết hạn — gia hạn trong ${graceLeft(first)} phút nữa để giữ dữ liệu.`, `⛔ ${first.name} has expired — renew within ${graceLeft(first)} min to keep your data.`) : L(`⏰ ${first.name} sắp hết hạn (${leftText(first).toLowerCase()}).`, `⏰ ${first.name} expires soon (${leftText(first).toLowerCase()}).`))
+    : L(`${bad ? "⛔" : "⏰"} ${soon.length} máy sắp hết hạn hoặc đã hết hạn — gần nhất: ${first.name} (${first.status === "expired" ? "đã hết hạn" : leftText(first).toLowerCase()}).`, `${bad ? "⛔" : "⏰"} ${soon.length} phones are expiring or expired — next: ${first.name} (${first.status === "expired" ? "expired" : leftText(first).toLowerCase()}).`);
+  $("expgo").textContent = soon.length === 1 ? L("Gia hạn ngay", "Renew now") : L("Xem & gia hạn", "View & renew");
   $("expgo").onclick = () => soon.length === 1 ? openRenew(first) : devMenu(true);
 }
 /* ---- tự khớp kích thước máy với màn hình của khách ---- */
@@ -677,7 +772,7 @@ function checkFit() {
   const off = mobile && a && b && Math.abs(a - b) / b > 0.08;
   $("fitbar").hidden = !off || skip;
   if (!off || skip) return;
-  $("fittxt").textContent = `Máy ${cur.res} lệch tỉ lệ màn hình bạn. Đổi sang ${mine} cho kín màn? (đổi ngay, app vẫn chạy)`;
+  $("fittxt").textContent = L(`Máy ${cur.res} lệch tỉ lệ màn hình bạn. Đổi sang ${mine} cho kín màn? (đổi ngay, app vẫn chạy)`, `The phone (${cur.res}) doesn't match your screen shape. Switch to ${mine} to fill the screen? (instant, apps keep running)`);
   $("fitgo").onclick = () => ACT.display(mine);
   $("fitno").onclick = () => { try { localStorage.setItem(key, "1"); } catch (e) {} $("fitbar").hidden = true; };
 }
@@ -697,7 +792,7 @@ function ctvCut(v) { return PROF && PROF.ctv_status === "approved" && +PROF.ctv_
 const vnd = v => Math.round(+v || 0).toLocaleString("vi-VN") + "đ";
 async function openRenew(p) {
   if (!p) return;
-  if (!canRenew(p)) { toast("Máy này không gia hạn được (đã xoá hoặc đang bị khoá).", 1); return; }
+  if (!canRenew(p)) { toast(L("Máy này không gia hạn được (đã xoá hoặc đang bị khoá).", "This phone can't be renewed (deleted or locked)."), 1); return; }
   await loadBilling();
   const max = (PRICE && PRICE.max_days) || 365, opts = [1, 3, 7, 15, 30, 60, 90].filter(d => d <= max);
   let days = opts.includes(30) ? 30 : opts[opts.length - 1];
@@ -705,22 +800,22 @@ async function openRenew(p) {
     const price = ctvCut(perDay(p) * days), bal = PROF ? +PROF.balance : 0;
     const base = Math.max(Date.now(), new Date(p.expires_at || Date.now()).getTime());
     $("rn-chips").querySelectorAll("button").forEach(b => b.classList.toggle("on", +b.dataset.v === days));
-    $("rn-sum").innerHTML = `<div><span>Đơn giá</span><span>${vnd(ctvCut(perDay(p)))} / ngày${PROF && PROF.ctv_status === "approved" && +PROF.ctv_discount ? ` <small class="lv-ok">(CTV −${PROF.ctv_discount}%)</small>` : ""}</span></div>
-      <div><span>Hạn mới</span><span>${fdate(new Date(base + days * 86400000))}</span></div>
-      <div><span>Số dư</span><span>${vnd(bal)}</span></div>
-      <div><span>Thanh toán</span><b>${vnd(price)}</b></div>
-      ${bal < price ? `<div class="lv-bad">Số dư thiếu ${vnd(price - bal)}. <a href="/" target="_blank" rel="noopener">Nạp tiền</a> rồi bấm lại.</div>` : ""}`;
+    $("rn-sum").innerHTML = `<div><span>${L("Đơn giá", "Price")}</span><span>${vnd(ctvCut(perDay(p)))} / ${L("ngày", "day")}${PROF && PROF.ctv_status === "approved" && +PROF.ctv_discount ? ` <small class="lv-ok">(CTV −${PROF.ctv_discount}%)</small>` : ""}</span></div>
+      <div><span>${L("Hạn mới", "New expiry")}</span><span>${fdate(new Date(base + days * 86400000))}</span></div>
+      <div><span>${L("Số dư", "Balance")}</span><span>${vnd(bal)}</span></div>
+      <div><span>${L("Thanh toán", "Total")}</span><b>${vnd(price)}</b></div>
+      ${bal < price ? (LANG === "en" ? `<div class="lv-bad">You need ${vnd(price - bal)} more. <a href="/" target="_blank" rel="noopener">Top up</a>, then try again.</div>` : `<div class="lv-bad">Số dư thiếu ${vnd(price - bal)}. <a href="/" target="_blank" rel="noopener">Nạp tiền</a> rồi bấm lại.</div>`) : ""}`;
     $("dlgok").disabled = bal < price;
   };
-  ask({ title: "Gia hạn " + p.name, desc: `${p.ram}GB · ${p.cpu} nhân · ${esc(p.res || "")} · ${expText(p)}`,
-    body: `<span class="lbl">Thêm bao nhiêu ngày?</span><div class="chips" id="rn-chips">${opts.map(d => `<button type="button" data-v="${d}">${d}<small>ngày</small></button>`).join("")}</div>
-           <input class="in" id="rn-x" type="number" min="1" max="${max}" inputmode="numeric" placeholder="Hoặc tự nhập số ngày">
+  ask({ title: L("Gia hạn ", "Renew ") + p.name, desc: `${p.ram}GB · ${p.cpu} ${L("nhân", "cores")} · ${esc(p.res || "")} · ${expText(p)}`,
+    body: `<span class="lbl">${L("Thêm bao nhiêu ngày?", "How many days to add?")}</span><div class="chips" id="rn-chips">${opts.map(d => `<button type="button" data-v="${d}">${d}<small>${L("ngày", d > 1 ? "days" : "day")}</small></button>`).join("")}</div>
+           <input class="in" id="rn-x" type="number" min="1" max="${max}" inputmode="numeric" placeholder="${L("Hoặc tự nhập số ngày", "Or enter a number of days")}">
            <div class="rnsum" id="rn-sum"></div>`,
-    ok: "Gia hạn",
+    ok: L("Gia hạn", "Renew"),
     onOk: async () => {
       const { error } = await sb.rpc("cloudphone_renew", { p_id: p.id, p_days: days });
-      if (error) { const m = String(error.message || ""); toast(/INSUFFICIENT/.test(m) ? "Số dư không đủ." : /PHONE_GONE/.test(m) ? "Máy đã bị xoá vì hết hạn quá 30 phút." : /PHONE_LOCKED/.test(m) ? "Máy đang bị khoá." : /MAINTENANCE/.test(m) ? "Hệ thống đang bảo trì." : "Gia hạn lỗi: " + m, 1); return false; }
-      toast(`Đã gia hạn +${days} ngày cho ${p.name}. Hạn mới cập nhật trong ít giây.`);
+      if (error) { const m = String(error.message || ""); toast(/INSUFFICIENT/.test(m) ? L("Số dư không đủ.", "Not enough balance.") : /PHONE_GONE/.test(m) ? L("Máy đã bị xoá vì hết hạn quá 30 phút.", "The phone was deleted (expired over 30 min ago).") : /PHONE_LOCKED/.test(m) ? L("Máy đang bị khoá.", "This phone is locked.") : /MAINTENANCE/.test(m) ? L("Hệ thống đang bảo trì.", "The system is under maintenance.") : L("Gia hạn lỗi: ", "Renewal failed: ") + m, 1); return false; }
+      toast(L(`Đã gia hạn +${days} ngày cho ${p.name}. Hạn mới cập nhật trong ít giây.`, `Renewed ${p.name} for +${days} days. The new expiry shows in a few seconds.`));
       setTimeout(refreshPhones, 4000); setTimeout(refreshPhones, 20000);
     } });
   draw();
@@ -738,12 +833,12 @@ setInterval(() => { if (document.visibilityState === "visible") refreshPhones();
 function renderHead() {
   renderDevMenu();
   const act = phones.filter(p => p.status === "active").length;
-  $("multin").textContent = "Nhiều máy" + (act > 1 ? " (" + act + ")" : "");
+  $("multin").textContent = L("Nhiều máy", "Multi view") + (act > 1 ? " (" + act + ")" : "");
   if (!cur) return;
-  $("spec").innerHTML = `<b>${cur.ram}GB</b> RAM · <b>${cur.cpu}</b> nhân · ${esc(cur.res || "")} · <b>${cur.fps || 30}</b> FPS`;
+  $("spec").innerHTML = `<b>${cur.ram}GB</b> RAM · <b>${cur.cpu}</b> ${L("nhân", "cores")} · ${esc(cur.res || "")} · <b>${cur.fps || 30}</b> FPS`;
   $("left").textContent = leftText(cur); $("left").className = "lv-" + expLevel(cur);
   $("qtxt").textContent = QUAL[quality][0];
-  document.title = cur.name + " – Điều khiển máy";
+  document.title = cur.name + L(" – Điều khiển máy", " – Phone control");
 }
 function setTools(on) { document.querySelectorAll(".tools .tb, .mbar .tb[data-key]").forEach(b => { b.disabled = !on; }); }
 
@@ -759,12 +854,12 @@ async function loadPhones() {
 }
 function openPhone(p) {
   cur = p; main.size = null; zoom = 1; renderHead(); fit();
-  if (!p) { main.stop(); setTools(false); setState("bad", "Không có máy"); veil(true, "Bạn chưa có máy nào đang thuê", '<a href="/">Về cửa hàng để thuê máy</a>', false); return; }
+  if (!p) { main.stop(); setTools(false); setState("bad", L("Không có máy", "No phone")); veil(true, L("Bạn chưa có máy nào đang thuê", "You don't have a rented phone yet"), '<a href="/">' + L("Về cửa hàng để thuê máy", "Go to the store to rent one") + '</a>', false); return; }
   const u = new URL(location.href); u.searchParams.set("id", p.id); history.replaceState(null, "", u);
   if (p.status !== "active" || !p.port) {
     main.stop(); setTools(false);
-    if (p.status === "pending") { setState("wait", "Đang tạo máy"); veil(true, "Máy đang được tạo", "Khoảng 2–3 phút, trang tự mở khi xong."); }
-    else { setState("bad", "Máy tạm dừng"); veil(true, "Máy đã hết hạn và đang tạm dừng", 'Gia hạn trong 30 phút để giữ dữ liệu. <a href="/">Về cửa hàng để gia hạn</a>', false); }
+    if (p.status === "pending") { setState("wait", L("Đang tạo máy", "Creating phone")); veil(true, L("Máy đang được tạo", "Your phone is being created"), L("Khoảng 2–3 phút, trang tự mở khi xong.", "About 2–3 minutes. This page opens it automatically when ready.")); }
+    else { setState("bad", L("Máy tạm dừng", "Phone paused")); veil(true, L("Máy đã hết hạn và đang tạm dừng", "This phone has expired and is paused"), L('Gia hạn trong 30 phút để giữ dữ liệu. <a href="/">Về cửa hàng để gia hạn</a>', 'Renew within 30 minutes to keep your data. <a href="/">Go to the store to renew</a>'), false); }
     return;
   }
   setTools(true); main.tries = 0; main.open(p, quality);
@@ -773,30 +868,30 @@ function openPhone(p) {
 }
 /* ---- menu chọn máy: mở từng máy / mở tất cả / mở vài máy đã chọn ---- */
 const pickSet = new Set();
-const pState = p => p.locked && (!p.locked_until || new Date(p.locked_until) > new Date()) ? ["bad", "🔒 Bị khoá"]
-  : p.status === "active" ? ["ok", "Đang chạy"] : p.status === "pending" ? ["", "Đang tạo"] : p.status === "expired" ? ["bad", "Tạm dừng"] : ["bad", p.status];
+const pState = p => p.locked && (!p.locked_until || new Date(p.locked_until) > new Date()) ? ["bad", L("🔒 Bị khoá", "🔒 Locked")]
+  : p.status === "active" ? ["ok", L("Đang chạy", "Running")] : p.status === "pending" ? ["", L("Đang tạo", "Creating")] : p.status === "expired" ? ["bad", L("Tạm dừng", "Paused")] : ["bad", p.status];
 function renderDevMenu() {
   const multi = document.body.classList.contains("multi");
   const s = cur ? pState(cur) : ["", ""];
-  $("devname").textContent = multi ? `Đang xem ${tiles.size} máy` : cur ? cur.name : "Máy của tôi";
+  $("devname").textContent = multi ? L(`Đang xem ${tiles.size} máy`, `Viewing ${tiles.size} phones`) : cur ? cur.name : L("Máy của tôi", "My phone");
   $("devdot").className = multi ? "ok" : s[0];
   const act = phones.filter(p => p.status === "active");
-  $("dm-title").textContent = `Máy của bạn (${phones.length})`;
+  $("dm-title").textContent = L(`Máy của bạn (${phones.length})`, `Your phones (${phones.length})`);
   $("dm-all").disabled = act.length < 1;
   $("dm-list").innerHTML = phones.length ? phones.map(p => {
     const st = pState(p), on = p.status === "active" && st[0] === "ok", isCur = !multi && cur && p.id === cur.id;
     const lv = expLevel(p), canRn = canRenew(p);
-    return `<div class="dm-r${isCur ? " cur" : ""}${lv === "bad" ? " bad" : lv === "warn" ? " warn" : ""}"><input type="checkbox" data-pick="${p.id}"${pickSet.has(p.id) ? " checked" : ""}${on ? "" : " disabled"} aria-label="Chọn ${esc(p.name)}">
+    return `<div class="dm-r${isCur ? " cur" : ""}${lv === "bad" ? " bad" : lv === "warn" ? " warn" : ""}"><input type="checkbox" data-pick="${p.id}"${pickSet.has(p.id) ? " checked" : ""}${on ? "" : " disabled"} aria-label="${L("Chọn", "Select")} ${esc(p.name)}">
       <span class="nm"><i class="${st[0]}"></i><b>${esc(p.name)}</b></span>
-      <span class="acts2"><button class="btn sm${isCur ? " gh" : ""}" type="button" data-openone="${p.id}"${isCur || p.status !== "active" ? " disabled" : ""}>${isCur ? "Đang mở" : "Mở"}</button>
-        ${canRn ? `<button class="btn sm ${lv === "ok" ? "gh" : ""}" type="button" data-renew="${p.id}">Gia hạn</button>` : ""}</span>
-      <span class="info2">${p.ram}GB · ${p.cpu} nhân · ${esc(p.res || "")} · ${p.fps || 30} FPS · ${st[1]}</span>
-      <span class="info2">Mua ${fdate(p.created_at)}${p.days ? " · gói " + p.days + " ngày" : ""}</span>
+      <span class="acts2"><button class="btn sm${isCur ? " gh" : ""}" type="button" data-openone="${p.id}"${isCur || p.status !== "active" ? " disabled" : ""}>${isCur ? L("Đang mở", "Open now") : L("Mở", "Open")}</button>
+        ${canRn ? `<button class="btn sm ${lv === "ok" ? "gh" : ""}" type="button" data-renew="${p.id}">${L("Gia hạn", "Renew")}</button>` : ""}</span>
+      <span class="info2">${p.ram}GB · ${p.cpu} ${L("nhân", "cores")} · ${esc(p.res || "")} · ${p.fps || 30} FPS · ${st[1]}</span>
+      <span class="info2">${L("Mua", "Bought")} ${fdate(p.created_at)}${p.days ? L(" · gói " + p.days + " ngày", " · " + p.days + "-day plan") : ""}</span>
       <span class="exp2 lv-${lv}">${expText(p)}</span></div>`;
-  }).join("") : '<div style="padding:16px;color:var(--muted)">Bạn chưa thuê máy nào. <a href="/">Thuê máy</a></div>';
+  }).join("") : L('<div style="padding:16px;color:var(--muted)">Bạn chưa thuê máy nào. <a href="/">Thuê máy</a></div>', '<div style="padding:16px;color:var(--muted)">You haven\'t rented a phone yet. <a href="/">Rent one</a></div>');
   $("dm-sel").disabled = pickSet.size < 1;
   renderExpBar();
-  $("dm-sel").textContent = pickSet.size ? `Mở ${pickSet.size} máy đã chọn` : "Mở máy đã chọn";
+  $("dm-sel").textContent = pickSet.size ? L(`Mở ${pickSet.size} máy đã chọn`, `Open ${pickSet.size} selected`) : L("Mở máy đã chọn", "Open selected");
 }
 function devMenu(open) { $("devmenu").hidden = !open; $("devbtn").setAttribute("aria-expanded", open ? "true" : "false"); if (open) renderDevMenu(); }
 $("devbtn").onclick = e => { e.stopPropagation(); devMenu($("devmenu").hidden); };
@@ -818,22 +913,22 @@ async function checkInfo() {
     if (i.expires_at) cur.expires_at = i.expires_at;
     if (i.fps) cur.fps = i.fps; if (i.fps_range) cur.fpsRange = i.fps_range;
     if (i.maint) {
-      main.stop(); setTools(false); setState("bad", "Đang bảo trì");
-      veil(true, "Đang bảo trì", esc(i.maint_msg || "Vui lòng quay lại sau.") + "<br>Máy và dữ liệu của bạn vẫn được giữ nguyên.", false);
+      main.stop(); setTools(false); setState("bad", L("Đang bảo trì", "Maintenance"));
+      veil(true, L("Đang bảo trì", "Under maintenance"), esc(LANG === "en" ? "Please come back later." : (i.maint_msg || "Vui lòng quay lại sau.")) + L("<br>Máy và dữ liệu của bạn vẫn được giữ nguyên.", "<br>Your phone and data are kept safe."), false);
       underMaint = true; renderHead(); return;
     }
     if (i.locked) {
-      main.stop(); setTools(false); setState("bad", "Máy bị khoá");
-      veil(true, "🔒 Máy đang bị khoá", esc(i.lock_msg || "Liên hệ hỗ trợ để biết thêm."), false);
+      main.stop(); setTools(false); setState("bad", L("Máy bị khoá", "Locked"));
+      veil(true, L("🔒 Máy đang bị khoá", "🔒 This phone is locked"), esc(srv(i.lock_msg) || L("Liên hệ hỗ trợ để biết thêm.", "Contact support for details.")), false);
       underMaint = true; renderHead(); return;
     }
     if (underMaint) { underMaint = false; openPhone(cur); return; }
     if ((!i.online || i.booting) && !main.ok) {
-      setState("wait", "Máy đang khởi động…");
-      veil(true, "Máy đang khởi động lại…", "Android trong máy đang bật lại (thường do app dùng hết RAM). Khoảng 1–2 phút, màn hình tự mở lại khi xong.");
+      setState("wait", L("Máy đang khởi động…", "Starting up…"));
+      veil(true, L("Máy đang khởi động lại…", "The phone is restarting…"), L("Android trong máy đang bật lại (thường do app dùng hết RAM). Khoảng 1–2 phút, màn hình tự mở lại khi xong.", "Android is starting again (usually because an app used up the RAM). About 1–2 minutes; the screen reopens by itself."));
       main.tries = 0;
     }
-  } catch (e) { if (!main.ok) setState("bad", e.status === 409 ? "Máy chưa chạy" : e.status ? "Lỗi server (" + e.status + ")" : "Không tới được server"); }
+  } catch (e) { if (!main.ok) setState("bad", e.status === 409 ? L("Máy chưa chạy", "Not running") : e.status ? L("Lỗi server (", "Server error (") + e.status + ")" : L("Không tới được server", "Can't reach server")); }
   renderHead();
 }
 setInterval(checkInfo, 20000);
@@ -852,7 +947,7 @@ function setView(v, ids, openP) {
   const multi = v === "multi";
   gridIds = multi && ids && ids.length ? ids : null;
   if (openP) cur = openP;
-  if (multi && phones.filter(p => p.status === "active").length < 1) { toast("Bạn chưa có máy nào đang chạy."); return; }
+  if (multi && phones.filter(p => p.status === "active").length < 1) { toast(L("Bạn chưa có máy nào đang chạy.", "You have no running phones.")); return; }
   document.body.classList.toggle("multi", multi);
   $("v-one").classList.toggle("on", !multi); $("v-multi").classList.toggle("on", multi);
   store.set("cp_view", v);
@@ -864,21 +959,21 @@ $("v-one").onclick = () => setView("one");
 $("v-multi").onclick = () => setView("multi");
 function buildGrid() {
   const list = phones.filter(p => p.status === "active" && p.port && (!gridIds || gridIds.includes(p.id)));
-  const g = $("grid"); g.innerHTML = list.length ? "" : '<div class="gempty">Chưa có máy nào đang chạy.</div>';
+  const g = $("grid"); g.innerHTML = list.length ? "" : L('<div class="gempty">Chưa có máy nào đang chạy.</div>', '<div class="gempty">No running phones.</div>');
   for (const p of list) {
     const el = document.createElement("div"); el.className = "tile";
     el.innerHTML = `<div class="th"><i></i><span>${esc(p.name)}</span><small>${esc(p.res || "")}</small>
-        <button class="btn sm gh" data-big="${p.id}" title="Mở lớn máy này">Mở lớn</button></div>
+        <button class="btn sm gh" data-big="${p.id}" title="${L("Mở lớn máy này", "Open this phone large")}">${L("Mở lớn", "Enlarge")}</button></div>
       <div class="tf"><iframe title="${esc(p.name)}" allow="autoplay; clipboard-read; clipboard-write"></iframe>
-        <div class="veil"><div class="spin"></div><b>Đang mở…</b><span></span></div></div>
-      <div class="tbar"><button data-tkey="4" data-id="${p.id}">↩<span>Quay lại</span></button><button data-tkey="3" data-id="${p.id}">○<span>Màn chính</span></button>
-        <button data-tkey="187" data-id="${p.id}">▢<span>Đa nhiệm</span></button><button data-big="${p.id}">⤢<span>Mở lớn</span></button></div>`;
+        <div class="veil"><div class="spin"></div><b>${L("Đang mở…", "Opening…")}</b><span></span></div></div>
+      <div class="tbar"><button data-tkey="4" data-id="${p.id}">↩<span>${L("Quay lại", "Back")}</span></button><button data-tkey="3" data-id="${p.id}">○<span>${L("Màn chính", "Home")}</span></button>
+        <button data-tkey="187" data-id="${p.id}">▢<span>${L("Đa nhiệm", "Recents")}</span></button><button data-big="${p.id}">⤢<span>${L("Mở lớn", "Enlarge")}</span></button></div>`;
     g.appendChild(el);
     const dot = el.querySelector(".th i"), v = el.querySelector(".veil");
     const conn = new Conn(el.querySelector("iframe"), v, {
-      connecting(n) { dot.className = ""; veilOn(v, true, n ? "Đang nối lại…" : "Đang mở…", ""); },
+      connecting(n) { dot.className = ""; veilOn(v, true, n ? L("Đang nối lại…", "Reconnecting…") : L("Đang mở…", "Opening…"), ""); },
       ok() { dot.className = "ok"; veilOn(v, false); },
-      fail() { dot.className = "bad"; veilOn(v, true, "Không kết nối được", '<button class="btn sm" data-tretry="' + p.id + '">Thử lại</button>', false); },
+      fail() { dot.className = "bad"; veilOn(v, true, L("Không kết nối được", "Can't connect"), '<button class="btn sm" data-tretry="' + p.id + '">' + L("Thử lại", "Try again") + '</button>', false); },
       size() { layoutGrid(); },
     });
     tiles.set(p.id, { el, conn, p });
@@ -921,22 +1016,22 @@ function chipsBind(box, on) { box.onclick = e => { const b = e.target.closest("[
 const ACT = {
   quality() {
     let q = quality, pl = player;
-    ask({ title: "Chất lượng hình", desc: "Chọn theo mạng của bạn. Đổi xong hình tự mở lại sau 1–2 giây.",
-      body: `<span class="lbl">Độ nét &amp; băng thông</span><div id="q-box">${pick(Object.entries(QUAL).map(([k, v]) => [k, v[0], v[1]]), q, "c3")}</div>
-             <span class="lbl">Cách giải mã hình</span><div id="p-box">${pick([["webcodecs", "Nhanh", "Ít trễ, dùng card đồ hoạ"], ["broadway", "Tương thích", "Dùng khi bị đen / giật"]], pl, "c2")}</div>`,
-      ok: "Áp dụng",
-      onOk: () => { quality = q; player = pl; store.set("cp_q", q); store.set("cp_player", pl); renderHead(); if (cur && cur.status === "active") { main.tries = 0; main.open(cur, quality); } toast("Đã đổi: " + QUAL[q][0] + " · " + (pl === "webcodecs" ? "Nhanh" : "Tương thích")); } });
+    ask({ title: L("Chất lượng hình", "Video quality"), desc: L("Chọn theo mạng của bạn. Đổi xong hình tự mở lại sau 1–2 giây.", "Pick what suits your connection. The video reopens 1–2 seconds after you change it."),
+      body: `<span class="lbl">${L("Độ nét &amp; băng thông", "Sharpness &amp; bandwidth")}</span><div id="q-box">${pick(Object.entries(QUAL).map(([k, v]) => [k, v[0], v[1]]), q, "c3")}</div>
+             <span class="lbl">${L("Cách giải mã hình", "Video decoder")}</span><div id="p-box">${pick([["webcodecs", L("Nhanh", "Fast"), L("Ít trễ, dùng card đồ hoạ", "Low latency, uses the GPU")], ["broadway", L("Tương thích", "Compatible"), L("Dùng khi bị đen / giật", "Use if the screen is black or stutters")]], pl, "c2")}</div>`,
+      ok: L("Áp dụng", "Apply"),
+      onOk: () => { quality = q; player = pl; store.set("cp_q", q); store.set("cp_player", pl); renderHead(); if (cur && cur.status === "active") { main.tries = 0; main.open(cur, quality); } toast(L("Đã đổi: ", "Changed: ") + QUAL[q][0] + " · " + (pl === "webcodecs" ? L("Nhanh", "Fast") : L("Tương thích", "Compatible"))); } });
     chipsBind($("q-box"), v => q = v); chipsBind($("p-box"), v => pl = v);
   },
   async rotate() {
-    try { await api(cur.id + "/rotate", { method: "POST", json: { dir: main.size && main.size[0] > main.size[1] ? 0 : 1 } }); toast("Đã xoay — khung hình tự đổi theo."); } catch (e) { toast(e.message, 1); }
+    try { await api(cur.id + "/rotate", { method: "POST", json: { dir: main.size && main.size[0] > main.size[1] ? 0 : 1 } }); toast(L("Đã xoay — khung hình tự đổi theo.", "Rotated — the frame adjusts automatically.")); } catch (e) { toast(e.message, 1); }
   },
   async shot() {
-    toast("Đang chụp màn hình…");
+    toast(L("Đang chụp màn hình…", "Taking a screenshot…"));
     try {
       const b = await api(cur.id + "/shot", { blob: true }), url = URL.createObjectURL(b);
       const name = "manhinh-" + new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-") + ".png";
-      ask({ title: "Ảnh chụp màn hình", body: `<img class="shot" src="${url}" alt="Ảnh chụp màn hình máy">`, ok: "Tải ảnh về", onOk: () => { const l = document.createElement("a"); l.href = url; l.download = name; l.click(); } });
+      ask({ title: L("Ảnh chụp màn hình", "Screenshot"), body: `<img class="shot" src="${url}" alt="${L("Ảnh chụp màn hình máy", "Phone screenshot")}">`, ok: L("Tải ảnh về", "Download image"), onOk: () => { const l = document.createElement("a"); l.href = url; l.download = name; l.click(); } });
     } catch (e) { toast(e.message, 1); }
   },
   focus() { document.body.classList.add("focus"); fit(); const el = document.documentElement; if (el.requestFullscreen) el.requestFullscreen().catch(() => {}); },
@@ -945,26 +1040,27 @@ const ACT = {
   display(preset) {
     const [lo, hi] = cur.fpsRange || [10, 120];
     const FPS = [30, 60, 90, 120].filter(v => v >= lo && v <= hi);
-    const RES = [["540x960", "Nhẹ máy"], ["720x1280", "HD"], ["720x1600", "HD+ dài"], ["1080x1920", "Full HD"], ["1080x2340", "FHD+ dài"], ["1080x2400", "FHD+ 20:9"], ["1280x720", "HD ngang"], ["1920x1080", "FHD ngang"]];
+    const RES = [["540x960", L("Nhẹ máy", "Light")], ["720x1280", "HD"], ["720x1600", L("HD+ dài", "HD+ tall")], ["1080x1920", "Full HD"], ["1080x2340", L("FHD+ dài", "FHD+ tall")], ["1080x2400", "FHD+ 20:9"], ["1280x720", L("HD ngang", "HD landscape")], ["1920x1080", L("FHD ngang", "FHD landscape")]];
     const mine = myScreenRes();
-    if (!RES.some(r => r[0] === mine)) RES.unshift([mine, "📐 Theo màn hình bạn"]); else RES.find(r => r[0] === mine)[1] = "📐 Theo màn hình bạn";
+    if (!RES.some(r => r[0] === mine)) RES.unshift([mine, L("📐 Theo màn hình bạn", "📐 Match your screen")]); else RES.find(r => r[0] === mine)[1] = L("📐 Theo màn hình bạn", "📐 Match your screen");
     let fps = cur.fps || 30, res = typeof preset === "string" ? preset : (cur.res || "720x1280");
     const draw = () => {
       $("d-fps").innerHTML = FPS.map(v => `<button type="button" data-fps="${v}" class="${v === fps ? "on" : ""}">${v}<small>FPS</small></button>`).join("");
       $("d-res").innerHTML = RES.map(r => `<button type="button" data-res="${r[0]}" class="${r[0] === res ? "on" : ""}">${r[1]}<small>${r[0]}</small></button>`).join("");
     };
-    ask({ title: "FPS & độ phân giải", desc: `Đang dùng <b>${esc(cur.res)}</b> · <b>${cur.fps || 30} FPS</b>. <br>• Chỉ đổi <b>độ phân giải</b>: đổi ngay trong vài giây, <b>app đang chạy không bị tắt</b>.<br>• Đổi <b>FPS</b>: máy khởi động lại (1–3 phút), dữ liệu vẫn giữ nhưng app đang mở sẽ đóng.`,
-      body: `<span class="lbl">FPS (${lo}–${hi})</span><div class="chips" id="d-fps"></div><input class="in" id="d-fpsx" type="number" min="${lo}" max="${hi}" inputmode="numeric" placeholder="Hoặc tự nhập FPS">
-             <span class="lbl">Độ phân giải</span><div class="chips" id="d-res"></div><input class="in" id="d-resx" type="text" autocomplete="off" placeholder="Hoặc tự nhập, VD 1080x2400">`,
-      ok: "Áp dụng",
+    ask({ title: L("FPS & độ phân giải", "FPS & resolution"), desc: L(`Đang dùng <b>${esc(cur.res)}</b> · <b>${cur.fps || 30} FPS</b>. <br>• Chỉ đổi <b>độ phân giải</b>: đổi ngay trong vài giây, <b>app đang chạy không bị tắt</b>.<br>• Đổi <b>FPS</b>: máy khởi động lại (1–3 phút), dữ liệu vẫn giữ nhưng app đang mở sẽ đóng.`,
+        `Current: <b>${esc(cur.res)}</b> · <b>${cur.fps || 30} FPS</b>. <br>• Changing only the <b>resolution</b> takes a few seconds and <b>running apps stay open</b>.<br>• Changing <b>FPS</b> restarts the phone (1–3 min). Your data is kept, but open apps will close.`),
+      body: `<span class="lbl">FPS (${lo}–${hi})</span><div class="chips" id="d-fps"></div><input class="in" id="d-fpsx" type="number" min="${lo}" max="${hi}" inputmode="numeric" placeholder="${L("Hoặc tự nhập FPS", "Or enter FPS")}">
+             <span class="lbl">${L("Độ phân giải", "Resolution")}</span><div class="chips" id="d-res"></div><input class="in" id="d-resx" type="text" autocomplete="off" placeholder="${L("Hoặc tự nhập, VD 1080x2400", "Or enter one, e.g. 1080x2400")}">`,
+      ok: L("Áp dụng", "Apply"),
       onOk: async () => {
-        if (!(fps >= lo && fps <= hi)) { toast(`FPS phải từ ${lo} đến ${hi}.`, 1); return false; }
-        if (!/^\d{3,4}x\d{3,4}$/.test(res)) { toast("Độ phân giải phải dạng rộng x cao, VD 1080x1920.", 1); return false; }
-        if (fps === (cur.fps || 30) && res === cur.res) { toast("Bạn chưa thay đổi gì."); return false; }
+        if (!(fps >= lo && fps <= hi)) { toast(L(`FPS phải từ ${lo} đến ${hi}.`, `FPS must be between ${lo} and ${hi}.`), 1); return false; }
+        if (!/^\d{3,4}x\d{3,4}$/.test(res)) { toast(L("Độ phân giải phải dạng rộng x cao, VD 1080x1920.", "Resolution must be width x height, e.g. 1080x1920."), 1); return false; }
+        if (fps === (cur.fps || 30) && res === cur.res) { toast(L("Bạn chưa thay đổi gì.", "Nothing changed.")); return false; }
         try {
           const j = await api(cur.id + "/display", { method: "POST", json: { fps, res } });
           const quick = fps === (cur.fps || 30);
-          main.stop(); setTools(false); setState("wait", "Đang đổi cấu hình…"); veil(true, `Đang chuyển sang ${res} · ${fps} FPS…`, quick ? "Vài giây, app đang chạy vẫn giữ nguyên." : "Khoảng 1–3 phút, màn hình tự mở lại khi xong.");
+          main.stop(); setTools(false); setState("wait", L("Đang đổi cấu hình…", "Applying settings…")); veil(true, L(`Đang chuyển sang ${res} · ${fps} FPS…`, `Switching to ${res} · ${fps} FPS…`), quick ? L("Vài giây, app đang chạy vẫn giữ nguyên.", "A few seconds — running apps stay open.") : L("Khoảng 1–3 phút, màn hình tự mở lại khi xong.", "About 1–3 minutes; the screen reopens by itself."));
           const item = trayItem(`${res} · ${fps} FPS`, 0);
           if (await pollJob(j.job, item)) { cur.fps = fps; cur.res = res; }
           openPhone(cur);
@@ -978,50 +1074,50 @@ const ACT = {
   },
   upload() { $("file").click(); },
   fromurl() {
-    ask({ title: "Cài từ link", desc: "Dán link tải file hoặc APK (Google Drive công khai, APKPure, MediaFire…). Server sẽ tự tải về rồi đưa vào máy, APK thì tự cài.",
-      body: '<input class="in" id="f-url" type="url" inputmode="url" placeholder="https://…">', ok: "Tải & cài",
-      onOk: async () => { const u = $("f-url").value.trim(); if (!/^https?:\/\//.test(u)) { toast("Link phải bắt đầu bằng http:// hoặc https://", 1); return false; }
-        const item = trayItem(u.split("/").pop().slice(0, 60) || "Tải từ link", 0); item.msg("Đang gửi yêu cầu…");
+    ask({ title: L("Cài từ link", "Install from link"), desc: L("Dán link tải file hoặc APK (Google Drive công khai, APKPure, MediaFire…). Server sẽ tự tải về rồi đưa vào máy, APK thì tự cài.", "Paste a download link for a file or APK (public Google Drive, APKPure, MediaFire…). The server downloads it and puts it on the phone; APKs install automatically."),
+      body: '<input class="in" id="f-url" type="url" inputmode="url" placeholder="https://…">', ok: L("Tải & cài", "Download & install"),
+      onOk: async () => { const u = $("f-url").value.trim(); if (!/^https?:\/\//.test(u)) { toast(L("Link phải bắt đầu bằng http:// hoặc https://", "The link must start with http:// or https://"), 1); return false; }
+        const item = trayItem(u.split("/").pop().slice(0, 60) || L("Tải từ link", "From link"), 0); item.msg(L("Đang gửi yêu cầu…", "Sending request…"));
         try { const j = await api(cur.id + "/fromurl", { method: "POST", json: { url: u } }); pollJob(j.job, item); } catch (e) { item.fail(e.message); } } });
   },
   async apps() {
-    ask({ title: "Ứng dụng đã cài", desc: "Ứng dụng bạn tự cài thêm trên máy.", body: '<div class="apps" id="applist"><div class="spin" style="margin:16px auto"></div></div>', noOk: true });
+    ask({ title: L("Ứng dụng đã cài", "Installed apps"), desc: L("Ứng dụng bạn tự cài thêm trên máy.", "Apps you installed on the phone."), body: '<div class="apps" id="applist"><div class="spin" style="margin:16px auto"></div></div>', noOk: true });
     try {
       const { apps } = await api(cur.id + "/apps");
       $("applist").innerHTML = apps.length ? apps.map(p => `<div class="app"><span title="${esc(p)}">${esc(p)}</span>
-        <button class="btn sm" data-app="launch" data-pkg="${esc(p)}">Mở</button><button class="btn sm gh" data-app="stop" data-pkg="${esc(p)}">Dừng</button>
-        <button class="btn sm gh" data-app="clear" data-pkg="${esc(p)}">Xoá dữ liệu</button><button class="btn sm red" data-app="uninstall" data-pkg="${esc(p)}">Gỡ</button></div>`).join("")
-        : '<p>Chưa cài thêm ứng dụng nào. Bấm “Tải file / APK” hoặc mở CH Play trên máy để cài.</p>';
+        <button class="btn sm" data-app="launch" data-pkg="${esc(p)}">${L("Mở", "Open")}</button><button class="btn sm gh" data-app="stop" data-pkg="${esc(p)}">${L("Dừng", "Stop")}</button>
+        <button class="btn sm gh" data-app="clear" data-pkg="${esc(p)}">${L("Xoá dữ liệu", "Clear data")}</button><button class="btn sm red" data-app="uninstall" data-pkg="${esc(p)}">${L("Gỡ", "Uninstall")}</button></div>`).join("")
+        : L('<p>Chưa cài thêm ứng dụng nào. Bấm “Tải file / APK” hoặc mở CH Play trên máy để cài.</p>', '<p>No apps installed yet. Tap “Upload file / APK” or open Play Store on the phone.</p>');
     } catch (e) { $("applist").innerHTML = `<p style="color:var(--bad)">${esc(e.message)}</p>`; }
   },
   text() {
-    ask({ title: "Dán chữ vào máy", desc: "Bấm vào ô nhập trên máy trước, rồi dán chữ ở đây (tài khoản, mật khẩu, link…). Có dấu cũng được. Mẹo: bấm vào màn hình máy rồi nhấn <b>Ctrl+V</b> là dán luôn.",
-      body: '<textarea class="in cliptxt" id="f-text" maxlength="20000" placeholder="Nội dung cần dán…"></textarea><button type="button" class="btn sm gh" id="f-fromclip" style="margin-top:8px">📋 Lấy chữ bạn đã copy</button>', ok: "Dán vào máy",
+    ask({ title: L("Dán chữ vào máy", "Paste text into the phone"), desc: L("Bấm vào ô nhập trên máy trước, rồi dán chữ ở đây (tài khoản, mật khẩu, link…). Có dấu cũng được. Mẹo: bấm vào màn hình máy rồi nhấn <b>Ctrl+V</b> là dán luôn.", "Tap a text field on the phone first, then paste your text here (username, password, link…). Tip: click the phone screen and press <b>Ctrl+V</b> to paste directly."),
+      body: `<textarea class="in cliptxt" id="f-text" maxlength="20000" placeholder="${L("Nội dung cần dán…", "Text to paste…")}"></textarea><button type="button" class="btn sm gh" id="f-fromclip" style="margin-top:8px">${L("📋 Lấy chữ bạn đã copy", "📋 Use what you copied")}</button>`, ok: L("Dán vào máy", "Paste into phone"),
       onOk: async () => { const t = $("f-text").value; if (!t) return false; return await pasteToPhone(t); } });
     $("f-fromclip").onclick = async () => {
-      try { const t = await navigator.clipboard.readText(); if (t) $("f-text").value = t; else toast("Bộ nhớ copy đang trống.", 1); }
-      catch (e) { toast("Trình duyệt không cho đọc bộ nhớ copy — hãy nhấn giữ ô trên rồi chọn Dán.", 1); }
+      try { const t = await navigator.clipboard.readText(); if (t) $("f-text").value = t; else toast(L("Bộ nhớ copy đang trống.", "Your clipboard is empty."), 1); }
+      catch (e) { toast(L("Trình duyệt không cho đọc bộ nhớ copy — hãy nhấn giữ ô trên rồi chọn Dán.", "Your browser blocked clipboard access — press and hold the box above and choose Paste."), 1); }
     };
   },
   async copyout() {
-    if (!main.ok) { toast("Máy chưa kết nối xong.", 1); return; }
+    if (!main.ok) { toast(L("Máy chưa kết nối xong.", "The phone isn't connected yet."), 1); return; }
     clipWant = true; setTimeout(() => { clipWant = false; }, 4000);
     const ok = await main.cmd("clipget");
-    if (!ok) { clipWant = false; toast("Chưa lấy được — trên máy hãy bôi đen chữ và bấm Copy, chữ sẽ tự hiện ở đây.", 1); return; }
-    setTimeout(() => { if (clipWant) { clipWant = false; toast("Bộ nhớ copy của máy đang trống. Bôi đen chữ trên máy rồi bấm Copy.", 1); } }, 3000);
+    if (!ok) { clipWant = false; toast(L("Chưa lấy được — trên máy hãy bôi đen chữ và bấm Copy, chữ sẽ tự hiện ở đây.", "Couldn't read it — select text on the phone and tap Copy; it will show up here."), 1); return; }
+    setTimeout(() => { if (clipWant) { clipWant = false; toast(L("Bộ nhớ copy của máy đang trống. Bôi đen chữ trên máy rồi bấm Copy.", "The phone's clipboard is empty. Select text on the phone and tap Copy."), 1); } }, 3000);
   },
   openurl() {
-    ask({ title: "Mở trang web trên máy", desc: "Máy sẽ mở link này bằng trình duyệt.", body: '<input class="in" id="f-open" type="url" inputmode="url" placeholder="https://…">', ok: "Mở trên máy",
+    ask({ title: L("Mở trang web trên máy", "Open a website on the phone"), desc: L("Máy sẽ mở link này bằng trình duyệt.", "The phone opens this link in its browser."), body: '<input class="in" id="f-open" type="url" inputmode="url" placeholder="https://…">', ok: L("Mở trên máy", "Open on phone"),
       onOk: async () => { let u = $("f-open").value.trim(); if (u && !/^https?:\/\//.test(u)) u = "https://" + u; if (!u) return false;
-        try { await api(cur.id + "/url", { method: "POST", json: { url: u } }); toast("Đã mở trên máy."); } catch (e) { toast(e.message, 1); return false; } } });
+        try { await api(cur.id + "/url", { method: "POST", json: { url: u } }); toast(L("Đã mở trên máy.", "Opened on the phone.")); } catch (e) { toast(e.message, 1); return false; } } });
   },
   reboot() {
-    ask({ title: "Khởi động lại máy?", desc: "Máy sẽ tắt rồi bật lại trong khoảng 1–3 phút. Dữ liệu và ứng dụng vẫn giữ nguyên.", ok: "Khởi động lại",
+    ask({ title: L("Khởi động lại máy?", "Restart the phone?"), desc: L("Máy sẽ tắt rồi bật lại trong khoảng 1–3 phút. Dữ liệu và ứng dụng vẫn giữ nguyên.", "The phone turns off and back on in about 1–3 minutes. Your data and apps are kept."), ok: L("Khởi động lại", "Restart"),
       onOk: async () => {
         try {
           const j = await api(cur.id + "/reboot", { method: "POST", json: {} });
-          main.stop(); setTools(false); setState("wait", "Đang khởi động lại…"); veil(true, "Đang khởi động lại máy…", "Khoảng 1–3 phút, màn hình tự mở lại khi xong.");
-          const item = trayItem("Khởi động lại " + cur.name, 0); await pollJob(j.job, item); openPhone(cur);
+          main.stop(); setTools(false); setState("wait", L("Đang khởi động lại…", "Restarting…")); veil(true, L("Đang khởi động lại máy…", "Restarting the phone…"), L("Khoảng 1–3 phút, màn hình tự mở lại khi xong.", "About 1–3 minutes; the screen reopens by itself."));
+          const item = trayItem(L("Khởi động lại ", "Restart ") + cur.name, 0); await pollJob(j.job, item); openPhone(cur);
         } catch (e) { toast(e.message, 1); }
       } });
   },
@@ -1029,10 +1125,10 @@ const ACT = {
 document.addEventListener("click", async e => {
   const b = e.target.closest("[data-app]"); if (!b) return;
   const act = b.dataset.app, pkg = b.dataset.pkg;
-  if (act === "uninstall" && !confirm("Gỡ ứng dụng " + pkg + "?")) return;
-  if (act === "clear" && !confirm("Xoá toàn bộ dữ liệu của " + pkg + "? (đăng xuất, mất tiến trình)")) return;
+  if (act === "uninstall" && !confirm(L("Gỡ ứng dụng " + pkg + "?", "Uninstall " + pkg + "?"))) return;
+  if (act === "clear" && !confirm(L("Xoá toàn bộ dữ liệu của " + pkg + "? (đăng xuất, mất tiến trình)", "Clear all data of " + pkg + "? (signs out, progress is lost)"))) return;
   b.disabled = true;
-  try { await api(cur.id + "/" + act, { method: "POST", json: { pkg } }); toast({ launch: "Đã mở ", stop: "Đã dừng ", clear: "Đã xoá dữ liệu ", uninstall: "Đã gỡ " }[act] + pkg); if (act === "uninstall") b.closest(".app").remove(); else if (act === "launch") $("dlg").hidden = true; }
+  try { await api(cur.id + "/" + act, { method: "POST", json: { pkg } }); toast((LANG === "en" ? { launch: "Opened ", stop: "Stopped ", clear: "Cleared data of ", uninstall: "Uninstalled " } : { launch: "Đã mở ", stop: "Đã dừng ", clear: "Đã xoá dữ liệu ", uninstall: "Đã gỡ " })[act] + pkg); if (act === "uninstall") b.closest(".app").remove(); else if (act === "launch") $("dlg").hidden = true; }
   catch (err) { toast(err.message, 1); } finally { b.disabled = false; }
 });
 $("exitfocus").onclick = () => { document.body.classList.remove("focus"); if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); fit(); };
@@ -1048,12 +1144,12 @@ addEventListener("resize", syncMobile);
 /* ---------- tải file lên (chia nhỏ, tự thử lại) ---------- */
 function trayItem(name, size) {
   const el = document.createElement("div"); el.className = "ti";
-  el.innerHTML = `<div class="r"><span class="n"></span><span class="s"></span><button class="x" aria-label="Ẩn">×</button></div><div class="m">Đang chờ…</div><div class="bar"><i></i></div>`;
+  el.innerHTML = `<div class="r"><span class="n"></span><span class="s"></span><button class="x" aria-label="${L("Ẩn", "Hide")}">×</button></div><div class="m">${L("Đang chờ…", "Waiting…")}</div><div class="bar"><i></i></div>`;
   el.querySelector(".n").textContent = name; el.querySelector(".s").textContent = size ? mb(size) : "";
   el.querySelector(".x").onclick = () => el.remove();
   $("tray").prepend(el);
   return {
-    el, msg(t) { el.querySelector(".m").textContent = t; },
+    el, msg(t) { el.querySelector(".m").textContent = srv(t); },
     pct(p) { el.querySelector(".bar i").style.width = Math.round(p * 100) + "%"; },
     done(t) { el.classList.add("ok"); this.pct(1); this.msg(t); setTimeout(() => el.remove(), 9000); },
     fail(t) { el.classList.add("err"); this.pct(1); this.msg(t); },
@@ -1068,24 +1164,24 @@ async function pollJob(jid, item) {
       if (j.state === "done") { item.done(j.msg); return true; }
       if (j.state === "error") { item.fail(j.msg); return false; }
       item.msg(j.msg); item.el.querySelector(".bar i").style.width = "100%"; item.el.querySelector(".bar i").style.opacity = ".45";
-    } catch (e) { if (e.status === 404) { item.fail("Không theo dõi được (server vừa khởi động lại)."); return false; } }
+    } catch (e) { if (e.status === 404) { item.fail(L("Không theo dõi được (server vừa khởi động lại).", "Lost track of this job (the server just restarted).")); return false; } }
   }
-  item.fail("Quá lâu chưa xong — kiểm tra lại trên máy."); return false;
+  item.fail(L("Quá lâu chưa xong — kiểm tra lại trên máy.", "This is taking too long — check on the phone.")); return false;
 }
 const queue = []; let busyUp = false;
 function addFiles(list) {
-  if (!cur || cur.status !== "active") { toast("Máy chưa chạy, chưa tải file được.", 1); return; }
+  if (!cur || cur.status !== "active") { toast(L("Máy chưa chạy, chưa tải file được.", "The phone isn't running, can't upload yet."), 1); return; }
   for (const f of list) {
-    if (!f.size) { toast(f.name + ": file rỗng.", 1); continue; }
-    if (f.size > 4 * 1073741824) { toast(f.name + ": lớn hơn 4GB.", 1); continue; }
-    const it = trayItem(f.name, f.size); it.msg(/\.apk$/i.test(f.name) ? "Chờ tải lên — sẽ tự cài" : "Chờ tải lên");
+    if (!f.size) { toast(f.name + L(": file rỗng.", ": empty file."), 1); continue; }
+    if (f.size > 4 * 1073741824) { toast(f.name + L(": lớn hơn 4GB.", ": larger than 4GB."), 1); continue; }
+    const it = trayItem(f.name, f.size); it.msg(/\.apk$/i.test(f.name) ? L("Chờ tải lên — sẽ tự cài", "Waiting to upload — will install automatically") : L("Chờ tải lên", "Waiting to upload"));
     queue.push({ f, it, pid: cur.id });
   }
   runQueue();
 }
 async function runQueue() {
   if (busyUp) return; busyUp = true;
-  while (queue.length) { const { f, it, pid } = queue.shift(); try { await upOne(f, it, pid); } catch (e) { it.fail(e.message || "Tải lên lỗi."); } }
+  while (queue.length) { const { f, it, pid } = queue.shift(); try { await upOne(f, it, pid); } catch (e) { it.fail(e.message || L("Tải lên lỗi.", "Upload failed.")); } }
   busyUp = false;
 }
 async function upOne(f, it, pid) {
@@ -1101,13 +1197,13 @@ async function upOne(f, it, pid) {
       } catch (e) {
         if (e.status === 409 && e.data && e.data.size != null) { j = { size: e.data.size }; break; }
         if (e.status && e.status < 500 && e.status !== 408) throw e;
-        if (++tries > 5) throw new Error("Mạng chập chờn, tải lên thất bại. Thử lại sau.");
-        it.msg("Mạng chập chờn, đang thử lại…"); await sleep(1500 * tries);
+        if (++tries > 5) throw new Error(L("Mạng chập chờn, tải lên thất bại. Thử lại sau.", "Unstable connection, upload failed. Try again later."));
+        it.msg(L("Mạng chập chờn, đang thử lại…", "Unstable connection, retrying…")); await sleep(1500 * tries);
       }
     }
     off = j.size; it.pct(off / f.size * .96);
-    it.msg(`Đang tải lên ${Math.round(off / f.size * 100)}% · ${mb(off / Math.max(1, (Date.now() - t0) / 1000))}/s`);
-    if (j.job) { it.msg(/\.apk$/i.test(f.name) ? "Đang cài ứng dụng…" : "Đang chép vào máy…"); await pollJob(j.job, it); return; }
+    it.msg(`${L("Đang tải lên", "Uploading")} ${Math.round(off / f.size * 100)}% · ${mb(off / Math.max(1, (Date.now() - t0) / 1000))}/s`);
+    if (j.job) { it.msg(/\.apk$/i.test(f.name) ? L("Đang cài ứng dụng…", "Installing app…") : L("Đang chép vào máy…", "Copying to the phone…")); await pollJob(j.job, it); return; }
   }
 }
 $("file").onchange = () => { addFiles([...$("file").files]); $("file").value = ""; };
@@ -1125,24 +1221,47 @@ document.addEventListener("paste", e => {
   if (t && !typing && $("dlg").hidden && cur && main.ok) { e.preventDefault(); pasteToPhone(t); }
 });
 
+let IOS_TXT = false;
+function iosText() {        // chữ nút app trên iPhone (gọi lại khi đổi ngôn ngữ)
+  if (!IOS_TXT) return;
+  $("getapp").querySelector(".gl").textContent = L("Cài app iPhone", "Get iPhone app"); $("getapp").querySelector(".gs").textContent = L("Cài app", "Get app");
+  $("appcta").querySelector("b").textContent = L("📱 App cho iPhone", "📱 iPhone app"); $("appcta").querySelector("span").textContent = L("Thêm vào màn hình chính, mở toàn màn hình như app thật", "Add to your home screen and use it full screen like a real app"); $("appcta").querySelector("i").textContent = L("Xem cách cài", "How to install");
+  $("dm-app").textContent = L("📱 Cài app lên iPhone — dùng như app thật", "📱 Install on iPhone — works like a real app");
+}
 (function appLinks() {     // nút tải app: Android → file APK · iPhone → hướng dẫn thêm vào màn hình chính
   const standalone = !!(navigator.standalone || (window.matchMedia && matchMedia("(display-mode: standalone)").matches));
   if (/BlueRobloxApp\//.test(navigator.userAgent) || standalone) return;
   const ios = /iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
   const ids = ["dm-app", "getapp", "appcta"];
   if (ios) {
-    const guide = e => { e.preventDefault(); ask({ title: "📱 Cài BlueRoblox lên iPhone", noOk: true, onOk: () => true,
-      desc: "Dùng như app thật: mở toàn màn hình, điều khiển máy ngay trên iPhone. Miễn phí, không cần App Store.",
-      body: '<ol style="margin:0;padding-left:20px;line-height:1.7"><li>Mở trang này bằng <b>Safari</b> (hoặc Chrome).</li><li>Bấm nút <b>Chia sẻ</b> (ô vuông có mũi tên lên) ở thanh dưới — Chrome: góc trên bên phải.</li><li>Chọn <b>Thêm vào MH chính</b> → <b>Thêm</b>.</li><li>Mở biểu tượng <b>BlueRoblox</b> trên màn hình chính và đăng nhập.</li></ol>' }); };
+    const guide = e => { e.preventDefault(); ask({ title: L("📱 Cài BlueRoblox lên iPhone", "📱 Install BlueRoblox on iPhone"), noOk: true, onOk: () => true,
+      desc: L("Dùng như app thật: mở toàn màn hình, điều khiển máy ngay trên iPhone. Miễn phí, không cần App Store.", "Works like a real app: full screen, control your phone right on your iPhone. Free, no App Store needed."),
+      body: L('<ol style="margin:0;padding-left:20px;line-height:1.7"><li>Mở trang này bằng <b>Safari</b> (hoặc Chrome).</li><li>Bấm nút <b>Chia sẻ</b> (ô vuông có mũi tên lên) ở thanh dưới — Chrome: góc trên bên phải.</li><li>Chọn <b>Thêm vào MH chính</b> → <b>Thêm</b>.</li><li>Mở biểu tượng <b>BlueRoblox</b> trên màn hình chính và đăng nhập.</li></ol>',
+        '<ol style="margin:0;padding-left:20px;line-height:1.7"><li>Open this page in <b>Safari</b> (or Chrome).</li><li>Tap <b>Share</b> (the square with an up arrow) in the bottom bar — in Chrome it is at the top right.</li><li>Choose <b>Add to Home Screen</b> → <b>Add</b>.</li><li>Open the <b>BlueRoblox</b> icon on your home screen and sign in.</li></ol>') }); };
     ids.forEach(id => { const el = $(id); el.removeAttribute("download"); el.href = "#"; el.onclick = guide; el.hidden = false; });
-    $("getapp").querySelector(".gl").textContent = "Cài app iPhone"; $("getapp").querySelector(".gs").textContent = "Cài app";
-    $("appcta").querySelector("b").textContent = "📱 App cho iPhone"; $("appcta").querySelector("span").textContent = "Thêm vào màn hình chính, mở toàn màn hình như app thật"; $("appcta").querySelector("i").textContent = "Xem cách cài";
-    $("dm-app").textContent = "📱 Cài app lên iPhone — dùng như app thật";
+    IOS_TXT = true; iosText();
     return;
   }
   fetch("/download/app.json", { cache: "no-store" }).then(r => r.ok ? r.json() : null).then(i => { if (i && i.version) ids.forEach(id => { $(id).hidden = false; }); }).catch(() => {});
 })();
 /* ---------- khởi động trang ---------- */
+/* đổi ngôn ngữ: không tải lại trang, hình đang chạy giữ nguyên */
+const STATE_EN = { "Đang chạy": "Running", "Đang kết nối…": "Connecting…", "Đang kết nối lại…": "Reconnecting…" };
+function setLang(l) {
+  const prev = LANG; LANG = l === "en" ? "en" : "vi"; store.set("br_lang", LANG);
+  QUAL = mkQual(); applyStatic(); iosText(); renderHead(); info();
+  if (cur && !document.body.classList.contains("multi")) checkFit();
+  if (lastState) { const [k, t] = lastState; const vi = Object.keys(STATE_EN).find(x => x === t || STATE_EN[x] === t); setState(k, vi ? L(vi, STATE_EN[vi]) : t); }
+  if (prev !== LANG && document.body.classList.contains("multi")) setView("multi", gridIds);
+  else if (cur && !$("veil").hidden) {          // màn che đang hiện → vẽ lại chữ theo ngôn ngữ mới
+    if (underMaint) checkInfo();
+    else if (cur.status !== "active" || !cur.port) openPhone(cur);
+    else if (main.p && !main.ok) main.h.connecting(main.tries, main.raw);
+  }
+}
+$("lang-vi").onclick = () => setLang("vi");
+$("lang-en").onclick = () => setLang("en");
+applyStatic();
 (async function init() {
   setTools(false); syncMobile();
   if (EMBED && location.hash.includes("at=")) {          // app Android truyền phiên đăng nhập qua #at=…&rt=…
@@ -1152,11 +1271,11 @@ document.addEventListener("paste", e => {
     history.replaceState(null, "", location.pathname + location.search);
   }
   const { data: { session } } = await sb.auth.getSession();
-  if (!session) { setState("bad", "Chưa đăng nhập"); veil(true, "Bạn chưa đăng nhập", '<a href="/">Về cửa hàng để đăng nhập</a>, rồi bấm “Điều khiển” trên máy của bạn.', false); return; }
+  if (!session) { setState("bad", L("Chưa đăng nhập", "Not signed in")); veil(true, L("Bạn chưa đăng nhập", "You're not signed in"), L('<a href="/">Về cửa hàng để đăng nhập</a>, rồi bấm “Điều khiển” trên máy của bạn.', '<a href="/">Go to the store to sign in</a>, then tap “Control” on your phone.'), false); return; }
   token = session.access_token; me = session.user;
   sb.auth.onAuthStateChange((_e, s) => { if (s) token = s.access_token; });
   try { const s = await api("session", { method: "POST", json: {} }); if (s.admin) $("adminlink").hidden = false; }
-  catch (e) { setState("bad", "Không kết nối được server"); veil(true, "Không kết nối được máy chủ điện thoại", esc(e.message) + '<br><a href="">Tải lại trang</a>', false); return; }
+  catch (e) { setState("bad", L("Không kết nối được server", "Can't reach server")); veil(true, L("Không kết nối được máy chủ điện thoại", "Can't connect to the phone server"), esc(e.message) + '<br><a href="">' + L("Tải lại trang", "Reload page") + '</a>', false); return; }
   const p = await loadPhones(); loadBilling().catch(() => {});
   if (store.get("cp_view") === "multi" && phones.filter(x => x.status === "active").length > 1 && !new URLSearchParams(location.search).get("id")) { cur = p; renderHead(); setView("multi"); }
   else openPhone(p);

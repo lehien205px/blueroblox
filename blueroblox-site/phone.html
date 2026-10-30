@@ -250,10 +250,12 @@ body.focus .exitfocus{display:block}
 .langsw button{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:999px;font-weight:700;font-size:14px;color:#3a2200;white-space:nowrap}
 .langsw button.on{background:#0e1638;color:#fff}
 .langsw button:not(.on):hover{background:rgba(255,255,255,.35)}
-.langsw .fl{font-size:17px;line-height:1}.langsw .ls{display:none}
+.langsw .fl{display:inline-flex;line-height:0}.langsw .fl svg{width:22px;height:15px;border-radius:3px;box-shadow:0 0 0 1px rgba(0,0,0,.25)}.langsw .ls{display:none}
 @media (max-width:1500px){.info{display:none!important}}
+#left{flex:none}.meta .spec{min-width:0;overflow:hidden;text-overflow:ellipsis}
+@media (max-width:1250px){.meta .spec{display:none}}
 @media (max-width:860px){.appcta{display:none!important}}
-@media (max-width:860px){.langsw{padding:2px}.langsw button{padding:4px 7px;font-size:12px;gap:3px}.langsw .ln{display:none}.langsw .ls{display:inline}.langsw .fl{font-size:17px}}
+@media (max-width:860px){.langsw{padding:2px}.langsw button{padding:4px 7px;font-size:12px;gap:3px}.langsw .ln{display:none}.langsw .ls{display:inline}.langsw .fl svg{width:24px;height:16px}}
 @media (max-width:420px){.langsw .ls{display:none!important}.top .meta{display:none}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
@@ -274,7 +276,7 @@ body.focus .exitfocus{display:block}
     <button id="v-one" class="on" title="Xem 1 máy"><svg class="ic sm" viewBox="0 0 24 24"><rect x="7" y="3" width="10" height="18" rx="2"/></svg><span style="min-width:0;padding:0;color:inherit;font:inherit">1 máy</span></button>
     <button id="v-multi" title="Xem nhiều máy cùng lúc"><svg class="ic sm" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="8" rx="1.5"/><rect x="14" y="3" width="7" height="8" rx="1.5"/><rect x="3" y="13" width="7" height="8" rx="1.5"/><rect x="14" y="13" width="7" height="8" rx="1.5"/></svg><span style="min-width:0;padding:0;color:inherit;font:inherit" id="multin">Nhiều máy</span></button>
   </div>
-  <div class="langsw" id="langsw" role="group" aria-label="Language / Ngôn ngữ"><button type="button" id="lang-vi" title="Tiếng Việt"><span class="fl">🇻🇳</span><span class="ln">Tiếng Việt</span><span class="ls">VI</span></button><button type="button" id="lang-en" title="English"><span class="fl">🇬🇧</span><span class="ln">English</span><span class="ls">EN</span></button></div>
+  <div class="langsw" id="langsw" role="group" aria-label="Language / Ngôn ngữ"><button type="button" id="lang-vi" title="Tiếng Việt"><span class="fl"><svg viewBox="0 0 30 20" aria-hidden="true"><rect width="30" height="20" fill="#da251d"/><path fill="#ff0" d="M15 4l1.76 5.42h5.7l-4.61 3.35 1.76 5.42L15 14.84l-4.61 3.35 1.76-5.42-4.61-3.35h5.7z"/></svg></span><span class="ln">Tiếng Việt</span><span class="ls">VI</span></button><button type="button" id="lang-en" title="English"><span class="fl"><svg viewBox="0 0 60 30" aria-hidden="true"><clipPath id="ukc"><path d="M0 0v30h60V0z"/></clipPath><clipPath id="ukt"><path d="M30 15h30v15zv15H0zH0V0zV0h30z"/></clipPath><g clip-path="url(#ukc)"><path d="M0 0v30h60V0z" fill="#012169"/><path d="M0 0l60 30m0-30L0 30" stroke="#fff" stroke-width="6"/><path d="M0 0l60 30m0-30L0 30" clip-path="url(#ukt)" stroke="#C8102E" stroke-width="4"/><path d="M30 0v30M0 15h60" stroke="#fff" stroke-width="10"/><path d="M30 0v30M0 15h60" stroke="#C8102E" stroke-width="6"/></g></svg></span><span class="ln">English</span><span class="ls">EN</span></button></div>
   <div class="meta"><span class="spec" id="spec"></span><span id="left"></span></div>
   <div class="right">
     <span class="info" id="info" title="Độ phân giải máy · độ nét hình đang gửi · kích thước hiển thị · tốc độ mạng"></span>

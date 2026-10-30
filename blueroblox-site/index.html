@@ -681,6 +681,26 @@ h1 em::after{background:linear-gradient(90deg,rgba(143,208,255,0),#8fd0ff 15%,#f
 .iossteps li{margin:4px 0}
 html.pwa .appbar{display:none!important}
 
+/* ===== nút đổi ngôn ngữ / tiền tệ — to, dễ thấy ===== */
+.langsw,.cursw{display:inline-flex;flex:none;align-items:center;padding:3px;border-radius:999px}
+.langsw{background:linear-gradient(135deg,#ffc861,#ff8a3d);box-shadow:0 0 0 3px rgba(255,200,97,.18),0 6px 18px -6px rgba(255,160,60,.7)}
+.cursw{background:linear-gradient(135deg,#8fd0ff,#3d7bff);box-shadow:0 0 0 3px rgba(143,208,255,.16),0 6px 18px -6px rgba(61,123,255,.7)}
+.langsw button,.cursw button{display:inline-flex;align-items:center;gap:7px;border:0;background:none;padding:7px 14px;border-radius:999px;font:inherit;font-weight:700;font-size:15px;white-space:nowrap;cursor:pointer;transition:background .2s,color .2s}
+.langsw button{color:#3a2200}.cursw button{color:#06123a}
+.langsw button.on,.cursw button.on{background:#0e1638;color:#fff}
+.langsw button:not(.on):hover,.cursw button:not(.on):hover{background:rgba(255,255,255,.35)}
+.langsw button:focus-visible,.cursw button:focus-visible{outline:2px solid #fff;outline-offset:1px}
+.langsw .fl{display:inline-flex;line-height:0}
+.langsw .fl svg{width:24px;height:16px;border-radius:3px;box-shadow:0 0 0 1px rgba(0,0,0,.25)}
+.langsw .ls{display:none}
+.cursw .sy{font-size:16px;opacity:.85}
+@media (max-width:1100px){.langsw .ln{display:none}.langsw .ls{display:inline}}
+@media (max-width:620px){
+  .langsw button,.cursw button{padding:6px 10px;font-size:13px;gap:5px}
+  .langsw .fl svg{width:22px;height:15px}
+  .cursw .sy{display:none}
+}
+
 </style>
 <script>
 // Đã điền sẵn cho blueroblox.shop
@@ -702,8 +722,8 @@ window.BR_CONFIG = {
       <a class="on" href="/"><svg class="ic" viewBox="0 0 24 24"><path d="M3 11l9-8 9 8M5 10v10h14V10"/></svg><span data-i18n="nav_home">Trang chủ</span></a><a href="#shop"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3h2l2.6 13h10L21 7H6"/><circle cx="9" cy="20" r="1.5"/><circle cx="18" cy="20" r="1.5"/></svg><span data-i18n="nav_shop">Sản phẩm</span></a><a id="nav-topup"><svg class="ic" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.4"/></svg><span data-i18n="nav_topup">Nạp tiền</span></a><a id="nav-orders"><svg class="ic" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg><span data-i18n="nav_orders">Đơn hàng</span></a><a id="nav-vps" hidden><svg class="ic" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg><span data-i18n="nav_vps">VPS của tôi</span> <span class="badge" id="vps-nav-badge" hidden></span></a><a id="nav-cloud" hidden><svg class="ic" viewBox="0 0 24 24"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M10 18h4"/></svg><span>📱 ĐT đám mây</span> <span class="badge" id="cp-nav-badge" hidden></span></a><a href="#policy"><svg class="ic" viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6l8-3z"/><path d="M9 12l2 2 4-4"/></svg><span data-i18n="nav_policy">Chính sách</span></a>
     </nav>
     <div class="acct">
-      <div class="seg" id="lang-seg" role="group" aria-label="Language"><button id="lang-vi" class="on">VI</button><button id="lang-en">EN</button></div>
-      <div class="seg" role="group" aria-label="Đơn vị tiền"><button id="cur-vnd" class="on">VND</button><button id="cur-usd">USD</button></div>
+      <div class="langsw" id="lang-seg" role="group" aria-label="Language / Ngôn ngữ"><button id="lang-vi" class="on" type="button" title="Tiếng Việt"><span class="fl"><svg viewBox="0 0 30 20" aria-hidden="true"><rect width="30" height="20" fill="#da251d"/><path fill="#ff0" d="M15 4l1.76 5.42h5.7l-4.61 3.35 1.76 5.42L15 14.84l-4.61 3.35 1.76-5.42-4.61-3.35h5.7z"/></svg></span><span class="ln">Tiếng Việt</span><span class="ls">VI</span></button><button id="lang-en" type="button" title="English"><span class="fl"><svg viewBox="0 0 60 30" aria-hidden="true"><clipPath id="ukc"><path d="M0 0v30h60V0z"/></clipPath><clipPath id="ukt"><path d="M30 15h30v15zv15H0zH0V0zV0h30z"/></clipPath><g clip-path="url(#ukc)"><path d="M0 0v30h60V0z" fill="#012169"/><path d="M0 0l60 30m0-30L0 30" stroke="#fff" stroke-width="6"/><path d="M0 0l60 30m0-30L0 30" clip-path="url(#ukt)" stroke="#C8102E" stroke-width="4"/><path d="M30 0v30M0 15h60" stroke="#fff" stroke-width="10"/><path d="M30 0v30M0 15h60" stroke="#C8102E" stroke-width="6"/></g></svg></span><span class="ln">English</span><span class="ls">EN</span></button></div>
+      <div class="cursw" role="group" aria-label="Currency / Đơn vị tiền"><button id="cur-vnd" class="on" type="button" title="Việt Nam đồng"><span class="sy">₫</span>VND</button><button id="cur-usd" type="button" title="US dollar"><span class="sy">$</span>USD</button></div>
       <span id="guest-acts"><button class="btn ghost" id="btn-login" data-i18n="login">Đăng nhập</button> <button class="btn" id="btn-reg" data-i18n="signup">Đăng ký</button></span>
       <span id="user-acts" hidden style="display:flex;gap:8px;align-items:center">
         <span class="bal"><span data-i18n="balance">Số dư</span>: <b id="bal">0đ</b></span>

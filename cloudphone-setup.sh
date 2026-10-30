@@ -163,6 +163,13 @@ echo "   Đang cài app sẵn cho các máy đang chạy (có thể mất vài p
 asu "python3 '$H/phonectl.py' preinstall --all; python3 '$H/phonectl.py' perms" 2>&1 | grep -E "^\s*[+!]" || true
 
 # ---------------------------------------------------------------------
+# Người gác: tự kiểm tra + tự sửa mỗi 1 phút, tự chạy lại sau khi máy khởi động
+step "Watchdog (tự kiểm tra, tự sửa khi lỗi / mất điện)"
+if curl -fsSL -o /tmp/cloudphone-watchdog.sh "$REPO_RAW/cloudphone-watchdog.sh?t=$(date +%s)" && bash -n /tmp/cloudphone-watchdog.sh; then
+  bash /tmp/cloudphone-watchdog.sh install | sed 's/^/   /'
+else warn "Chưa tải được cloudphone-watchdog.sh — up file đó lên GitHub rồi chạy lại lệnh cài"; fi
+
+# ---------------------------------------------------------------------
 # Lệnh tắt "cloudphone"
 cat > /usr/local/bin/cloudphone <<EOF
 #!/usr/bin/env bash
@@ -171,6 +178,7 @@ run() { if [ "\$(id -un)" = "\$U" ]; then "\$@"; else sudo -u "\$U" -H "\$@"; fi
 case "\${1:-}" in
   status|"")
     for s in cpapi cloudphoned cloudflared-phone cloudflared; do systemctl list-unit-files | grep -q "^\$s.service" && printf "%-18s %s\n" "\$s" "\$(systemctl is-active \$s)"; done
+    printf "%-18s %s\n" "watchdog" "\$(systemctl is-active cloudphone-watchdog.timer 2>/dev/null)"
     printf "%-18s %s\n" "ws-scrcpy" "\$(docker inspect -f '{{.State.Status}}' $WSNAME 2>/dev/null || echo không có)"
     lsmod | grep -q binder && echo "binder             bật" || echo "binder             TẮT (sudo modprobe binder_linux)"
     df -h / | tail -1 | awk '{print "ổ cứng             trống "\$4" / "\$2}'
@@ -182,14 +190,16 @@ case "\${1:-}" in
       run curl -fsSL -o "\$H/\$f.new" "\$RAW/\$f?t=\$(date +%s)" && [ -s "\$H/\$f.new" ] && run python3 -m py_compile "\$H/\$f.new" \
         && run mv "\$H/\$f.new" "\$H/\$f" && echo "✓ \$f" || { echo "✗ \$f (giữ bản cũ)"; rm -f "\$H/\$f.new"; }
     done
-    sudo systemctl restart cpapi cloudphoned && echo "✓ Đã khởi động lại dịch vụ" ;;
-  restart) sudo systemctl restart cpapi cloudphoned; docker start $WSNAME >/dev/null; echo "✓ Đã khởi động lại" ;;
+    sudo systemctl restart cpapi cloudphoned && echo "✓ Đã khởi động lại dịch vụ"
+    curl -fsSL -o /tmp/cpwd.sh "\$RAW/cloudphone-watchdog.sh?t=\$(date +%s)" && bash -n /tmp/cpwd.sh && sudo bash /tmp/cpwd.sh install >/dev/null && echo "✓ watchdog" ;;
+  restart) sudo systemctl restart cpapi cloudphoned; docker restart $WSNAME >/dev/null; for s in cloudflared-phone cloudflared; do systemctl is-enabled -q \$s 2>/dev/null && sudo systemctl restart \$s; done; echo "✓ Đã khởi động lại (dịch vụ + phát hình + tunnel)" ;;
+  watch)   tail -n "\${2:-30}" /var/log/cloudphone-watchdog.log 2>/dev/null || echo "Chưa có nhật ký watchdog" ;;
   logs)    sudo journalctl -u "\${2:-cloudphoned}" -n "\${3:-50}" --no-pager ;;
   list)    run python3 "\$H/phonectl.py" list ;;
   apps)    run python3 "\$H/phonectl.py" preinstall --all; run python3 "\$H/phonectl.py" perms; echo "✓ Xong (máy nào đã có app thì bỏ qua)" ;;
   perms)   run python3 "\$H/phonectl.py" perms && echo "✓ Đã mở quyền cài APK cho mọi máy" ;;
   memfix)  run python3 "\$H/phonectl.py" memfix ;;
-  *) echo "cloudphone [status|update|restart|logs [cpapi|cloudphoned]|list|apps|perms|memfix]" ;;
+  *) echo "cloudphone [status|update|restart|watch|logs [cpapi|cloudphoned]|list|apps|perms|memfix]" ;;
 esac
 EOF
 chmod +x /usr/local/bin/cloudphone

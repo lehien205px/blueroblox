@@ -536,12 +536,12 @@ class Conn {
     iframe.addEventListener("load", () => {
       if (!this.p || !/^https:/.test(this.f.src)) return;
       const sid = this.sid;
-      setTimeout(() => {   // không có tin "boot" → chế độ gốc (server cũ hoặc đã tắt tối ưu): hiện hình luôn
+      setTimeout(() => {   // trang hình tải xong mà không có tin "boot" → đó là trang lỗi (máy chủ phát hình chưa chạy) → tự thử lại
         if (this.sid !== sid || this.boot || !this.p) return;
-        clearTimeout(this.t); this.legacy = true; this.ok = true; this.tries = 0; this.h.ok && this.h.ok();
-      }, 3500);
+        this.retry(L("Máy chủ phát hình chưa sẵn sàng", "The video server isn't ready yet"));
+      }, 4000);
       setTimeout(() => {   // có tối ưu nhưng chưa xác nhận hình → vẫn bỏ màn che sau 7 giây, không bắt khách chờ
-        if (this.sid !== sid || !this.p || this.ok) return;
+        if (this.sid !== sid || !this.p || this.ok || !this.boot) return;
         this.soft = true; this.h.ok && this.h.ok();
       }, 7000);
     });
@@ -557,14 +557,18 @@ class Conn {
   retry(why) {
     clearTimeout(this.t); this.ok = false; this.fails++;
     if (!this.raw && this.fails >= 2) this.raw = true;       // tối ưu không chạy được → dùng chế độ gốc (như bản đầu)
-    if (this.tries >= 5) { this.h.fail && this.h.fail(why); return; }
+    if (this.tries >= 5) {          // hết lượt → báo lỗi, rồi cứ 15 giây tự thử lại (máy chủ vừa khởi động lại thì tự lên hình)
+      this.h.fail && this.h.fail(why);
+      clearTimeout(this.auto); this.auto = setTimeout(() => { if (this.p && !this.ok) { this.tries = 0; this.fails = 0; this.raw = false; this.open(this.p, this.q); } }, 15000);
+      return;
+    }
     this.tries++; this.h.connecting && this.h.connecting(this.tries, this.raw);
     setTimeout(() => this.p && this.open(this.p, this.q), Math.min(800 * this.tries, 4000));
   }
-  stop() { clearTimeout(this.t); this.p = null; this.ok = false; this.f.src = "about:blank"; }
+  stop() { clearTimeout(this.t); clearTimeout(this.auto); this.p = null; this.ok = false; this.f.src = "about:blank"; }
   msg(d) {
     if (d.n !== this.sid) return;                         // tin cũ của lần mở trước → bỏ qua
-    if (d.t === "boot") { this.boot = true; return; }
+    if (d.t === "boot") { this.boot = true; if (d.raw && !this.ok) { clearTimeout(this.t); this.legacy = true; this.ok = true; this.tries = 0; this.h.ok && this.h.ok(); } return; }
     if (d.t === "open") { if (!this.ok) { this.arm(30000); this.h.progress && this.h.progress(L("Đã kết nối, đang chờ hình đầu tiên…", "Connected, waiting for the first frame…")); } return; }
     if (d.t === "ok") { clearTimeout(this.t); const first = !this.ok || this.soft; this.ok = true; this.soft = false; this.tries = 0; this.fails = 0; if (first) this.h.ok && this.h.ok(); }
     else if (d.t === "closed") { if (this.p) { if (this.h.closed) this.h.closed(() => this.retry(L("Mất kết nối hình", "Video connection lost"))); else this.retry(L("Mất kết nối hình", "Video connection lost")); } }
@@ -646,7 +650,7 @@ const main = new Conn($("scr"), $("veil"), {
   connecting(n, raw) { setState("wait", n ? L("Đang kết nối lại…", "Reconnecting…") : L("Đang kết nối…", "Connecting…")); veil(true, n ? L(`Đang kết nối lại (lần ${n})…`, `Reconnecting (attempt ${n})…`) : L("Đang mở màn hình máy…", "Opening the phone screen…"), n ? (raw ? L("Chuyển sang chế độ hình gốc cho chắc chắn…", "Switching to basic video mode to be safe…") : L("Hình bị gián đoạn, đang tự nối lại.", "The video was interrupted, reconnecting automatically.")) : ""); },
   ok() { veil(false); setState("ok", L("Đang chạy", "Running")); },
   progress(txt) { if (!$("veil").hidden) $("veild").textContent = txt; },
-  fail(why) { setState("bad", L("Không kết nối được", "Can't connect")); veil(true, why || L("Không kết nối được màn hình", "Can't connect to the screen"), '<button class="btn sm" id="vretry">' + L("Thử lại", "Try again") + '</button>', false); const b = $("vretry"); if (b) b.onclick = () => { main.tries = 0; main.open(cur, quality); }; },
+  fail(why) { setState("bad", L("Không kết nối được", "Can't connect")); veil(true, why || L("Không kết nối được màn hình", "Can't connect to the screen"), L("Trang tự thử lại sau 15 giây.", "Retrying automatically in 15 seconds.") + '<br><button class="btn sm" id="vretry">' + L("Thử lại ngay", "Retry now") + '</button>', false); const b = $("vretry"); if (b) b.onclick = () => { main.tries = 0; main.fails = 0; main.raw = false; main.open(cur, quality); }; },
   size() { try { if (cur && main.size) localStorage.setItem("cp_sz_" + cur.id + "_" + cur.res, main.size[0] + "x" + main.size[1]); } catch (e) {} fit(); info(); }, stat: () => info(),
   clip(text) { showClip(text); },
   async closed(go) {           // rớt hình: nếu máy vừa được mở ở nơi khác (tab / máy / app khác) thì dừng, không giành nhau
@@ -1003,7 +1007,7 @@ $("grid").addEventListener("click", e => {
   const big = e.target.closest("[data-big]"), k = e.target.closest("[data-tkey]"), r = e.target.closest("[data-tretry]");
   if (big) { const p = phones.find(x => x.id === big.dataset.big); setView("one", null, p); }
   else if (k) { const t = tiles.get(k.dataset.id); if (t) pressKey(t.conn, t.p, +k.dataset.tkey); }
-  else if (r) { const t = tiles.get(r.dataset.tretry); if (t) { t.conn.tries = 0; t.conn.open(t.p, "eco"); } }
+  else if (r) { const t = tiles.get(r.dataset.tretry); if (t) { t.conn.tries = 0; t.conn.fails = 0; t.conn.raw = false; t.conn.open(t.p, "eco"); } }
 });
 
 /* ---------- phím & công cụ ---------- */

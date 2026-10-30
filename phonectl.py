@@ -103,7 +103,9 @@ def is_running(name):
 TUNE = ("settings put global window_animation_scale 0.5; settings put global transition_animation_scale 0.5; "
         "settings put global animator_duration_scale 0.5; settings put global package_verifier_enable 0; "
         "settings put global verifier_verify_adb_installs 0; settings put global stay_on_while_plugged_in 7; "
-        "settings put system screen_off_timeout 2147483647; svc power stayon true")
+        "settings put system screen_off_timeout 2147483647; svc power stayon true; "
+        # Cổng VPN: Android mở /dev/tun (docker chỉ có /dev/net/tun) → thiếu thì VPN báo "Failed to connect"
+        "[ -c /dev/tun ] || { rm -f /dev/tun; mknod /dev/tun c 10 200; }; chmod 666 /dev/tun")
 def tune(name):
     """Cho máy mượt hơn: giảm hiệu ứng chuyển cảnh, cài APK không phải chờ quét, màn hình không tự tắt."""
     sh(["docker", "exec", name, "/system/bin/sh", "-c", TUNE])

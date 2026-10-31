@@ -1279,6 +1279,9 @@ window.BR_CONFIG = {
       <div class="nodes" id="cpa-nodes"><div class="empty">Đang tải…</div></div>
       <div class="f" style="grid-template-columns:1fr 1fr">
         <h3>🏷️ Thẻ sản phẩm hiển thị ở cửa hàng</h3>
+        <label class="full">📦 Số lượng còn bán (mỗi máy khách thuê trừ 1 · về 0 = hiện "Hết hàng" · để trống = không giới hạn)
+          <span style="display:flex;gap:8px;align-items:center"><input id="cpa-stock" type="number" min="0" inputmode="numeric" placeholder="Không giới hạn" style="max-width:200px;font-size:18px;font-weight:700">
+          <button class="btn ghost sm" type="button" data-stockadd="10">+10</button><button class="btn ghost sm" type="button" data-stockadd="50">+50</button><span class="hint" id="cpa-stockhint"></span></span></label>
         <label class="full">Tên sản phẩm<input id="cpa-cname" maxlength="80" placeholder="Điện thoại đám mây (Cloud Phone)"></label>
         <label class="full">Điểm nổi bật (cách nhau bằng dấu phẩy, tối đa 4)<input id="cpa-cfeats" maxlength="160" placeholder="Android 24/7, Chạy game, Điều khiển web"></label>
         <label class="full">Mô tả / Nội dung<textarea id="cpa-cdesc" rows="4" maxlength="1200" placeholder="Giới thiệu sản phẩm cho khách…"></textarea></label>
@@ -3544,6 +3547,7 @@ function cpBlocked() {      // lý do không cho thuê (null = được thuê)
   if (s.maint) return "Đang bảo trì" + (s.maint_msg ? ": " + s.maint_msg : "") + ". Vui lòng quay lại sau.";
   if (s.online === false) return "Máy chủ điện thoại đang tạm ngưng, vui lòng quay lại sau.";
   const p = CPpricing || CP_DEF;
+  if (p.stock != null && +p.stock <= 0) return L("Đã hết hàng. Vui lòng quay lại sau.", "Sold out. Please come back later.");
   if (+s.free_ram < p.min_ram || +s.free_cpu < p.min_cpu) return "Đã hết máy trống. Vui lòng quay lại sau.";
   return null;
 }
@@ -3579,6 +3583,7 @@ function cpCheck() {
   if (!(cpSel.days >= p.min_days && cpSel.days <= p.max_days)) return `Số ngày phải từ ${p.min_days} đến ${p.max_days}.`;
   if (!(cpSel.fps >= p.min_fps && cpSel.fps <= p.max_fps)) return `FPS phải từ ${p.min_fps} đến ${p.max_fps}.`;
   if (!(cpSel.qty >= 1 && cpSel.qty <= 20)) return "Số lượng máy phải từ 1 đến 20.";
+  if (p.stock != null && cpSel.qty > +p.stock && !isAdmin()) return +p.stock <= 0 ? L("Đã hết hàng.", "Sold out.") : L(`Chỉ còn ${p.stock} máy — chọn số lượng nhỏ hơn.`, `Only ${p.stock} left — choose a smaller quantity.`);
   const s = CPstatus;
   if (s && !isAdmin() && (cpSel.ram * cpSel.qty > +s.free_ram || cpSel.cpu * cpSel.qty > +s.free_cpu))
     return `Máy chủ chỉ còn trống ${Math.floor(+s.free_ram)}GB RAM và ${Math.floor(+s.free_cpu)} nhân CPU — chọn ít máy hơn hoặc cấu hình nhỏ hơn.`;
@@ -3683,6 +3688,7 @@ async function cpBuy() {
   const { error } = await sb.rpc("cloudphone_order_custom", { p_ram: cpSel.ram, p_cpu: cpSel.cpu, p_days: cpSel.days, p_res: cpSel.res, p_name: null, p_fps: cpSel.fps, p_qty: cpSel.qty });
   if (error) { $("cp-err").textContent = errMsg(error); return; }
   show("cporderdlg", false); await loadProfile(); renderUser();
+  CPpricing = null; cpLoadPricing().then(() => { try { renderGrid(); } catch (e) {} });
   toast(cpSel.qty > 1 ? `Đã tạo đơn ${cpSel.qty} máy! Các máy đang khởi tạo (khoảng 2–3 phút mỗi máy).` : L("Đã tạo đơn! Máy đang khởi tạo (khoảng 2–3 phút).", "Order placed! Creating…"));
   notifyTg && notifyTg(`📱 <b>Đơn ĐT đám mây mới</b>\n${cpSel.qty} máy × ${cpSel.ram}GB / ${cpSel.cpu} nhân / ${cpSel.days} ngày / ${cpSel.res} / ${cpSel.fps} FPS\nGiá: ${vnd(price)}`);
   openCloud();
@@ -3750,8 +3756,11 @@ async function cpCancel(id) {
 /* ===== THẺ "ĐT đám mây" ở lưới sản phẩm (tên/nội dung admin sửa được) ===== */
 function cloudGridCard() {
   const c = cpCardShow(), p = CPpricing || CP_DEF, from = cpPerDay(p.min_ram, p.min_cpu), s = CPstatus;
-  const st = !s ? ["ok", L("Còn hàng", "In stock")] : s.maint ? ["wt", "Bảo trì"] : s.online === false ? ["wt", "Tạm ngưng"]
-    : (+s.free_ram < p.min_ram || +s.free_cpu < p.min_cpu) ? ["out", L("Hết hàng", "Sold out")] : ["ok", L("Còn hàng", "In stock")];
+  const stk = p.stock == null ? null : +p.stock;
+  const st = s && s.maint ? ["wt", L("Bảo trì", "Maintenance")] : s && s.online === false ? ["wt", L("Tạm ngưng", "Paused")]
+    : stk !== null && stk <= 0 ? ["out", L("Hết hàng", "Sold out")]
+    : s && (+s.free_ram < p.min_ram || +s.free_cpu < p.min_cpu) ? ["out", L("Hết hàng", "Sold out")]
+    : ["ok", stk !== null ? L("Còn " + stk + " máy", stk + " left") : L("Còn hàng", "In stock")];
   return `<article class="card" style="cursor:pointer" data-cpbuy="1">
     <div class="thumb"><canvas data-id="cloudphone" data-c="vps"></canvas><span class="tag">ĐT ĐÁM MÂY</span><span class="hot">MỚI</span></div>
     <div class="body"><h4>${esc(c.name)}</h4>
@@ -3797,6 +3806,8 @@ async function loadCloudAdm() {
   $("cpa-mincpu").value = pr.min_cpu; $("cpa-maxcpu").value = pr.max_cpu;
   $("cpa-mindays").value = pr.min_days; $("cpa-maxdays").value = pr.max_days;
   $("cpa-minfps").value = pr.min_fps; $("cpa-maxfps").value = pr.max_fps;
+  $("cpa-stock").value = pr.stock == null ? "" : pr.stock;
+  $("cpa-stockhint").textContent = pr.stock == null ? "Đang: không giới hạn" : +pr.stock <= 0 ? "Đang HẾT HÀNG" : "Đang còn " + pr.stock + " máy";
   $("cpa-msg").textContent = ""; cpaAnalyze();
   const { data } = await sb.from("cloud_phones").select("*").order("created_at", { ascending: false });
   CPA_ROWS = (data || []).filter(r => r.status !== "cancelled"); cpaSel.clear(); renderCpaTbl();
@@ -3806,16 +3817,22 @@ $("cpa-save") && ($("cpa-save").onclick = () => busy($("cpa-save"), async () => 
   if (f.min_ram > f.max_ram || f.min_cpu > f.max_cpu || f.min_days > f.max_days || f.min_fps > f.max_fps) return toast("Giá trị tối thiểu không được lớn hơn tối đa.", 1);
   const body = { ...f, card_name: $("cpa-cname").value.trim() || null, card_desc: $("cpa-cdesc").value.trim() || null,
     card_feats: $("cpa-cfeats").value.trim() || null, card_name_en: $("cpa-cname-en").value.trim() || null, card_desc_en: $("cpa-cdesc-en").value.trim() || null, card_feats_en: $("cpa-cfeats-en").value.trim() || null, updated_at: new Date().toISOString() };
+  const sv = $("cpa-stock").value.trim();
+  if (sv !== "" && !(+sv >= 0)) return toast("Số lượng phải là số từ 0 trở lên (hoặc để trống = không giới hạn).", 1);
+  body.stock = sv === "" ? null : Math.floor(+sv);
   const { error } = await sb.from("cloudphone_pricing").update(body).eq("id", 1);
   if (error) {
+    if (/stock/.test(error.message || "")) return toast("Chưa chạy file SQL cloud-phones-v8.sql trên Supabase.", 1);
     if (/_en/.test(error.message || "")) return toast("Chưa chạy file SQL product-english.sql trên Supabase.", 1);
     if (/card_/.test(error.message || "")) return toast("Chưa chạy file SQL cloud-phones-v3.sql trên Supabase.", 1);
     if (/_fps/.test(error.message || "")) return toast("Chưa chạy file SQL cloud-phones-v4.sql trên Supabase.", 1);
     return toast(errMsg(error), 1);
   }
   toast("Đã lưu. Khách mở form thuê sẽ thấy giá mới ngay."); $("cpa-msg").textContent = "✓ Đã lưu lúc " + new Date().toLocaleTimeString("vi-VN");
-  CPpricing = null; await cpLoadPricing(); try { renderGrid(); } catch (e) {}
+  CPpricing = null; const np = await cpLoadPricing(); try { renderGrid(); } catch (e) {}
+  if (np) $("cpa-stockhint").textContent = np.stock == null ? "Đang: không giới hạn" : +np.stock <= 0 ? "Đang HẾT HÀNG" : "Đang còn " + np.stock + " máy";
 }));
+document.addEventListener("click", e => { const b = e.target.closest("[data-stockadd]"); if (!b) return; const i = $("cpa-stock"); i.value = Math.max(0, +i.value || 0) + +b.dataset.stockadd; });
 
 /* ===================== BẢO TRÌ + MÁY CHỦ (v5) ===================== */
 function applyMaint() {

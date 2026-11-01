@@ -3,7 +3,7 @@
 #  gpu-phone-test.sh — THỬ NGHIỆM "Máy GPU": Android Emulator (Google) dùng card NVIDIA (GTX 1080)
 #  Chạy SONG SONG với hệ thống redroid hiện tại, KHÔNG đụng tới máy của khách.
 #
-#   bash gpu-phone-test.sh install   # cài SDK + Android 13 (có Google Play)  ~10 phút, ~6GB
+#   bash gpu-phone-test.sh install   # cài SDK + Android 11 (có Google Play)  ~10 phút, ~6GB
 #   bash gpu-phone-test.sh xsetup    # màn hình ảo trên GTX 1080 (install tự gọi)
 #   bash gpu-phone-test.sh start     # bật máy thử (4 nhân, 4GB, 720x1280)
 #   bash gpu-phone-test.sh check     # xem máy có ĐANG DÙNG GTX 1080 không + CPU/RAM
@@ -15,7 +15,9 @@ set -u
 SDK="$HOME/android-sdk"
 AVD=gputest
 PORT=5600                     # cổng console; adb = PORT+1 = 5601 (chỉ trong server)
-IMG="system-images;android-33;google_apis_playstore;x86_64"
+# Android 11 (API 30) Google Play: có sẵn bộ dịch ARM của Google (Roblox chạy được) + trình điều khiển web xem được
+# (Android 13 bị lỗi hình trên ws-scrcpy). Muốn đổi: GPU_IMG="system-images;android-33;google_apis_playstore;x86_64" bash ...
+IMG="${GPU_IMG:-system-images;android-30;google_apis_playstore;x86_64}"
 TOOLS_URL="https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip"
 LOG="$HOME/gpu-phone-test.log"
 export ANDROID_SDK_ROOT="$SDK" ANDROID_HOME="$SDK" ANDROID_AVD_HOME="$HOME/.android/avd"
@@ -42,8 +44,8 @@ install)
       || { err "Không tải được cmdline-tools"; exit 1; }
   fi
   yes | "$SM" --licenses >/dev/null 2>&1
-  echo "== Tải emulator + Android 13 Google Play (vài phút) =="
-  "$SM" "emulator" "platform-tools" "$IMG" >/dev/null && ok "emulator, platform-tools, Android 13 (Google Play)" || { err "Tải SDK lỗi"; exit 1; }
+  echo "== Tải emulator + Android 11 Google Play (vài phút) =="
+  "$SM" "emulator" "platform-tools" "$IMG" >/dev/null && ok "emulator, platform-tools, $IMG" || { err "Tải SDK lỗi"; exit 1; }
   echo no | "$AM" create avd -n "$AVD" -k "$IMG" -d pixel_4 --force >/dev/null && ok "Tạo máy thử '$AVD'"
   CFG="$ANDROID_AVD_HOME/$AVD.avd/config.ini"
   set_cfg() { grep -q "^$1=" "$CFG" && sed -i "s|^$1=.*|$1=$2|" "$CFG" || echo "$1=$2" >> "$CFG"; }
@@ -109,6 +111,7 @@ start)
   bash "$0" check ;;
 
 check)
+  echo "== Android: $("$ADB" -s emulator-$PORT shell getprop ro.build.version.release 2>/dev/null | tr -d '\r') · chip hỗ trợ: $("$ADB" -s emulator-$PORT shell getprop ro.product.cpu.abilist 2>/dev/null | tr -d '\r')"
   echo "== Bộ vẽ hình của máy thử =="
   R1=$("$ADB" -s emulator-$PORT shell dumpsys SurfaceFlinger 2>/dev/null | grep -iE "^GLES:|GLES:" | head -1 | tr -d '\r')
   echo "   $R1"

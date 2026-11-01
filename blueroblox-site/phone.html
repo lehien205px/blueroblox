@@ -740,6 +740,7 @@ function expText(p) {
   return `${lv === "bad" ? "⚠️ " : lv === "warn" ? "⏰ " : ""}${L("Hết hạn", "Expires")} ${fdate(p.expires_at)} · ${leftText(p).toLowerCase()}`;
 }
 function canRenew(p) {
+  if (p.shared) return false;          // máy được chia sẻ: chỉ chủ máy gia hạn
   const locked = p.locked && (!p.locked_until || new Date(p.locked_until) > new Date());
   return !locked && (p.status === "active" || (p.status === "expired" && graceLeft(p) > 0));
 }
@@ -828,8 +829,15 @@ async function openRenew(p) {
   $("rn-chips").onclick = e => { const b = e.target.closest("[data-v]"); if (b) { days = +b.dataset.v; $("rn-x").value = ""; draw(); } };
   $("rn-x").oninput = e => { const v = parseInt(e.target.value, 10); if (v > 0 && v <= max) { days = v; draw(); } };
 }
+async function myPhones() {       // máy của tôi + máy người khác chia sẻ cho tôi
+  const [{ data }, sh] = await Promise.all([
+    sb.from("cloud_phones").select("*").eq("user_id", me.id).in("status", ["active", "pending", "expired"]).order("created_at", { ascending: true }),
+    sb.rpc("cp_shared_with_me").then(r => r, () => ({}))]);
+  if (!data) return null;
+  return data.concat(Array.isArray(sh && sh.data) ? sh.data.filter(p => !data.some(x => x.id === p.id)) : []);
+}
 async function refreshPhones() {
-  const { data } = await sb.from("cloud_phones").select("*").eq("user_id", me.id).in("status", ["active", "pending", "expired"]).order("created_at", { ascending: true });
+  const data = await myPhones();
   if (!data) return;
   for (const n of data) { const o = phones.find(x => x.id === n.id); if (o) Object.assign(o, n); else phones.push(n); }
   phones = phones.filter(x => data.some(n => n.id === x.id) || (cur && x.id === cur.id && x.user_id !== me.id));
@@ -850,8 +858,7 @@ function setTools(on) { document.querySelectorAll(".tools .tb, .mbar .tb[data-ke
 
 async function loadPhones() {
   const want = new URLSearchParams(location.search).get("id");
-  const { data } = await sb.from("cloud_phones").select("*").eq("user_id", me.id).in("status", ["active", "pending", "expired"]).order("created_at", { ascending: true });
-  phones = data || [];
+  phones = (await myPhones()) || [];
   if (want && !phones.some(p => p.id === want)) {
     const { data: one } = await sb.from("cloud_phones").select("*").eq("id", want).maybeSingle();   // admin mở máy của khách
     if (one) phones.unshift(one);
@@ -888,7 +895,7 @@ function renderDevMenu() {
     const st = pState(p), on = p.status === "active" && st[0] === "ok", isCur = !multi && cur && p.id === cur.id;
     const lv = expLevel(p), canRn = canRenew(p);
     return `<div class="dm-r${isCur ? " cur" : ""}${lv === "bad" ? " bad" : lv === "warn" ? " warn" : ""}"><input type="checkbox" data-pick="${p.id}"${pickSet.has(p.id) ? " checked" : ""}${on ? "" : " disabled"} aria-label="${L("Chọn", "Select")} ${esc(p.name)}">
-      <span class="nm"><i class="${st[0]}"></i><b>${esc(p.name)}</b></span>
+      <span class="nm"><i class="${st[0]}"></i><b>${esc(p.name)}</b>${p.shared ? ` <small title="${esc(L("Được chia sẻ bởi ", "Shared by ") + (p.owner_name || ""))}">👥</small>` : ""}</span>
       <span class="acts2"><button class="btn sm${isCur ? " gh" : ""}" type="button" data-openone="${p.id}"${isCur || p.status !== "active" ? " disabled" : ""}>${isCur ? L("Đang mở", "Open now") : L("Mở", "Open")}</button>
         ${canRn ? `<button class="btn sm ${lv === "ok" ? "gh" : ""}" type="button" data-renew="${p.id}">${L("Gia hạn", "Renew")}</button>` : ""}</span>
       <span class="info2">${p.ram}GB · ${p.cpu} ${L("nhân", "cores")} · ${esc(p.res || "")} · ${p.fps || 30} FPS · ${st[1]}</span>

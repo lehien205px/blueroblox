@@ -746,6 +746,24 @@ html.pwa .appbar{display:none!important}
 }
 @media (prefers-reduced-motion:reduce){.notice .nh i{animation:none}}
 
+/* ===== chia sẻ / chuyển nhượng máy ===== */
+#cpsharedlg{z-index:72}
+.cpcode{display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px dashed var(--line2);border-radius:12px;background:rgba(143,208,255,.04)}
+.cpcode input{flex:1;min-width:0;background:transparent;border:0;color:var(--fg);font:600 14px var(--body);letter-spacing:.06em;text-transform:uppercase;outline:none}
+.cpcode input::placeholder{text-transform:none;letter-spacing:0;font-weight:400;color:var(--muted)}
+.shsec{display:grid;gap:10px;padding:14px;border:1px solid var(--line);border-radius:14px;background:rgba(6,10,28,.45);margin-top:12px}
+.shsec>b{font-size:15px}.shsec .hint{margin:0;font-size:13px;line-height:1.5}
+.shdanger{border-color:rgba(255,107,129,.35)}
+.shcode{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px;border-radius:12px;background:rgba(61,123,255,.12);border:1px solid rgba(143,208,255,.35)}
+.shcode .cd{font:800 24px var(--mono);letter-spacing:.18em;color:#fff}
+.shcode small{flex-basis:100%;color:var(--muted);font-size:12.5px;line-height:1.5}
+.shlist{display:grid;gap:6px}
+.shrow{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:10px;background:rgba(255,255,255,.03);border:1px solid var(--line);font-size:13px}
+.shrow .cd{font:700 14px var(--mono);letter-spacing:.1em}.shrow .shwho{flex:1;min-width:0;color:var(--muted)}
+.shdays{grid-template-columns:repeat(5,1fr)!important}@media (max-width:520px){.shdays{grid-template-columns:repeat(3,1fr)!important}}
+.vmi .shby{font-size:12.5px;color:#8fd0ff}
+.shdays button{padding:9px 4px!important;font-size:13px!important;min-height:0!important}
+
 </style>
 <script>
 // Đã điền sẵn cho blueroblox.shop
@@ -1390,7 +1408,28 @@ window.BR_CONFIG = {
     </div>
     <div class="note">Máy Android chạy trên cloud 24/7. Bấm <b>Điều khiển</b> để mở máy trong trình duyệt. Hết hạn máy sẽ tạm dừng — gia hạn trong <b>30 phút</b>, quá thời gian đó máy và toàn bộ dữ liệu bị xoá.</div>
     <div class="appbox" hidden><span>📱 <b>App Android</b> — thuê, gia hạn và điều khiển máy ngay trên điện thoại, có thông báo khi sắp hết hạn. <small class="appv"></small></span><a class="btn sm" href="/download/blueroblox-cloud.apk" download>Tải app</a></div>
+    <div class="cpcode"><span>🔑</span><input id="cp-code" maxlength="12" autocomplete="off" placeholder="Có mã chia sẻ / chuyển nhượng? Nhập vào đây"><button class="btn sm" type="button" id="cp-claim">Nhập mã</button></div>
     <div class="olist" id="cp-list"></div>
+  </div>
+</div>
+<!-- ĐIỆN THOẠI ĐÁM MÂY — chia sẻ / chuyển nhượng -->
+<div class="modal" id="cpsharedlg" hidden>
+  <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="sh-title">
+    <div style="display:flex;align-items:center;gap:10px"><h3 id="sh-title" style="margin:0">👥 Chia sẻ máy</h3><button class="btn ghost sm" type="button" id="sh-close" style="margin-left:auto">Đóng</button></div>
+    <div class="shsec">
+      <b id="sh-h1">Chia sẻ dùng chung</b>
+      <p class="hint" id="sh-d1">Người nhập mã được <b>điều khiển máy như bạn</b> (không gia hạn, huỷ hay chia sẻ tiếp được). Mỗi mã dùng cho 1 người. Bạn thu hồi lúc nào cũng được.</p>
+      <div class="amts shdays" id="sh-days"></div>
+      <button class="btn" type="button" id="sh-make">Tạo mã chia sẻ</button>
+      <div class="shcode" id="sh-new" hidden></div>
+      <div class="shlist" id="sh-list"></div>
+    </div>
+    <div class="shsec shdanger">
+      <b id="sh-h2">Chuyển nhượng máy</b>
+      <p class="hint" id="sh-d2">Người nhập mã trở thành <b>chủ mới</b> của máy (giữ nguyên hạn còn lại và dữ liệu). Bạn sẽ <b>mất máy này</b>, mọi chia sẻ cũ bị huỷ.</p>
+      <button class="btn ghost" type="button" id="sh-transfer">Tạo mã chuyển nhượng</button>
+      <div class="shcode" id="sh-tnew" hidden></div>
+    </div>
   </div>
 </div>
 <!-- ĐIỆN THOẠI ĐÁM MÂY — thuê máy mới -->
@@ -3614,8 +3653,9 @@ function cpPill(p) {
 async function openCloud() {
   if (!profile) { openAuth("login"); return; }
   $("cp-list").innerHTML = `<div class="empty">${L("Đang tải…", "Loading…")}</div>`; show("cpdlg");
-  const [{ data }] = await Promise.all([sb.from("cloud_phones").select("*").eq("user_id", profile.id).order("created_at", { ascending: false }), cpLoadPricing()]);
-  myCloud = (data || []).filter(p => p.status !== "cancelled");
+  const [{ data }, , sh] = await Promise.all([sb.from("cloud_phones").select("*").eq("user_id", profile.id).order("created_at", { ascending: false }), cpLoadPricing(),
+    sb.rpc("cp_shared_with_me").then(r => r, () => ({}))]);
+  myCloud = (data || []).filter(p => p.status !== "cancelled").concat(Array.isArray(sh && sh.data) ? sh.data : []);
   renderCloud();
   clearTimeout(cpPollT);
   if (myCloud.some(p => ["pending", "cancelling", "expired"].includes(p.status))) cpPollT = setTimeout(() => { if (!$("cpdlg").hidden) openCloud(); }, 6000);
@@ -3628,19 +3668,22 @@ function renderCloud() {
     const g = cpGraceLeft(p);
     const locked = cpLocked(p);
     const lk = p.status === "active" && p.stream_url && !locked ? cpLinks(p) : null;
-    const canRenew = !locked && (p.status === "active" || (p.status === "expired" && g > 0));
+    const canRenew = !p.shared && !locked && (p.status === "active" || (p.status === "expired" && g > 0));
     return `<div class="vmi"><div class="top"><div class="nm">📱 ${esc(p.name)}<small>${p.ram}GB · ${p.cpu} nhân · ${esc(p.res || "")} · ${p.fps || 30} FPS</small></div>${cpPill(p)}</div>
       ${exp ? `<div class="exp">${L("Hết hạn", "Expires")}: ${exp.toLocaleString(LANG === "en" ? "en-GB" : "vi-VN")}${left ? " · " + left : ""}</div>` : ""}
       ${p.status === "expired" ? `<div class="exp" style="color:var(--bad)">${g > 0 ? `Máy đã tạm dừng. Gia hạn trong <b>${g} phút</b> nữa để giữ dữ liệu, quá hạn máy sẽ bị xoá.` : "Đã quá 30 phút — máy đang bị xoá."}</div>` : ""}
       ${p.status === "pending" ? `<div class="exp">Máy đang khởi động (khoảng 2–3 phút), trang tự cập nhật.</div>` : ""}
       ${locked ? `<div class="exp" style="color:var(--bad)">🔒 Máy bị khoá${p.locked_until ? " đến " + new Date(p.locked_until).toLocaleString("vi-VN") : " vĩnh viễn"}${p.lock_reason ? ": " + esc(p.lock_reason) : ""}. Liên hệ hỗ trợ nếu cần.</div>` : ""}
       ${p.status === "error" && p.error ? `<div class="exp" style="color:var(--bad)">${esc(p.error)}</div>` : ""}
+      ${p.shared ? `<div class="shby">👥 ${L("Được chia sẻ bởi", "Shared by")} <b>${esc(p.owner_name || "?")}</b> · ${p.share_expires ? L("đến ", "until ") + new Date(p.share_expires).toLocaleString(LANG === "en" ? "en-GB" : "vi-VN") : L("theo hạn máy", "until the phone expires")}</div>` : ""}
       <div class="acts">
         ${lk ? `<a class="btn sm" href="/phone.html?id=${encodeURIComponent(p.id)}" target="_blank" rel="noopener">▶ Điều khiển</a>`
            : `<button class="btn sm" disabled>${locked ? "🔒 Bị khoá" : p.status === "pending" ? "Đang tạo…" : p.status === "expired" ? "Đã tạm dừng" : "Chưa sẵn sàng"}</button>`}
         ${canRenew ? `<button class="btn ghost sm" data-cprenew="${p.id}">🔄 Gia hạn</button>` : ""}
+        ${p.shared ? `<button class="btn ghost sm" data-shleave="${p.share_id}">🚪 ${L("Rời máy", "Leave")}</button>` : `
+        ${["active", "pending"].includes(p.status) && !locked ? `<button class="btn ghost sm" data-cpshare="${p.id}">👥 ${L("Chia sẻ", "Share")}</button>` : ""}
         <button class="btn ghost sm" data-cprename="${p.id}">✏️ Đổi tên</button>
-        ${["active", "expired", "error"].includes(p.status) ? `<button class="btn danger sm" data-cpcancel="${p.id}">🗑️ Huỷ</button>` : ""}
+        ${["active", "expired", "error"].includes(p.status) ? `<button class="btn danger sm" data-cpcancel="${p.id}">🗑️ Huỷ</button>` : ""}`}
       </div></div>`;
   }).join("");
 }
@@ -3711,6 +3754,11 @@ document.addEventListener("click", e => {
   }
   const rn = t.closest("[data-cprenew]"), rm = t.closest("[data-cprename]"), cc = t.closest("[data-cpcancel]");
   if (rn) cpRenew(rn.dataset.cprenew); else if (rm) cpRename(rm.dataset.cprename); else if (cc) cpCancel(cc.dataset.cpcancel);
+  const sh = t.closest("[data-cpshare]"), lv = t.closest("[data-shleave]"), rv = t.closest("[data-shrevoke]"), cp = t.closest("[data-shcopy]");
+  if (sh) cpShareOpen(sh.dataset.cpshare);
+  else if (lv && confirm(L("Rời máy này? Bạn sẽ không điều khiển được nữa (chủ máy có thể chia sẻ lại).", "Leave this phone? You will lose access."))) cpShareRevoke(lv.dataset.shleave, true);
+  else if (rv && confirm(L("Thu hồi quyền dùng máy của người này?", "Revoke this person's access?"))) cpShareRevoke(rv.dataset.shrevoke);
+  else if (cp) { const v = cp.dataset.shcopy; (navigator.clipboard ? navigator.clipboard.writeText(v) : Promise.reject()).then(() => toast(L("Đã copy: ", "Copied: ") + v), () => prompt(L("Copy mã:", "Copy code:"), v)); }
 });
 document.addEventListener("input", e => {
   const id = e.target.id;
@@ -3740,6 +3788,77 @@ async function cpRenew(id) {
   if (error) { toast(errMsg(error), 1); return; }
   await loadProfile(); renderUser(); toast(L("Đã gia hạn +" + d + " ngày.", "Renewed.")); openCloud();
 }
+/* ===== CHIA SẺ / CHUYỂN NHƯỢNG MÁY (SQL v9) ===== */
+Object.assign(ERR, { BAD_CODE: "Mã không đúng, đã bị huỷ hoặc đã hết hạn.", CODE_USED: "Mã này đã có người dùng rồi.", OWN_PHONE: "Đây là máy của chính bạn.",
+  ALREADY_SHARED: "Bạn đã được chia sẻ máy này rồi.", SHARE_LIMIT: "Máy này đã có quá nhiều mã chia sẻ (tối đa 20). Thu hồi bớt rồi tạo lại.",
+  PHONE_NOT_ACTIVE: "Máy phải đang chạy mới chia sẻ được.", NOT_ALLOWED: "Bạn không có quyền làm việc này." });
+Object.assign(ERR_EN, { BAD_CODE: "Wrong, cancelled or expired code.", CODE_USED: "This code has already been used.", OWN_PHONE: "This is your own phone.",
+  ALREADY_SHARED: "This phone is already shared with you.", SHARE_LIMIT: "Too many share codes for this phone (max 20). Revoke some first.",
+  PHONE_NOT_ACTIVE: "The phone must be running to share it.", NOT_ALLOWED: "You are not allowed to do this." });
+const shErr = e => /cp_share|cp_shared|function .* does not exist|schema cache/i.test(String(e && e.message)) ? L("Tính năng chia sẻ chưa bật (admin cần chạy SQL cloud-phones-v9).", "Sharing is not enabled yet.") : errMsg(e);
+let shPhone = null, shDays = 7;
+function shCodeBox(code, note) {
+  return `<span class="cd">${esc(code)}</span><button class="btn sm" type="button" data-shcopy="${esc(code)}">📋 Copy</button><small>${note}</small>`;
+}
+async function cpShareList() {
+  const box = $("sh-list"); box.innerHTML = "";
+  const { data, error } = await sb.rpc("cp_share_list", { p_phone: shPhone.id });
+  if (error) { box.innerHTML = `<div class="hint" style="color:var(--bad)">${esc(shErr(error))}</div>`; return; }
+  const rows = data || [];
+  box.innerHTML = rows.length ? `<div class="hint">${L("Mã đang hoạt động", "Active codes")} (${rows.length})</div>` + rows.map(s => `<div class="shrow"><span class="cd">${esc(s.code)}</span>
+      <span class="shwho">${s.user ? "👤 " + esc(s.user) : L("Chưa ai dùng", "Not used yet")} · ${s.expires_at ? L("đến ", "until ") + new Date(s.expires_at).toLocaleString(LANG === "en" ? "en-GB" : "vi-VN") : L("theo hạn máy", "until expiry")}</span>
+      <button class="btn danger sm" type="button" data-shrevoke="${s.id}">${s.user ? L("Thu hồi", "Revoke") : L("Huỷ mã", "Cancel")}</button></div>`).join("") : "";
+}
+function cpShareOpen(id) {
+  shPhone = myCloud.find(x => x.id === id); if (!shPhone) return;
+  $("sh-title").textContent = "👥 " + L("Chia sẻ", "Share") + " · " + shPhone.name;
+  $("sh-h1").textContent = L("Chia sẻ dùng chung", "Share access");
+  $("sh-d1").innerHTML = L("Người nhập mã được <b>điều khiển máy như bạn</b> (không gia hạn, huỷ hay chia sẻ tiếp được). Mỗi mã dùng cho 1 người. Bạn thu hồi lúc nào cũng được.",
+    "Whoever enters the code can <b>control this phone like you</b> (but can't renew, cancel or re-share it). One code per person. Revoke any time.");
+  $("sh-h2").textContent = L("Chuyển nhượng máy", "Transfer ownership");
+  $("sh-d2").innerHTML = L("Người nhập mã trở thành <b>chủ mới</b> của máy (giữ nguyên hạn còn lại và dữ liệu). Bạn sẽ <b>mất máy này</b>, mọi chia sẻ cũ bị huỷ.",
+    "Whoever enters the code becomes the <b>new owner</b> (remaining time and data are kept). You will <b>lose this phone</b> and all shares are cancelled.");
+  $("sh-make").textContent = L("Tạo mã chia sẻ", "Create share code"); $("sh-transfer").textContent = L("Tạo mã chuyển nhượng", "Create transfer code");
+  $("sh-close").textContent = L("Đóng", "Close");
+  const opts = [[1, L("1 ngày", "1 day")], [3, L("3 ngày", "3 days")], [7, L("7 ngày", "7 days")], [30, L("30 ngày", "30 days")], [0, L("Theo hạn máy", "Until expiry")]];
+  $("sh-days").innerHTML = opts.map(([v, t]) => `<button type="button" data-v="${v}" class="${v === shDays ? "on" : ""}">${t}</button>`).join("");
+  $("sh-new").hidden = true; $("sh-tnew").hidden = true;
+  show("cpsharedlg"); cpShareList();
+}
+$("sh-days") && ($("sh-days").onclick = e => { const b = e.target.closest("[data-v]"); if (!b) return; shDays = +b.dataset.v; $("sh-days").querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b)); });
+$("sh-close") && ($("sh-close").onclick = () => show("cpsharedlg", false));
+$("sh-make") && ($("sh-make").onclick = () => busy($("sh-make"), async () => {
+  const { data, error } = await sb.rpc("cp_share_create", { p_phone: shPhone.id, p_kind: "share", p_days: shDays || null });
+  if (error) return toast(shErr(error), 1);
+  $("sh-new").innerHTML = shCodeBox(data.code, L("Gửi mã này cho người cần dùng. Họ đăng nhập <b>blueroblox.shop</b> → <b>ĐT đám mây</b> → nhập mã (hoặc trong app Android).",
+    "Send this code. They sign in at <b>blueroblox.shop</b> → <b>Cloud phones</b> → enter the code (or in the Android app)."));
+  $("sh-new").hidden = false; cpShareList();
+}));
+$("sh-transfer") && ($("sh-transfer").onclick = () => busy($("sh-transfer"), async () => {
+  if (!confirm(L(`Tạo mã chuyển nhượng "${shPhone.name}"? Ai nhập mã này sẽ thành chủ máy, bạn mất máy. (Mã cũ chưa dùng sẽ bị huỷ)`, `Create a transfer code for "${shPhone.name}"? Whoever enters it becomes the owner.`))) return;
+  const { data, error } = await sb.rpc("cp_share_create", { p_phone: shPhone.id, p_kind: "transfer", p_days: null });
+  if (error) return toast(shErr(error), 1);
+  $("sh-tnew").innerHTML = shCodeBox(data.code, L("Chỉ đưa mã cho người mua sau khi đã nhận tiền. Muốn huỷ mã: tạo mã chuyển nhượng mới (mã cũ tự mất hiệu lực).",
+    "Only give this code after you've been paid. To cancel it, create a new transfer code."));
+  $("sh-tnew").hidden = false;
+}));
+async function cpShareRevoke(id, leave) {
+  const { error } = await sb.rpc("cp_share_revoke", { p_id: id });
+  if (error) return toast(shErr(error), 1);
+  toast(leave ? L("Đã rời máy.", "You left the phone.") : L("Đã thu hồi.", "Revoked."));
+  if (leave) openCloud(); else cpShareList();
+}
+$("cp-claim") && ($("cp-claim").onclick = () => busy($("cp-claim"), async () => {
+  const code = $("cp-code").value.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+  if (code.length < 6) return toast(L("Nhập mã gồm 8 ký tự.", "Enter the 8-character code."), 1);
+  const { data, error } = await sb.rpc("cp_share_claim", { p_code: code });
+  if (error) return toast(shErr(error), 1);
+  $("cp-code").value = "";
+  toast(data.kind === "transfer" ? L(`🎉 Máy "${data.name}" giờ là của bạn!`, `🎉 "${data.name}" is now yours!`) : L(`✓ Đã thêm máy "${data.name}" được chia sẻ cho bạn.`, `✓ "${data.name}" has been shared with you.`));
+  openCloud();
+}));
+$("cp-code") && $("cp-code").addEventListener("keydown", e => { if (e.key === "Enter") $("cp-claim").click(); });
+
 async function cpRename(id) {
   const p = myCloud.find(x => x.id === id); if (!p) return;
   const n = prompt("Tên mới cho máy:", p.name); if (n === null) return;

@@ -122,5 +122,10 @@ for c in $(docker ps --format '{{.Names}}' | grep -E '^cp_'); do
   elif [ "$(bad "hang_$c")" -ge 3 ]; then log "$c bị treo (Android: '${okb:-không phản hồi}') 3 phút liền → khởi động lại máy"; docker restart "$c" >/dev/null 2>&1; good "hang_$c"; fixed=1; fi
 done
 
+# 8) đường thẳng (fast-route.sh): nginx cổng 8443 phải chạy
+if [ -f /etc/nginx/conf.d/cloudphone-fast.conf ]; then
+  if ! systemctl is-active -q nginx; then log "nginx (đường thẳng) đang tắt → bật lại"; systemctl restart nginx; fixed=1; fi
+fi
+
 [ "$fixed" = 0 ] && echo "✓ Mọi thứ bình thường"
 exit 0

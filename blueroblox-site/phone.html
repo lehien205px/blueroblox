@@ -850,7 +850,7 @@ function renderHead() {
   const act = phones.filter(p => p.status === "active").length;
   $("multin").textContent = L("Nhiều máy", "Multi view") + (act > 1 ? " (" + act + ")" : "");
   if (!cur) return;
-  $("spec").innerHTML = `<b>${cur.ram}GB</b> RAM · <b>${cur.cpu}</b> ${L("nhân", "cores")} · ${esc(cur.res || "")} · <b>${cur.fps || 30}</b> FPS`;
+  $("spec").innerHTML = `Android <b>${esc(cur.android || "11")}</b> · <b>${cur.ram}GB</b> RAM · <b>${cur.cpu}</b> ${L("nhân", "cores")} · ${esc(cur.res || "")} · <b>${cur.fps || 30}</b> FPS`;
   $("left").textContent = leftText(cur); $("left").className = "lv-" + expLevel(cur);
   $("qtxt").textContent = QUAL[quality][0];
   document.title = cur.name + L(" – Điều khiển máy", " – Phone control");
@@ -899,7 +899,7 @@ function renderDevMenu() {
       <span class="nm"><i class="${st[0]}"></i><b>${esc(p.name)}</b>${p.shared ? ` <small title="${esc(L("Được chia sẻ bởi ", "Shared by ") + (p.owner_name || ""))}">👥</small>` : ""}</span>
       <span class="acts2"><button class="btn sm${isCur ? " gh" : ""}" type="button" data-openone="${p.id}"${isCur || p.status !== "active" ? " disabled" : ""}>${isCur ? L("Đang mở", "Open now") : L("Mở", "Open")}</button>
         ${canRn ? `<button class="btn sm ${lv === "ok" ? "gh" : ""}" type="button" data-renew="${p.id}">${L("Gia hạn", "Renew")}</button>` : ""}</span>
-      <span class="info2">${p.ram}GB · ${p.cpu} ${L("nhân", "cores")} · ${esc(p.res || "")} · ${p.fps || 30} FPS · ${st[1]}</span>
+      <span class="info2">Android ${esc(p.android || "11")} · ${p.ram}GB · ${p.cpu} ${L("nhân", "cores")} · ${esc(p.res || "")} · ${p.fps || 30} FPS · ${st[1]}</span>
       <span class="info2">${L("Mua", "Bought")} ${fdate(p.created_at)}${p.days ? L(" · gói " + p.days + " ngày", " · " + p.days + "-day plan") : ""}</span>
       <span class="exp2 lv-${lv}">${expText(p)}</span></div>`;
   }).join("") : L('<div style="padding:16px;color:var(--muted)">Bạn chưa thuê máy nào. <a href="/">Thuê máy</a></div>', '<div style="padding:16px;color:var(--muted)">You haven\'t rented a phone yet. <a href="/">Rent one</a></div>');

@@ -362,7 +362,10 @@ def cmd_create(a):
         print(f"  Còn: RAM {lr-ur:.1f}GB, CPU {lc-uc:.1f} nhân."); sys.exit(2)
     if not re.match(r"^\d+x\d+$", a.res): print("LỖI: --res phải dạng 720x1280."); sys.exit(1)
     av = android_of(a.android)
-    gpu = av == "11" and not a.nogpu and gpu_slot(st)       # Android 11 + card còn chỗ → máy GPU
+    # Android 11 + card còn chỗ → máy GPU. Máy GPU CHƯA root được → khi đã có bản root, máy mới ưu tiên bản ROOT
+    # (muốn ưu tiên GPU hơn root: thêm GPU_OVER_ROOT=1 vào ~/cloudphone.conf)
+    rooted = pick_image(IMAGES[av][0]) != IMAGES[av][0]
+    gpu = av == "11" and not a.nogpu and (not rooted or CONF.get("GPU_OVER_ROOT") == "1") and gpu_slot(st)
     port = gpu_port(st) if gpu else free_port(st)
     if gpu and not port: gpu, port = False, free_port(st)
     if not port: print("LỖI: hết cổng (tối đa 30 máy/node)."); sys.exit(3)
@@ -419,9 +422,22 @@ def cpu_args(cpu):
     c = float(cpu)
     return [f"--cpus={min(c * 3, max(c, 16)):g}", f"--cpu-shares={int(c * 1024)}"]
 
+_IMG_OK = {}
+def image_ok(img):
+    if img not in _IMG_OK: _IMG_OK[img] = sh(["docker", "image", "inspect", img]).returncode == 0
+    return _IMG_OK[img]
+
+def root_img(base):
+    """Bản đã ROOT (Magisk) của image — dựng bằng: bash ~/cloudphone-root.sh build. Có thì máy mới tự dùng bản root."""
+    return base + "_root"
+
+def pick_image(base):
+    return root_img(base) if CONF.get("ROOT", "1") != "0" and image_ok(root_img(base)) else base
+
 def docker_run(name, ram, cpu, port, res, fps, dpi=0, android="11"):
     w, h = res.split("x")
     img, tr = IMAGES[android_of(android)]
+    img = pick_image(img)                                   # có bản root → máy tự có root (Magisk)
     data = os.path.join(DATA_ROOT, name); os.makedirs(data, exist_ok=True)
     return sh(["docker", "run", "-itd", "--privileged", "--restart", "unless-stopped", "--name", name,
                *mem_args(ram), *cpu_args(cpu),
@@ -438,6 +454,25 @@ def cmd_boost(a):
         if r.returncode == 0: n += 1; print(f"✓ {p['name']}: thuê {p.get('cpu', 2):g} nhân → được dùng tới {cpu_args(p.get('cpu', 2))[0].split('=')[1]} nhân khi server rảnh")
         else: print(f"! {p['name']}: {(r.stderr or r.stdout).strip()[:120]}")
     print(f"✅ Đã tăng tốc {n} máy")
+
+def cmd_rootall(a):
+    """Chuyển máy đang có sang bản ROOT: tạo lại container với CÙNG dữ liệu (app, tài khoản giữ nguyên), máy khởi động lại ~1 phút."""
+    st = load(); n = 0
+    for p in st["phones"]:
+        if is_gpu(p) or (a.name and p["name"] != a.name): continue
+        base = IMAGES[android_of(p.get("android", "11"))][0]
+        cur = (sh(["docker", "inspect", "-f", "{{.Config.Image}}", p["name"]]).stdout or "").strip()
+        if not image_ok(root_img(base)): print(f"! {p['name']}: chưa có bản root của Android {p.get('android', '11')} (chạy: bash ~/cloudphone-root.sh build)"); continue
+        if cur == root_img(base): print(f"✓ {p['name']}: đã root sẵn"); continue
+        was_on = is_running(p["name"], p)
+        sh(["docker", "exec", WSNAME, "adb", "disconnect", f"127.0.0.1:{p['port']}"])
+        rm_container(p["name"])
+        r = docker_run(p["name"], p["ram"], p["cpu"], p["port"], p.get("res", "720x1280"), p.get("fps", 30), p.get("dpi", 0), p.get("android", "11"))
+        if r.returncode != 0: print(f"! {p['name']}: LỖI {(r.stderr or r.stdout).strip()[:200]}"); continue
+        if not was_on: sh(["docker", "stop", p["name"]])          # máy đang tạm dừng (hết hạn) → giữ tắt
+        else: wait_boot(p["name"], p["port"], apps=False)
+        n += 1; print(f"✓ {p['name']}: đã chuyển sang bản ROOT" + ("" if was_on else " (đang tạm dừng)"))
+    print(f"✅ Xong — {n} máy vừa được root")
 
 def cmd_reconfig(a):
     """Đổi FPS / độ phân giải: tạo lại container với CÙNG thư mục dữ liệu → giữ nguyên app, tài khoản."""
@@ -609,6 +644,7 @@ def main():
     for nm, fn in (("start", cmd_start), ("restart", cmd_restart), ("gpurun", cmd_gpurun)):
         x = sub.add_parser(nm); x.add_argument("name"); x.set_defaults(f=fn)
     sub.add_parser("gpuinfo").set_defaults(f=cmd_gpuinfo)
+    ra = sub.add_parser("rootall"); ra.add_argument("name", nargs="?", default=""); ra.set_defaults(f=cmd_rootall)
     lr = sub.add_parser("liveres"); lr.add_argument("name"); lr.add_argument("--res", required=True); lr.set_defaults(f=cmd_liveres)
     pi = sub.add_parser("preinstall"); pi.add_argument("name", nargs="?", default=""); pi.add_argument("--all", action="store_true"); pi.add_argument("--force", action="store_true"); pi.set_defaults(f=cmd_preinstall)
     a = ap.parse_args()

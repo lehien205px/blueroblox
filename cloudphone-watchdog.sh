@@ -127,5 +127,23 @@ if [ -f /etc/nginx/conf.d/cloudphone-fast.conf ]; then
   if ! systemctl is-active -q nginx; then log "nginx (đường thẳng) đang tắt → bật lại"; systemctl restart nginx; fixed=1; fi
 fi
 
+# 9) ưu tiên luồng hình: khi game nặng (Roblox…) ngốn hết CPU, phần vẽ màn hình + nén hình + nhận chạm vẫn được chạy trước
+#    → khách điều khiển vẫn mượt, game chỉ giảm FPS một chút. Đặt độ ưu tiên -10 cho mọi luồng của các tiến trình này.
+python3 - <<'PYEOF' 2>/dev/null
+import os
+PATS = (b"com.genymobile.scrcpy", b"/system/bin/surfaceflinger", b"android.hardware.media.omx", b"media.swcodec", b"media.codec")
+for pid in os.listdir("/proc"):
+    if not pid.isdigit(): continue
+    try: cl = open(f"/proc/{pid}/cmdline", "rb").read()
+    except OSError: continue
+    if not any(p in cl for p in PATS): continue
+    try: tids = os.listdir(f"/proc/{pid}/task")
+    except OSError: continue
+    for t in tids:
+        try:
+            if os.getpriority(os.PRIO_PROCESS, int(t)) > -10: os.setpriority(os.PRIO_PROCESS, int(t), -10)
+        except OSError: pass
+PYEOF
+
 [ "$fixed" = 0 ] && echo "✓ Mọi thứ bình thường"
 exit 0

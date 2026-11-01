@@ -62,6 +62,11 @@ xsetup)
   [ -n "$BUS" ] || { err "Không đọc được card NVIDIA (nvidia-smi)"; exit 1; }
   V=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader | cut -d. -f1)
   sudo apt-get install -y -qq xserver-xorg-core >/dev/null && ok "Xorg"
+  # thư viện OpenGL/EGL/Vulkan của NVIDIA (máy chủ cài driver kiểu "headless" thường thiếu) — đúng phiên bản driver đang chạy
+  if ! ls /usr/lib/x86_64-linux-gnu/libGLX_nvidia.so.0 >/dev/null 2>&1; then
+    PV=$(dpkg-query -W -f='${Version}' "nvidia-utils-$V" 2>/dev/null)
+    sudo apt-get install -y -qq "libnvidia-gl-$V${PV:+=$PV}" >/dev/null && ok "Thư viện OpenGL NVIDIA ($V)" || warn "Không cài được libnvidia-gl-$V"
+  fi
   if ! ls /usr/lib/xorg/modules/drivers/nvidia_drv.so /usr/lib/x86_64-linux-gnu/nvidia/xorg/nvidia_drv.so >/dev/null 2>&1; then
     sudo apt-get install -y -qq "xserver-xorg-video-nvidia-$V" >/dev/null 2>&1 && ok "Driver Xorg NVIDIA $V" || warn "Không cài được xserver-xorg-video-nvidia-$V"
   fi
@@ -82,14 +87,17 @@ start)
   [ -x "$EMU" ] || { err "Chưa cài. Chạy:  bash $0 install"; exit 1; }
   [ -w /dev/kvm ] || { err "Chưa có quyền KVM — thoát SSH rồi vào lại"; exit 1; }
   [ -S "/tmp/.X11-unix/X${XD#:}" ] || bash "$0" xsetup || exit 1
-  pgrep -f "qemu.*-avd $AVD|emulator.*-avd $AVD" >/dev/null && { ok "Máy thử đang chạy rồi"; exit 0; }
+  if pgrep -f -- "-avd $AVD" >/dev/null; then
+    if [ "$("$ADB" -s emulator-$PORT shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; then ok "Máy thử đang chạy rồi"; bash "$0" check; exit 0; fi
+    warn "Có máy thử cũ bị kẹt → tắt hẳn rồi bật lại"; bash "$0" stop >/dev/null 2>&1
+  fi
   echo "== Bật máy thử bằng GPU NVIDIA =="
   DISPLAY=$XD setsid nohup "$EMU" -avd "$AVD" -port "$PORT" -no-window -gpu host -feature -Vulkan -no-audio -no-boot-anim -no-snapshot \
       -camera-back none -camera-front none -netdelay none -netspeed full > "$LOG" 2>&1 < /dev/null &
   "$ADB" start-server >/dev/null 2>&1
   for i in $(seq 1 90); do
     sleep 3
-    if ! pgrep -f "emulator.*-avd $AVD|qemu.*$AVD" >/dev/null; then err "Máy thử bị tắt khi khởi động. 20 dòng log cuối:"; tail -20 "$LOG"; exit 1; fi
+    if ! pgrep -f -- "-avd $AVD" >/dev/null; then err "Máy thử bị tắt khi khởi động. 20 dòng log cuối:"; tail -20 "$LOG"; exit 1; fi
     [ "$("$ADB" -s emulator-$PORT shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ] && break
     printf "."
   done; echo
@@ -118,7 +126,7 @@ check)
 
 stop)
   "$ADB" -s emulator-$PORT emu kill >/dev/null 2>&1; sleep 3
-  pkill -f "emulator.*-avd $AVD" 2>/dev/null; pkill -f "qemu-system.*$AVD" 2>/dev/null
+  pkill -f -- "-avd $AVD" 2>/dev/null; sleep 2; pkill -9 -f -- "-avd $AVD" 2>/dev/null
   docker exec wsscrcpy adb disconnect 127.0.0.1:$((PORT + 1)) >/dev/null 2>&1
   ok "Đã tắt máy thử" ;;
 

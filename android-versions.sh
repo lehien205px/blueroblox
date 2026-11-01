@@ -7,6 +7,8 @@
 #   bash android-versions.sh test       # bật 2 máy thử (cổng 5594 = A9, 5595 = A10) + kiểm tra Google Play / ARM / root
 #   bash android-versions.sh roblox     # đọc lỗi Roblox trong máy thử (sau khi cài & mở Roblox)
 #   bash android-versions.sh stop       # tắt + xoá 2 máy thử (giữ image)
+#   bash android-versions.sh a12h       # Android 12 với bộ dịch ARM HOUDINI (thay libndk bị văng) + máy thử cổng 5596
+#   bash android-versions.sh a12h-on    # dùng Android 12 Houdini cho MÁY MỚI + chuyển máy Android 12 đang có (giữ dữ liệu)
 #   Xem màn hình máy thử: admin → https://phone.blueroblox.shop/ → thiết bị 127.0.0.1:5594 / 5595
 # =====================================================================
 set -u
@@ -100,5 +102,27 @@ stop)
     sudo rm -rf "$HOME/redroid/$name"
   done <<< "$LIST" ;;
 
-*) sed -n '2,11p' "$0" ;;
+a12h)
+  IMG=redroid/redroid:12.0.0_mindthegapps_houdini
+  if ! docker image inspect "$IMG" >/dev/null 2>&1; then
+    [ -x "$RS/.venv/bin/python" ] || { err "Chạy trước:  bash $0 build   (để có công cụ)"; exit 1; }
+    echo "== Dựng Android 12 + Google Play + bộ dịch ARM Houdini (10–20 phút, đừng bấm Ctrl+C) =="
+    (cd "$RS" && sudo "$RS/.venv/bin/python" redroid.py -a 12.0.0 -mtg -i) > "$HOME/a12h-build.log" 2>&1
+    docker image inspect "$IMG" >/dev/null 2>&1 && ok "Dựng xong $IMG" || { err "Dựng lỗi — xem: tail -30 ~/a12h-build.log"; exit 1; }
+  else ok "Đã có $IMG"; fi
+  docker rm -f atest12h >/dev/null 2>&1; mkdir -p "$HOME/redroid/atest12h"
+  docker run -itd --privileged --name atest12h --memory=5g --memory-swap=12g --cpus=4 -v "$HOME/redroid/atest12h:/data" -p 127.0.0.1:5596:5555 "$IMG" \
+    androidboot.redroid_width=720 androidboot.redroid_height=1280 androidboot.redroid_dpi=320 androidboot.redroid_fps=30 $PROPS >/dev/null && ok "Bật máy thử atest12h"
+  for i in $(seq 1 36); do sleep 5; [ "$(docker exec atest12h getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ] && break; done
+  docker exec wsscrcpy adb connect 127.0.0.1:5596 >/dev/null 2>&1
+  ok "Máy thử Android 12 Houdini: phone.blueroblox.shop → 127.0.0.1:5596 — cài Noka / Roblox thử. Văng thì chạy:  docker exec atest12h logcat -d -b crash | tail -20" ;;
+
+a12h-on)
+  docker image inspect redroid/redroid:12.0.0_mindthegapps_houdini >/dev/null 2>&1 || { err "Chạy trước:  bash $0 a12h"; exit 1; }
+  C="$HOME/cloudphone.conf"; grep -q '^A12_ARM=houdini' "$C" || echo "A12_ARM=houdini" >> "$C"
+  ok "Máy Android 12 MỚI sẽ dùng Houdini. Chuyển máy Android 12 đang có (giữ app + tài khoản, mỗi máy khởi động lại ~1 phút):"
+  python3 "$HOME/phonectl.py" unroot
+  docker rm -f atest12h >/dev/null 2>&1; true ;;
+
+*) sed -n '2,13p' "$0" ;;
 esac

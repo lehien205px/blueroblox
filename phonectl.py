@@ -23,6 +23,13 @@ IMAGES = {"9": ("redroid/redroid:9.0.0_litegapps_houdini", "houdini"),        # 
           "12": ("redroid/redroid:12.0.0_mindthegapps_ndk", "ndk"),
           "13": ("redroid/redroid:13.0.0_mindthegapps_houdini", "houdini"),
           "14": ("redroid/redroid:14.0.0_mindthegapps_houdini", "houdini")}
+# Android 12 dùng bộ dịch ARM Houdini (Intel) thay libndk khi admin bật A12_ARM=houdini trong ~/cloudphone.conf
+def _a12():
+    try:
+        for line in open(os.path.expanduser("~/cloudphone.conf"), encoding="utf-8"):
+            if line.strip() == "A12_ARM=houdini": IMAGES["12"] = ("redroid/redroid:12.0.0_mindthegapps_houdini", "houdini")
+    except OSError: pass
+_a12()
 WSNAME = "wsscrcpy"                 # container ws-scrcpy (để đăng ký máy cho điều khiển web)
 PORT_BASE = 5555
 PORT_MAX = 5585                    # adb emulator chỉ quét 5555..5585

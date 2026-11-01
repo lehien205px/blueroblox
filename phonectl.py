@@ -129,14 +129,22 @@ def preinstall(name, port, force=False):
     """Cài các APK trong ~/apk-cai-san vào máy (mỗi APK chỉ cài 1 lần / máy, lưu dấu trong /data của máy)."""
     try: apks = sorted(f for f in os.listdir(PRE_DIR) if f.lower().endswith((".apk", ".apks", ".apkm", ".xapk")))
     except OSError: print(f"   ! Không thấy thư mục app cài sẵn {PRE_DIR}"); return
+    todo = []
     for f in apks:
         mark = "/data/local/tmp/.cp_pre_" + re.sub(r"[^\w.-]", "_", f)
         if not force and sh(["docker", "exec", name, "/system/bin/sh", "-c", f"test -f {mark} && echo y"]).stdout.strip() == "y":
             continue
+        todo.append((f, mark))
+    def one(fm):
+        f, mark = fm
         r = install_file(port, os.path.join(PRE_DIR, f))
         if "Success" in (r.stdout or ""):
-            sh(["docker", "exec", name, "/system/bin/sh", "-c", f"touch {mark}"]); print(f"   + Đã cài sẵn {f} cho {name}")
-        else: print(f"   ! Cài {f} cho {name} lỗi: {((r.stdout or '') + (r.stderr or ''))[-200:]}")
+            sh(["docker", "exec", name, "/system/bin/sh", "-c", f"touch {mark}"]); return f"   + Đã cài sẵn {f} cho {name}"
+        return f"   ! Cài {f} cho {name} lỗi: {((r.stdout or '') + (r.stderr or ''))[-200:]}"
+    if todo:                                  # cài song song (tối đa 3 app cùng lúc) → máy mới có đủ app nhanh hơn
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=min(3, len(todo))) as ex:
+            for line in ex.map(one, todo): print(line)
 
 def install_file(port, path):
     """Cài 1 file: .apk thường, hoặc gói nhiều phần .apks/.apkm/.xapk (VD Chrome, Gmail tải từ APKMirror)."""
@@ -189,21 +197,23 @@ def cmd_preinstall(a):
                 adb_connect(p["port"])
             preinstall(p["name"], p["port"], a.force); grant_perms(p["name"])
 
-def wait_boot(name, port):
-    """Chờ Android khởi động xong rồi mới kết nối (kết nối sớm → màn đen)."""
+def wait_boot(name, port, apps=True):
+    """Chờ Android khởi động xong rồi mới kết nối (kết nối sớm → màn đen).
+    apps=False: không chờ cài app sẵn (chương trình nền cài ngay sau, khách dùng máy được sớm hơn)."""
     t0 = time.time()
     while time.time() - t0 < BOOT_WAIT:
         r = sh(["docker", "exec", name, "/system/bin/getprop", "sys.boot_completed"])
         if (r.stdout or "").strip() == "1": break
-        time.sleep(5)
+        time.sleep(2)
     tune(name)
-    time.sleep(3)
-    for _ in range(5):
+    time.sleep(1.5)
+    for _ in range(8):
         adb_connect(port)
         r = sh(["docker", "exec", WSNAME, "adb", "-s", f"127.0.0.1:{port}", "get-state"])
         if (r.stdout or "").strip() == "device":
-            preinstall(name, port); grant_perms(name); return True
-        time.sleep(4)
+            if apps: preinstall(name, port)
+            grant_perms(name); return True
+        time.sleep(2)
     return False
 def fmt(dt): return dt.strftime("%d/%m/%Y %H:%M")
 
@@ -315,7 +325,7 @@ def cmd_memfix(a):
 def cmd_waitboot(a):
     st = load(); p = next((x for x in st["phones"] if x["name"] == a.name), None)
     if not p: print("Không có máy tên này."); sys.exit(1)
-    ok = wait_boot(a.name, p["port"])
+    ok = wait_boot(a.name, p["port"], apps=not a.noapps)
     print("Android đã khởi động xong." if ok else "Chưa kết nối được, sẽ tự thử lại."); sys.exit(0 if ok else 5)
 
 def rm_container(name):
@@ -402,7 +412,7 @@ def main():
     sub.add_parser("reap").set_defaults(f=cmd_reap)
     s = sub.add_parser("stop"); s.add_argument("name"); s.set_defaults(f=cmd_stop)
     sub.add_parser("connect-all").set_defaults(f=cmd_connect_all)
-    w = sub.add_parser("waitboot"); w.add_argument("name"); w.set_defaults(f=cmd_waitboot)
+    w = sub.add_parser("waitboot"); w.add_argument("name"); w.add_argument("--noapps", action="store_true"); w.set_defaults(f=cmd_waitboot)
     g = sub.add_parser("reconfig"); g.add_argument("name"); g.add_argument("--fps", type=int, default=0); g.add_argument("--res", default=""); g.set_defaults(f=cmd_reconfig)
     sub.add_parser("capacity").set_defaults(f=cmd_capacity)
     sub.add_parser("perms").set_defaults(f=cmd_perms)

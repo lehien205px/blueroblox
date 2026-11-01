@@ -109,14 +109,16 @@ def do_create(row):
 
 def finish_boot(pid, name):
     try:
-        r = phonectl(["waitboot", name])      # tối đa ~4 phút; rớt thì connect-all sẽ nối lại sau (gồm cài app sẵn + mở quyền APK)
-        for ln in (r.stdout or "").splitlines():
-            if ln.strip().startswith(("+", "!")): print("  ", name, ln.strip())
+        t0 = time.time()
+        phonectl(["waitboot", name, "--noapps"])   # chỉ chờ Android lên → giao máy cho khách NGAY
         ps = phone_state(name)
         if not ps: return
         patch(pid, {"status": "active", "container": name, "port": ps["port"], "node": NODE_ID,
                     "stream_url": stream_url(ps["port"]), "expires_at": parse_dt(ps["expires"]).isoformat(), "error": None})
-        print(f"   ✓ {name} sẵn sàng, cổng {ps['port']}")
+        print(f"   ✓ {name} sẵn sàng sau {time.time() - t0:.0f}s, cổng {ps['port']} — đang cài app sẵn ở nền")
+        r = phonectl(["preinstall", name])     # cài app sẵn song song, khách đang dùng máy vẫn được
+        for ln in (r.stdout or "").splitlines():
+            if ln.strip().startswith(("+", "!")): print("  ", ln.strip())
     except Exception as e:
         print("lỗi chờ khởi động:", e)
     finally:
@@ -291,13 +293,17 @@ def do_expiry(row):
         if ps: phonectl(["stop", name])
         patch(row["id"], {"status": "expired"})
 
-def tick():
+def tick_orders():
+    """Việc cần làm ngay (mỗi 3 giây): tạo máy mới, huỷ máy."""
     for row in get_pending("pending"):
         try: do_create(row)
         except Exception as e: print("lỗi tạo:", e)
     for row in get_pending("cancelling"):
         try: do_cancel(row)
         except Exception as e: print("lỗi huỷ:", e)
+
+def tick():
+    """Việc định kỳ (mỗi 15 giây): gia hạn, hết hạn."""
     for row in get_renew():
         try: do_renew(row)
         except Exception as e: print("lỗi gia hạn:", e)
@@ -312,8 +318,13 @@ if __name__ == "__main__":
     try:                                    # nới RAM cho máy đang chạy (chống văng app khi hết RAM)
         r = phonectl(["memfix"]); print(r.stdout.strip())
     except Exception as e: print("lỗi memfix:", e)
-    n = 0
+    n = 0; last = 0.0
     while True:
+        try: tick_orders()                  # đơn mới: kiểm tra mỗi 3 giây → nhận đơn gần như tức thì
+        except Exception as e: print("lỗi vòng lặp:", e)
+        if time.time() - last < 15:
+            time.sleep(3); continue
+        last = time.time()
         try: tick()
         except Exception as e: print("lỗi vòng lặp:", e)
         try: phonectl(["connect-all"])      # mỗi 15 giây: máy nào rớt kết nối thì nối lại (tránh màn xám)
@@ -331,4 +342,4 @@ if __name__ == "__main__":
                 phonectl(["perms"])
             except Exception as e: print("lỗi cài app sẵn / mở quyền APK:", e)
         n += 1
-        time.sleep(POLL)
+        time.sleep(3)

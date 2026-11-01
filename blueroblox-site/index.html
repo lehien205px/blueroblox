@@ -808,6 +808,16 @@ body.past-hero .stage, body.past-hero .stage *, body.past-hero h1 .ch, body.past
 .cpand button small{font-size:10.5px;font-weight:700;padding:2px 6px;border-radius:99px;background:rgba(255,200,97,.18);color:#ffc861}
 @media (max-width:640px){ .cpandf{grid-template-columns:1fr} }
 
+/* gợi ý cấu hình theo nhu cầu */
+.cpguide{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.cpg-h{grid-column:1/-1;font-size:13px;color:var(--muted);font-weight:600}
+.cpg{display:grid;gap:2px;text-align:left;padding:8px 12px;border-radius:14px;border:1px solid var(--line);background:rgba(6,10,28,.4);color:var(--fg);cursor:pointer;font:inherit}
+.cpg:hover{border-color:#8fd0ff;background:rgba(61,123,255,.12)}
+.cpg b{font-size:14px}.cpg .cfg{font:700 12.5px var(--mono);color:#8fd0ff}.cpg small{font-size:12px;color:var(--muted);line-height:1.4}
+.cpg.hot{border-color:rgba(255,107,129,.55);background:linear-gradient(180deg,rgba(255,107,129,.12),rgba(6,10,28,.4))}
+.cpwarn{color:#ffc861}
+@media (max-width:980px){ .cpguide{grid-template-columns:repeat(2,minmax(0,1fr))} }
+
 </style>
 <script>
 // Đã điền sẵn cho blueroblox.shop
@@ -1483,6 +1493,7 @@ window.BR_CONFIG = {
   <div class="dlg cpwide" role="dialog" aria-modal="true" aria-labelledby="cpo-title">
     <div class="cphead"><h3 id="cpo-title">Thuê điện thoại đám mây</h3><div class="hint" id="cp-rate"></div></div>
     <div class="cpf cpandf"><span class="cpl">Phiên bản Android</span><div class="cpand" id="cp-and"></div></div>
+    <div class="cpguide" id="cp-guide"></div>
     <div class="cpgrid">
       <div class="cpf"><label class="cpl" for="cp-ram-x">RAM (GB)</label><div class="amts" id="cp-ram"></div>
         <input class="in cpx" id="cp-ram-x" type="number" min="1" step="1" inputmode="numeric" placeholder="Hoặc tự nhập số GB, VD 32"></div>
@@ -3755,6 +3766,26 @@ function cpResChips() {
   $("cp-resq").innerHTML = CP_RES.map(r => `<button type="button" data-v="${r[0]}" class="${cpSel.res === r[0] ? "on" : ""}" title="${r[0]}">${r[1]}<small>${r[0]}</small></button>`).join("");
 }
 const cpAndList = () => String((CPpricing && CPpricing.android_versions) || "11").split(",").map(s => s.trim()).filter(v => /^\d{1,2}$/.test(v));
+/* Gợi ý cấu hình theo nhu cầu (bấm để điền sẵn) */
+const CP_GUIDE = [
+  { k: "app", i: "💬", vi: "Treo app · nuôi acc", en: "Apps · account farming", dvi: "Zalo, Facebook, TikTok, Telegram, tool treo…", den: "Social apps, idle tools…", ram: 2, cpu: 2, fps: 30 },
+  { k: "light", i: "🎮", vi: "Game nhẹ", en: "Light games", dvi: "Game 2D, game nhàn rỗi, cờ, bài…", den: "2D, idle, card & board games…", ram: 4, cpu: 2, fps: 30 },
+  { k: "roblox", i: "🟥", vi: "Roblox (tối thiểu)", en: "Roblox (minimum)", dvi: "Tối thiểu 4GB · 4 nhân, đồ hoạ Roblox để thấp. Treo 2–4 tab: 8GB · 6–8 nhân.", den: "Min 4GB · 4 cores, low graphics. 2–4 tabs: 8GB · 6–8 cores.", ram: 4, cpu: 4, fps: 30, hot: 1 },
+  { k: "heavy", i: "🔥", vi: "Game nặng 3D", en: "Heavy 3D games", dvi: "Free Fire, Liên Quân, PUBG Mobile, Genshin… cần 8GB · 8 nhân, máy ảo không có card đồ hoạ nên có thể giật.", den: "Free Fire, PUBG Mobile, Genshin… need 8GB · 8 cores; may stutter (no GPU).", ram: 8, cpu: 8, fps: 30 },
+];
+function cpGuide() {
+  const g = $("cp-guide"); if (!g) return;
+  g.innerHTML = `<div class="cpg-h">💡 ${L("Gợi ý cấu hình — bấm để điền nhanh", "Recommended setups — tap to fill in")}</div>` + CP_GUIDE.map(x =>
+    `<button type="button" class="cpg${x.hot ? " hot" : ""}" data-guide="${x.k}"><b>${x.i} ${L(x.vi, x.en)}</b><span class="cfg">${x.ram}GB · ${x.cpu} ${L("nhân", "cores")} · ${x.fps} FPS</span><small>${L(x.dvi, x.den)}</small></button>`).join("");
+}
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-guide]"); if (!b) return;
+  const x = CP_GUIDE.find(v => v.k === b.dataset.guide), p = CPpricing || CP_DEF; if (!x) return;
+  const cl = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
+  Object.assign(cpSel, { ram: cl(x.ram, p.min_ram, p.max_ram), cpu: cl(x.cpu, p.min_cpu, p.max_cpu), fps: cl(x.fps, p.min_fps, p.max_fps) });
+  [["cp-ram", "ram"], ["cp-cpu", "cpu"], ["cp-fps", "fps"]].forEach(([id, k]) => { $(id).querySelectorAll("button").forEach(z => z.classList.toggle("on", +z.dataset.v === cpSel[k])); $(id + "-x").value = ""; });
+  cpOrderUpd(); toast(L("Đã chọn cấu hình: ", "Selected: ") + L(x.vi, x.en));
+});
 function cpAndChips() {
   const L0 = cpAndList(); if (!L0.includes(cpSel.android)) cpSel.android = L0.includes("11") ? "11" : L0[0];
   $("cp-and").innerHTML = L0.map(v => `<button type="button" data-and="${v}" class="${v === cpSel.android ? "on" : ""}">Android ${v}${v !== "11" ? ` <small>${L("Mới", "New")}</small>` : ""}</button>`).join("");
@@ -3772,7 +3803,7 @@ async function openCpOrder() {
   cpChips("cp-days", CP_DAYS.filter(v => v >= p.min_days && v <= p.max_days), "days", " ngày");
   cpChips("cp-fps", CP_FPS.filter(v => v >= p.min_fps && v <= p.max_fps), "fps", " FPS");
   cpChips("cp-qty", CP_QTY, "qty", " máy");
-  cpResChips(); cpAndChips();
+  cpResChips(); cpAndChips(); cpGuide();
   ["cp-ram-x", "cp-cpu-x", "cp-days-x", "cp-fps-x", "cp-qty-x"].forEach(id => { $(id).value = ""; });
   $("cp-fps-x").min = p.min_fps; $("cp-fps-x").max = p.max_fps;
   $("cp-ram-x").max = p.max_ram; $("cp-cpu-x").max = p.max_cpu; $("cp-days-x").max = p.max_days;
@@ -3788,6 +3819,9 @@ function cpOrderUpd() {
   $("cp-bal").textContent = profile ? fmt(profile.balance) : "—";
   $("cp-err").textContent = bad || (profile && profile.balance < price ? L("Số dư không đủ. Cần nạp thêm ", "Need ") + fmt(price - profile.balance) + "." : "");
   $("cp-obuy").textContent = !bad && profile && profile.balance < price ? "Nạp tiền" : "Thanh toán & tạo máy";
+  const low = cpSel.ram < 4 || cpSel.cpu < 4;
+  $("cp-lim").innerHTML = (low ? `<span class="cpwarn">⚠️ ${L("Cấu hình này <b>chưa đủ chơi Roblox</b> (cần tối thiểu 4GB · 4 nhân). Phù hợp treo app, game nhẹ.", "This setup is <b>not enough for Roblox</b> (min 4GB · 4 cores). Fine for apps and light games.")}</span><br>` : "")
+    + `${L("Cho phép", "Allowed")}: RAM ${p.min_ram}–${p.max_ram} GB · CPU ${p.min_cpu}–${p.max_cpu} ${L("nhân", "cores")} · ${p.min_days}–${p.max_days} ${L("ngày", "days")} · ${p.min_fps}–${p.max_fps} FPS`;
 }
 async function cpBuy() {
   const bad = cpCheck(); if (bad) { $("cp-err").textContent = bad; return; }

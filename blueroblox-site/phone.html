@@ -707,6 +707,13 @@ function fit() {
   $("z-fit").classList.toggle("on", zoom === 1);
   info();
 }
+/* đo độ trễ mạng tới máy chủ (hiện ở dòng thông tin) — để biết lag do mạng hay do máy */
+let PING = 0;
+setInterval(async () => {
+  if (!main.ok || document.hidden) return;
+  const t0 = performance.now();
+  try { await fetch(PHONE + "/__cp/inject.js?ping=" + Date.now(), { mode: "no-cors", cache: "no-store" }); PING = Math.round(performance.now() - t0); info(); } catch (e) {}
+}, 5000);
 function info() {
   if (!cur) { $("info").textContent = ""; return; }
   const [rw, rh] = resOf(cur), s = main.size, fr = $("frame");
@@ -716,6 +723,7 @@ function info() {
   const land = s ? s[0] > s[1] : rw > rh, base = land ? Math.max(rw, rh) : Math.min(rw, rh);
   parts.push(`${L("hiển thị", "display")} ${dw}×${dh} (${Math.round(dw / base * 100)}%)`);
   if (main.ok && main.kbps) parts.push((main.kbps / 1000).toFixed(1) + " Mbps");
+  if (main.ok && PING) parts.push((ROUTE === "fast" ? "⚡ " : "☁ ") + L("trễ mạng ", "ping ") + PING + " ms");
   if (main.ok && main.legacy && !$("adminlink").hidden) parts.push(L("⚠ chế độ gốc — server chưa chạy cpapi mới", "⚠ basic mode — server is not running the new cpapi"));
   $("info").textContent = parts.join(" · ");
 }

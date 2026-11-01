@@ -215,6 +215,8 @@ def heartbeat():
     c_ram, c_cpu = ram_t * LIMIT_PCT / 100, cpu_t * LIMIT_PCT / 100
     try:
         running = len([l for l in subprocess.run(["docker", "ps", "--format", "{{.Names}}"], capture_output=True, text=True, timeout=15).stdout.split() if l.startswith("cp_")])
+        running += len([p for p in st if p.get("kind") == "gpu" and
+                        subprocess.run(["systemctl", "is-active", "-q", f"cloudgpu@{p['name']}"]).returncode == 0])
     except Exception:
         running = None
     try: up_h = round(float(open("/proc/uptime").read().split()[0]) / 3600, 1)
@@ -234,6 +236,9 @@ def heartbeat():
     _alert["full"] = full
 
 def running(name):
+    ps = phone_state(name)
+    if ps and ps.get("kind") == "gpu":          # máy GPU chạy bằng dịch vụ cloudgpu@TÊN
+        return subprocess.run(["systemctl", "is-active", "-q", f"cloudgpu@{name}"]).returncode == 0
     r = subprocess.run(["docker", "inspect", "-f", "{{.State.Running}}", name], capture_output=True, text=True)
     return r.stdout.strip() == "true"
 
@@ -253,7 +258,7 @@ def do_locks():
             print(f"[khoá] tắt {name}"); phonectl(["stop", name])
         elif not lk and not on:
             print(f"[bật lại] {name}")
-            subprocess.run(["docker", "start", name], capture_output=True, text=True)
+            phonectl(["start", name])
 
 def do_cancel(row):
     name = row.get("container") or cname(row)

@@ -35,8 +35,30 @@ ARM = ("ro.product.cpu.abilist=x86_64,arm64-v8a,x86,armeabi-v7a,armeabi "
        "ro.vendor.enable.native.bridge.exec64=1 "
        "ro.dalvik.vm.native.bridge=libndk_translation.so ro.ndk_translation.version=0.2.3").split()
 
-def sh(cmd, check=False):
-    cmd = [c for c in cmd if c != "sudo"]   # chạy docker trực tiếp (user đã trong nhóm docker)
+# ===================== MÁY GPU (Android Emulator vẽ hình bằng card NVIDIA) =====================
+# Máy mới Android 11 tự chạy bằng GPU khi card còn chỗ (GPU_PHONES trong ~/cloudphone.conf, 0 = tắt).
+# Hết chỗ trên card → tự tạo kiểu thường (redroid, vẽ bằng CPU). Khách không phải chọn gì.
+def _conf():
+    c = {}
+    try:
+        for line in open(os.path.expanduser("~/cloudphone.conf"), encoding="utf-8"):
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                k, v = line.split("=", 1); c[k.strip()] = v.strip()
+    except OSError: pass
+    return c
+CONF = _conf()
+GPU_MAX = int(CONF.get("GPU_PHONES", "0") or 0)          # số máy GPU tối đa trên card (GTX 1080 8GB: ~8)
+GPU_MIN_VRAM = 700                                        # MB bộ nhớ card phải còn trống để thêm 1 máy
+SDK = os.path.expanduser("~/android-sdk")
+AVD_HOME = os.path.expanduser("~/.android/avd")
+GPU_IMG = CONF.get("GPU_IMG", "system-images;android-30;google_apis_playstore;x86_64")
+GPU_PORTS = range(5611, 5682, 2)                          # cổng adb máy GPU (console = cổng − 1); 5601 là máy thử
+GPU_ENV = {**os.environ, "ANDROID_SDK_ROOT": SDK, "ANDROID_HOME": SDK, "ANDROID_AVD_HOME": AVD_HOME,
+           "ANDROID_ADB_SERVER_PORT": "5038", "QT_QPA_PLATFORM": "offscreen", "DISPLAY": ":9"}
+
+def sh(cmd, check=False, keep_sudo=False):
+    if not keep_sudo: cmd = [c for c in cmd if c != "sudo"]   # chạy docker trực tiếp (user đã trong nhóm docker)
     r = subprocess.run(cmd, capture_output=True, text=True)
     if check and r.returncode != 0:
         raise RuntimeError((r.stderr or r.stdout).strip())
@@ -101,9 +123,104 @@ def wipe_data(name):
 def adb_connect(port):
     sh(["docker", "exec", WSNAME, "adb", "connect", f"127.0.0.1:{port}"])
 
-def is_running(name):
+def rec(name, st=None):
+    return next((x for x in (st or load())["phones"] if x["name"] == name), None)
+
+def is_gpu(p): return bool(p) and p.get("kind") == "gpu"
+
+def is_running(name, p=None):
+    p = p or rec(name)
+    if is_gpu(p):
+        return sh(["systemctl", "is-active", "-q", f"cloudgpu@{name}"]).returncode == 0
     r = sh(["docker", "inspect", "-f", "{{.State.Running}}", name])
     return (r.stdout or "").strip() == "true"
+
+def ashell(name, script, port=None):
+    """Chạy lệnh trong Android: máy thường qua docker exec (root), máy GPU qua adb shell."""
+    p = rec(name)
+    if is_gpu(p) or (p is None and port):
+        serial = f"127.0.0.1:{port or p['port']}"
+        if (sh(["docker", "exec", WSNAME, "adb", "-s", serial, "get-state"]).stdout or "").strip() != "device":
+            adb_connect(port or p["port"])
+        return sh(["docker", "exec", WSNAME, "adb", "-s", serial, "shell", script])
+    return sh(["docker", "exec", name, "/system/bin/sh", "-c", script])
+
+def gpu_used(st):
+    return [x for x in st["phones"] if is_gpu(x)]
+
+def gpu_vram_free():
+    r = sh(["nvidia-smi", "--query-gpu=memory.free", "--format=csv,noheader,nounits"])
+    try: return int((r.stdout or "0").split()[0])
+    except Exception: return 0
+
+def gpu_ready():
+    return (GPU_MAX > 0 and os.path.exists(os.path.join(SDK, "emulator", "emulator"))
+            and os.path.exists("/tmp/.X11-unix/X9") and os.path.exists("/etc/systemd/system/cloudgpu@.service"))
+
+def gpu_slot(st):
+    """Còn chỗ trên card cho 1 máy GPU nữa không."""
+    return gpu_ready() and len(gpu_used(st)) < GPU_MAX and gpu_vram_free() >= GPU_MIN_VRAM
+
+def gpu_port(st):
+    busy = {int(x["port"]) for x in st["phones"]}
+    import socket
+    for port in GPU_PORTS:
+        if port in busy: continue
+        ok = True
+        for q in (port - 1, port):
+            s_ = socket.socket()
+            try: s_.bind(("127.0.0.1", q))
+            except OSError: ok = False
+            finally: s_.close()
+        if ok: return port
+    return None
+
+def avd_dir(name): return os.path.join(AVD_HOME, name + ".avd")
+
+def gpu_config(name, ram, cpu, res, dpi=0):
+    cfg = os.path.join(avd_dir(name), "config.ini")
+    w, h = res.split("x")
+    want = {"hw.ramSize": str(int(float(ram) * 1024)), "hw.cpu.ncore": str(max(1, int(float(cpu)))),
+            "hw.lcd.width": w, "hw.lcd.height": h, "hw.lcd.density": str(int(dpi) or auto_dpi(res)),
+            "hw.gpu.enabled": "yes", "hw.gpu.mode": "host", "disk.dataPartition.size": "16G", "hw.keyboard": "yes",
+            "fastboot.forceColdBoot": "yes", "hw.audioInput": "no", "hw.audioOutput": "no", "showDeviceFrame": "no",
+            "hw.camera.back": "none", "hw.camera.front": "none", "vm.heapSize": "512"}
+    lines, seen = [], set()
+    for line in open(cfg, encoding="utf-8"):
+        k = line.split("=", 1)[0].strip()
+        if k in want: lines.append(f"{k}={want[k]}\n"); seen.add(k)
+        else: lines.append(line)
+    lines += [f"{k}={v}\n" for k, v in want.items() if k not in seen]
+    open(cfg, "w", encoding="utf-8").writelines(lines)
+
+def gpu_create(name, ram, cpu, res, dpi=0):
+    am = os.path.join(SDK, "cmdline-tools", "latest", "bin", "avdmanager")
+    r = subprocess.run([am, "create", "avd", "-n", name, "-k", GPU_IMG, "-d", "pixel_4", "--force"],
+                       input="no\n", capture_output=True, text=True, env=GPU_ENV)
+    if r.returncode != 0 or not os.path.isdir(avd_dir(name)): return r
+    gpu_config(name, ram, cpu, res, dpi)
+    return gpu_svc("start", name)
+
+def gpu_svc(action, name):
+    """Máy GPU chạy như dịch vụ hệ thống cloudgpu@TÊN (khởi động lại server/dịch vụ khác không làm tắt máy)."""
+    return sh(["sudo", "-n", "/usr/bin/systemctl", action, f"cloudgpu@{name}"], keep_sudo=True)
+
+def gpu_wipe(name):
+    import shutil
+    shutil.rmtree(avd_dir(name), ignore_errors=True)
+    try: os.remove(os.path.join(AVD_HOME, name + ".ini"))
+    except OSError: pass
+
+def cmd_gpurun(a):
+    """(dịch vụ cloudgpu@TÊN gọi) — chạy emulator của máy GPU, giữ tiến trình ở tiền cảnh."""
+    p = rec(a.name)
+    if not is_gpu(p): print("Không phải máy GPU."); sys.exit(1)
+    port = int(p["port"])
+    emu = os.path.join(SDK, "emulator", "emulator")
+    args = [emu, "-avd", a.name, "-port", str(port - 1), "-no-window", "-gpu", "host", "-feature", "-Vulkan",
+            "-no-audio", "-no-boot-anim", "-no-snapshot", "-camera-back", "none", "-camera-front", "none",
+            "-netdelay", "none", "-netspeed", "full"]
+    os.execve(emu, args, GPU_ENV)
 
 TUNE = (# tắt hẳn hiệu ứng chuyển cảnh → CPU không phải vẽ thêm
         "settings put global window_animation_scale 0; settings put global transition_animation_scale 0; "
@@ -127,7 +244,7 @@ TUNE = (# tắt hẳn hiệu ứng chuyển cảnh → CPU không phải vẽ th
         "[ -c /dev/tun ] || { rm -f /dev/tun; mknod /dev/tun c 10 200; }; chmod 666 /dev/tun")
 def tune(name):
     """Cho máy mượt hơn: tắt hiệu ứng, bật cửa sổ nổi, không ngủ đông/đóng băng app nền, cài APK không phải chờ quét, màn hình không tự tắt."""
-    sh(["docker", "exec", name, "/system/bin/sh", "-c", TUNE])
+    ashell(name, TUNE)
 def _pre_dir():
     """Thư mục app cài sẵn: cạnh phonectl.py, hoặc ~/apk-cai-san, hoặc /home/*/apk-cai-san (dịch vụ chạy bằng user nào cũng tìm thấy)."""
     import glob
@@ -142,14 +259,14 @@ def preinstall(name, port, force=False):
     todo = []
     for f in apks:
         mark = "/data/local/tmp/.cp_pre_" + re.sub(r"[^\w.-]", "_", f)
-        if not force and sh(["docker", "exec", name, "/system/bin/sh", "-c", f"test -f {mark} && echo y"]).stdout.strip() == "y":
+        if not force and (ashell(name, f"test -f {mark} && echo y", port).stdout or "").strip() == "y":
             continue
         todo.append((f, mark))
     def one(fm):
         f, mark = fm
         r = install_file(port, os.path.join(PRE_DIR, f))
         if "Success" in (r.stdout or ""):
-            sh(["docker", "exec", name, "/system/bin/sh", "-c", f"touch {mark}"]); return f"   + Đã cài sẵn {f} cho {name}"
+            ashell(name, f"touch {mark}", port); return f"   + Đã cài sẵn {f} cho {name}"
         return f"   ! Cài {f} cho {name} lỗi: {((r.stdout or '') + (r.stderr or ''))[-200:]}"
     if todo:                                  # cài song song (tối đa 3 app cùng lúc) → máy mới có đủ app nhanh hơn
         from concurrent.futures import ThreadPoolExecutor
@@ -189,20 +306,20 @@ PERM_SH = ("for p in " + BROWSERS + "; do pm path $p >/dev/null 2>&1 || continue
            "case \"$(appops get $p REQUEST_INSTALL_PACKAGES 2>/dev/null)\" in *allow*) ;; "
            "*) appops set $p REQUEST_INSTALL_PACKAGES allow >/dev/null 2>&1;; esac; done; true")
 def grant_perms(name):
-    sh(["docker", "exec", name, "/system/bin/sh", "-c", PERM_SH])
+    ashell(name, PERM_SH)
     tune(name)          # giữ màn hình máy ảo luôn sáng (máy tạo trước bản này cũng được áp dụng)
 
 def cmd_perms(a):
     """Mở quyền cài APK cho mọi máy đang chạy (chương trình nền tự gọi mỗi 5 phút → app khách cài sau cũng được mở)."""
     running = set((sh(["docker", "ps", "--format", "{{.Names}}"]).stdout or "").split())
     for p in load()["phones"]:
-        if p["name"] in running: grant_perms(p["name"])
+        if p["name"] in running or (is_gpu(p) and is_running(p["name"], p)): grant_perms(p["name"])
 
 def cmd_preinstall(a):
     """Cài APK trong ~/apk-cai-san cho máy đang chạy: phonectl.py preinstall TÊN_MÁY  hoặc  --all"""
     st = load(); running = set((sh(["docker", "ps", "--format", "{{.Names}}"]).stdout or "").split())
     for p in st["phones"]:
-        if (a.all and p["name"] in running) or p["name"] == a.name:
+        if (a.all and (p["name"] in running or (is_gpu(p) and is_running(p["name"], p)))) or p["name"] == a.name:
             if sh(["docker", "exec", WSNAME, "adb", "-s", f"127.0.0.1:{p['port']}", "get-state"]).stdout.strip() != "device":
                 adb_connect(p["port"])
             preinstall(p["name"], p["port"], a.force); grant_perms(p["name"])
@@ -211,8 +328,9 @@ def wait_boot(name, port, apps=True):
     """Chờ Android khởi động xong rồi mới kết nối (kết nối sớm → màn đen).
     apps=False: không chờ cài app sẵn (chương trình nền cài ngay sau, khách dùng máy được sớm hơn)."""
     t0 = time.time()
-    while time.time() - t0 < BOOT_WAIT:
-        r = sh(["docker", "exec", name, "/system/bin/getprop", "sys.boot_completed"])
+    gpu = is_gpu(rec(name))
+    while time.time() - t0 < BOOT_WAIT + (120 if gpu else 0):
+        r = ashell(name, "getprop sys.boot_completed", port) if gpu else sh(["docker", "exec", name, "/system/bin/getprop", "sys.boot_completed"])
         if (r.stdout or "").strip() == "1": break
         time.sleep(2)
     tune(name)
@@ -242,26 +360,31 @@ def cmd_create(a):
     if ur + a.ram > lr or uc + a.cpu > lc:
         print(f"HẾT HÀNG: thêm máy này (RAM {a.ram}GB, CPU {a.cpu}) sẽ vượt {LIMIT_PCT}%.")
         print(f"  Còn: RAM {lr-ur:.1f}GB, CPU {lc-uc:.1f} nhân."); sys.exit(2)
-    port = free_port(st)
-    if not port: print("LỖI: hết cổng (tối đa 30 máy/node)."); sys.exit(3)
     if not re.match(r"^\d+x\d+$", a.res): print("LỖI: --res phải dạng 720x1280."); sys.exit(1)
+    av = android_of(a.android)
+    gpu = av == "11" and not a.nogpu and gpu_slot(st)       # Android 11 + card còn chỗ → máy GPU
+    port = gpu_port(st) if gpu else free_port(st)
+    if gpu and not port: gpu, port = False, free_port(st)
+    if not port: print("LỖI: hết cổng (tối đa 30 máy/node)."); sys.exit(3)
     if not SAFE.match(a.name): print("LỖI: tên máy chỉ gồm chữ, số, _ . -"); sys.exit(1)
     fps = clamp_fps(a.fps)
     sh(["docker", "rm", "-f", a.name])           # phòng còn container cũ trùng tên
-    wipe_data(a.name)                             # đảm bảo máy MỚI TINH, không dính dữ liệu cũ
-    av = android_of(a.android)
-    if sh(["docker", "image", "inspect", IMAGES[av][0]]).returncode != 0:
+    wipe_data(a.name); gpu_wipe(a.name)           # đảm bảo máy MỚI TINH, không dính dữ liệu cũ
+    if not gpu and sh(["docker", "image", "inspect", IMAGES[av][0]]).returncode != 0:
         print(f"LỖI: máy chủ chưa có Android {av} (chạy: bash ~/android-test.sh build)"); sys.exit(4)
-    r = docker_run(a.name, a.ram, a.cpu, port, a.res, fps, a.dpi, av)
+    exp = now() + datetime.timedelta(days=a.days)
+    row = {"name": a.name, "port": port, "ram": a.ram, "cpu": a.cpu, "res": a.res, "fps": fps,
+           "dpi": a.dpi, "android": av, "created": fmt(now()), "expires": exp.isoformat()}
+    if gpu: row["kind"] = "gpu"
+    st["phones"].append(row); save(st)             # lưu trước để dịch vụ máy GPU đọc được cấu hình
+    r = gpu_create(a.name, a.ram, a.cpu, a.res, a.dpi) if gpu else docker_run(a.name, a.ram, a.cpu, port, a.res, fps, a.dpi, av)
     if r.returncode != 0:
-        print("LỖI tạo máy:", (r.stderr or r.stdout).strip()); sys.exit(4)
+        st = load(); st["phones"] = [x for x in st["phones"] if x["name"] != a.name]; save(st)
+        if gpu: gpu_wipe(a.name)
+        print("LỖI tạo máy:", (r.stderr or r.stdout).strip()[-400:]); sys.exit(4)
     # chờ boot xong rồi mới đăng ký vào ws-scrcpy (tránh màn đen) — bỏ qua nếu --nowait (chương trình nền tự chờ song song)
     ok = True if a.nowait else wait_boot(a.name, port)
-    exp = now() + datetime.timedelta(days=a.days)
-    st["phones"].append({"name": a.name, "port": port, "ram": a.ram, "cpu": a.cpu, "res": a.res, "fps": fps,
-                          "dpi": a.dpi, "android": av, "created": fmt(now()), "expires": exp.isoformat()})
-    save(st)
-    print(f"✅ Đã tạo máy '{a.name}'  | cổng {port} | RAM {a.ram}GB CPU {a.cpu} | hết hạn {fmt(exp)}")
+    print(f"✅ Đã tạo máy '{a.name}'{' (GPU ⚡)' if gpu else ''}  | cổng {port} | RAM {a.ram}GB CPU {a.cpu} | hết hạn {fmt(exp)}")
     print("   Android đã khởi động xong, sẵn sàng điều khiển." if ok else "   CẢNH BÁO: máy chưa kết nối được trình điều khiển, sẽ tự thử lại.")
 
 def clamp_fps(v):
@@ -310,6 +433,7 @@ def cmd_boost(a):
     """Áp dụng ngay chế độ CPU tăng tốc cho mọi máy đang có (không cần khởi động lại máy)."""
     st = load(); n = 0
     for p in st["phones"]:
+        if is_gpu(p): continue
         r = sh(["docker", "update", *cpu_args(p.get("cpu", 2)), p["name"]])
         if r.returncode == 0: n += 1; print(f"✓ {p['name']}: thuê {p.get('cpu', 2):g} nhân → được dùng tới {cpu_args(p.get('cpu', 2))[0].split('=')[1]} nhân khi server rảnh")
         else: print(f"! {p['name']}: {(r.stderr or r.stdout).strip()[:120]}")
@@ -324,8 +448,11 @@ def cmd_reconfig(a):
     fps = clamp_fps(a.fps if a.fps else p.get("fps", 30))
     dpi = p.get("dpi", 0) if res == p.get("res") else 0
     sh(["docker", "exec", WSNAME, "adb", "disconnect", f"127.0.0.1:{p['port']}"])
-    rm_container(a.name)                       # chỉ xoá container, KHÔNG xoá dữ liệu
-    r = docker_run(a.name, p["ram"], p["cpu"], p["port"], res, fps, dpi, p.get("android", "11"))
+    if is_gpu(p):
+        gpu_svc("stop", a.name); gpu_config(a.name, p["ram"], p["cpu"], res, dpi); r = gpu_svc("start", a.name)
+    else:
+        rm_container(a.name)                       # chỉ xoá container, KHÔNG xoá dữ liệu
+        r = docker_run(a.name, p["ram"], p["cpu"], p["port"], res, fps, dpi, p.get("android", "11"))
     if r.returncode != 0:
         print("LỖI:", (r.stderr or r.stdout).strip()); sys.exit(4)
     p["res"], p["fps"], p["dpi"] = res, fps, dpi; save(st)
@@ -354,7 +481,7 @@ def cmd_memfix(a):
     st = load()
     running = set((sh(["docker", "ps", "--format", "{{.Names}}"]).stdout or "").split())
     for p in st["phones"]:
-        if p["name"] not in running: continue
+        if p["name"] not in running or is_gpu(p): continue
         r = sh(["docker", "update"] + mem_args(p["ram"]) + [p["name"]])
         info = sh(["docker", "inspect", "-f", "{{.State.OOMKilled}} {{.RestartCount}} {{.State.StartedAt}}", p["name"]]).stdout.strip()
         print(f"   {'✓' if r.returncode == 0 else '!'} {p['name']} RAM {p['ram']}GB (+1GB dư)  | OOM/restart/bật lúc: {info}"
@@ -373,7 +500,8 @@ def cmd_delete(a):
     st = load(); p = next((x for x in st["phones"] if x["name"] == a.name), None)
     if not p: print("Không có máy tên này."); sys.exit(1)
     sh(["docker", "exec", WSNAME, "adb", "disconnect", f"127.0.0.1:{p['port']}"])
-    rm_container(a.name); wipe_data(a.name)
+    if is_gpu(p): gpu_svc("stop", a.name); gpu_wipe(a.name)
+    else: rm_container(a.name); wipe_data(a.name)
     st["phones"] = [x for x in st["phones"] if x["name"] != a.name]; save(st)
     print(f"🗑️  Đã xoá máy '{a.name}' và toàn bộ dữ liệu.")
 
@@ -381,7 +509,7 @@ def cmd_stop(a):
     st = load(); p = next((x for x in st["phones"] if x["name"] == a.name), None)
     if not p: print("Không có máy tên này."); sys.exit(1)
     sh(["docker", "exec", WSNAME, "adb", "disconnect", f"127.0.0.1:{p['port']}"])
-    sh(["docker", "stop", a.name])
+    gpu_svc("stop", a.name) if is_gpu(p) else sh(["docker", "stop", a.name])
     print(f"⏸  Đã tạm dừng '{a.name}' (dữ liệu còn giữ {GRACE_MIN} phút).")
 
 def adb_online():
@@ -397,11 +525,32 @@ def cmd_connect_all(a):
     st = load(); online = adb_online(); n = 0
     for p in st["phones"]:
         serial = f"127.0.0.1:{p['port']}"
-        if serial in online or not is_running(p["name"]): continue
+        if serial in online or not is_running(p["name"], p): continue
         sh(["docker", "exec", WSNAME, "adb", "disconnect", serial])
         adb_connect(p["port"]); n += 1
         print("🔌 nối lại", p["name"], serial)
     if n == 0: print("Tất cả máy đã kết nối.")
+
+def start_phone(p):
+    return gpu_svc("start", p["name"]) if is_gpu(p) else sh(["docker", "start", p["name"]])
+
+def cmd_start(a):
+    p = rec(a.name)
+    if not p: print("Không có máy tên này."); sys.exit(1)
+    r = start_phone(p); print("✅ Đã bật" if r.returncode == 0 else "LỖI: " + (r.stderr or r.stdout).strip()); sys.exit(r.returncode and 4)
+
+def cmd_restart(a):
+    """Khởi động lại máy (cả máy thường lẫn máy GPU) — trang điều khiển gọi khi khách bấm 'Khởi động lại'."""
+    p = rec(a.name)
+    if not p: print("Không có máy tên này."); sys.exit(1)
+    sh(["docker", "exec", WSNAME, "adb", "disconnect", f"127.0.0.1:{p['port']}"])
+    r = gpu_svc("restart", a.name) if is_gpu(p) else sh(["docker", "restart", a.name])
+    print("✅ Đã khởi động lại" if r.returncode == 0 else "LỖI: " + (r.stderr or r.stdout).strip()); sys.exit(r.returncode and 4)
+
+def cmd_gpuinfo(a):
+    st = load(); g = gpu_used(st)
+    print(f"Máy GPU: {len(g)}/{GPU_MAX} · card còn trống {gpu_vram_free()} MB · sẵn sàng: {'có' if gpu_ready() else 'CHƯA (chạy: sudo bash ~/cloudphone-gpu.sh install)'}")
+    for p in g: print(f"   {p['name']}  cổng {p['port']}  {'đang chạy' if is_running(p['name'], p) else 'đang tắt'}")
 
 def cmd_renew(a):
     st = load(); p = next((x for x in st["phones"] if x["name"] == a.name), None)
@@ -410,8 +559,8 @@ def cmd_renew(a):
     if base < now(): base = now()
     base += datetime.timedelta(days=a.days)
     p["expires"] = base.isoformat(); save(st)
-    if not is_running(a.name):                    # máy đang tạm dừng vì hết hạn → bật lại
-        sh(["docker", "start", a.name]); wait_boot(a.name, p["port"])
+    if not is_running(a.name, p):                 # máy đang tạm dừng vì hết hạn → bật lại
+        start_phone(p); wait_boot(a.name, p["port"])
     print(f"🔄 '{a.name}' gia hạn +{a.days} ngày → hết hạn {fmt(base)}")
 
 def cmd_list(a):
@@ -422,7 +571,7 @@ def cmd_list(a):
         exp = parse_dt(p["expires"])
         left = exp - now(); d = left.days; hrs = int(left.total_seconds()//3600)
         status = f"{d}n" if d >= 0 else "HẾT HẠN"
-        print(f"{p['name']:<16}{p['port']:<7}{str(p['ram'])+'G':<6}{str(p['cpu']):<5}{fmt(exp):<18}{status}")
+        print(f"{p['name'] + (' ⚡' if is_gpu(p) else ''):<16}{p['port']:<7}{str(p['ram'])+'G':<6}{str(p['cpu']):<5}{fmt(exp):<18}{status}")
 
 def cmd_reap(a):
     st = load(); n = 0
@@ -430,12 +579,13 @@ def cmd_reap(a):
         exp = parse_dt(p["expires"])
         if exp + datetime.timedelta(minutes=GRACE_MIN) < now():
             sh(["docker", "exec", WSNAME, "adb", "disconnect", f"127.0.0.1:{p['port']}"])
-            rm_container(p["name"]); wipe_data(p["name"])
+            if is_gpu(p): gpu_svc("stop", p["name"]); gpu_wipe(p["name"])
+            else: rm_container(p["name"]); wipe_data(p["name"])
             st["phones"] = [x for x in st["phones"] if x["name"] != p["name"]]; n += 1
             print(f"🗑️  Hết hạn quá {GRACE_MIN} phút → xoá '{p['name']}' + dữ liệu")
-        elif exp < now() and is_running(p["name"]):
+        elif exp < now() and is_running(p["name"], p):
             sh(["docker", "exec", WSNAME, "adb", "disconnect", f"127.0.0.1:{p['port']}"])
-            sh(["docker", "stop", p["name"]])
+            gpu_svc("stop", p["name"]) if is_gpu(p) else sh(["docker", "stop", p["name"]])
             print(f"⏸  Hết hạn → tạm dừng '{p['name']}' (còn {GRACE_MIN} phút để gia hạn)")
     save(st)
     print(f"Xong. Đã xoá {n} máy.")
@@ -443,7 +593,7 @@ def cmd_reap(a):
 def main():
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest="cmd")
-    c = sub.add_parser("create"); c.add_argument("name"); c.add_argument("--ram", type=float, default=2); c.add_argument("--cpu", type=float, default=2); c.add_argument("--days", type=int, default=7); c.add_argument("--res", default="720x1280"); c.add_argument("--dpi", type=int, default=0); c.add_argument("--fps", type=int, default=30); c.add_argument("--nowait", action="store_true"); c.add_argument("--android", default="11"); c.set_defaults(f=cmd_create)
+    c = sub.add_parser("create"); c.add_argument("name"); c.add_argument("--ram", type=float, default=2); c.add_argument("--cpu", type=float, default=2); c.add_argument("--days", type=int, default=7); c.add_argument("--res", default="720x1280"); c.add_argument("--dpi", type=int, default=0); c.add_argument("--fps", type=int, default=30); c.add_argument("--nowait", action="store_true"); c.add_argument("--android", default="11"); c.add_argument("--nogpu", action="store_true"); c.set_defaults(f=cmd_create)
     sub.add_parser("list").set_defaults(f=cmd_list)
     d = sub.add_parser("delete"); d.add_argument("name"); d.set_defaults(f=cmd_delete)
     r = sub.add_parser("renew"); r.add_argument("name"); r.add_argument("--days", type=int, default=7); r.set_defaults(f=cmd_renew)
@@ -456,6 +606,9 @@ def main():
     sub.add_parser("perms").set_defaults(f=cmd_perms)
     sub.add_parser("memfix").set_defaults(f=cmd_memfix)
     sub.add_parser("boost").set_defaults(f=cmd_boost)
+    for nm, fn in (("start", cmd_start), ("restart", cmd_restart), ("gpurun", cmd_gpurun)):
+        x = sub.add_parser(nm); x.add_argument("name"); x.set_defaults(f=fn)
+    sub.add_parser("gpuinfo").set_defaults(f=cmd_gpuinfo)
     lr = sub.add_parser("liveres"); lr.add_argument("name"); lr.add_argument("--res", required=True); lr.set_defaults(f=cmd_liveres)
     pi = sub.add_parser("preinstall"); pi.add_argument("name", nargs="?", default=""); pi.add_argument("--all", action="store_true"); pi.add_argument("--force", action="store_true"); pi.set_defaults(f=cmd_preinstall)
     a = ap.parse_args()

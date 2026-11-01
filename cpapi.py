@@ -45,6 +45,9 @@ SB = CFG["SUPABASE_URL"].rstrip("/")
 KEY = CFG["SUPABASE_SERVICE_KEY"]
 PUBLIC_HOST = urllib.parse.urlparse(CFG["PUBLIC_BASE"]).netloc or "phone.blueroblox.shop"
 SELF_ORIGIN = "https://" + PUBLIC_HOST
+# Đường thẳng (không qua Cloudflare): FAST_BASE=https://fast.blueroblox.shop:8443 trong ~/cloudphone.conf (do fast-route.sh ghi)
+FAST_ORIGIN = (CFG.get("FAST_BASE") or "").strip().rstrip("/")
+SELF_ORIGINS = {SELF_ORIGIN} | ({FAST_ORIGIN} if FAST_ORIGIN else set())
 ORIGINS = {"https://blueroblox.shop", "https://www.blueroblox.shop"} | \
           {o.strip().rstrip("/") for o in CFG.get("CPAPI_ORIGINS", "").split(",") if o.strip()}
 
@@ -347,11 +350,9 @@ def bulk_install(jid, fid, ids, every, keep):
             good = "Success" in o
         except Exception as e:
             good, o = False, str(e)
-        if good and r.get("container"):
-            mark = "touch /data/local/tmp/.cp_pre_" + re.sub(r"[^\w.-]", "_", name) + "; " if keep else ""
-            subprocess.run(["docker", "exec", r["container"], "/system/bin/sh", "-c",
-                            mark + "true"],                     # KHÔNG đổi quyền app khác (Android sẽ tắt app đó → game văng)
-                           capture_output=True, timeout=60)
+        if good and keep:                                    # đánh dấu "đã cài sẵn" (qua adb: chạy được cả máy thường lẫn máy GPU)
+            try: adb(r["port"], ["shell", "touch /data/local/tmp/.cp_pre_" + re.sub(r"[^\w.-]", "_", name)], timeout=60)
+            except Exception: pass
         with lock:
             (ok if good else bad).append(r["name"] if good else f"{r['name']}: {o[-120:]}")
             JOBS[jid]["msg"] = f"Đang cài {len(ok) + len(bad)}/{len(rows)} máy… (lỗi {len(bad)})"
@@ -412,9 +413,12 @@ def download(url, jid):
 
 def wait_ready(container, port):
     t0 = time.time()
-    while time.time() - t0 < 240:
-        r = subprocess.run(["docker", "exec", container, "/system/bin/getprop", "sys.boot_completed"], capture_output=True, timeout=20)
-        if (r.stdout or b"").strip() == b"1": break
+    while time.time() - t0 < 300:             # hỏi qua adb → dùng được cho cả máy thường (redroid) lẫn máy GPU
+        try:
+            subprocess.run(["docker", "exec", WSNAME, "adb", "connect", f"127.0.0.1:{port}"], capture_output=True, timeout=20)
+            r = adb(port, ["shell", "getprop", "sys.boot_completed"], 20)
+            if (r.stdout or b"").strip() == b"1": break
+        except Exception: pass
         time.sleep(5)
     for _ in range(6):
         subprocess.run(["docker", "exec", WSNAME, "adb", "connect", f"127.0.0.1:{port}"], capture_output=True, timeout=20)
@@ -756,8 +760,7 @@ class H(BaseHTTPRequestHandler):
             if not cont: return self.send_json(409, {"error": "Không xác định được máy."})
             jid = new_job(me["uid"], "Khởi động lại")
             def work(j):
-                subprocess.run(["docker", "exec", WSNAME, "adb", "disconnect", f"127.0.0.1:{port}"], capture_output=True, timeout=20)
-                r = subprocess.run(["docker", "restart", cont], capture_output=True, timeout=120)
+                r = subprocess.run(["python3", os.path.join(HOME, "phonectl.py"), "restart", cont], capture_output=True, timeout=120)
                 if r.returncode: raise RuntimeError("Không khởi động lại được: " + out(r)[-200:])
                 JOBS[j]["msg"] = "Đang khởi động Android (1–3 phút)…"
                 return "Máy đã khởi động lại xong." if wait_ready(cont, port) else "Máy đã khởi động, đang kết nối lại…"
@@ -783,7 +786,7 @@ class H(BaseHTTPRequestHandler):
         q = {k: v[0] for k, v in urllib.parse.parse_qs(u.query).items()}
         if (self.headers.get("Upgrade") or "").lower() == "websocket":
             origin = self.headers.get("Origin", "")
-            if origin and origin != SELF_ORIGIN: return self.deny(403, "Nguồn không được phép.")
+            if origin and origin not in SELF_ORIGINS: return self.deny(403, "Nguồn không được phép.")
             if not auth: return self.deny(401, "Hãy mở máy từ trang blueroblox.shop.")
             if not auth.get("a"):
                 if maint().get("maint"): return self.deny(503, "Đang bảo trì.")
@@ -813,7 +816,7 @@ class H(BaseHTTPRequestHandler):
         for k, v in r.getheaders():
             if k.lower() not in HOP | {"content-length"} and not (html and k.lower() in ("cache-control", "etag", "last-modified")): self.send_header(k, v)
         if html:
-            self.send_header("Content-Security-Policy", "frame-ancestors " + " ".join(sorted(ORIGINS | {SELF_ORIGIN})))
+            self.send_header("Content-Security-Policy", "frame-ancestors " + " ".join(sorted(ORIGINS | SELF_ORIGINS)))
             self.send_header("Cache-Control", "no-store")
             if r.status == 200:
                 m = re.search(rb"<head[^>]*>", body, re.I)
@@ -892,5 +895,5 @@ if __name__ == "__main__":
     for f in os.listdir(UP_DIR):          # dọn file tải dở từ lần chạy trước
         try: os.remove(os.path.join(UP_DIR, f))
         except OSError: pass
-    log(f"cpapi chạy ở {LISTEN[0]}:{LISTEN[1]} → bảo vệ ws-scrcpy {UPSTREAM[1]}, trang chủ {SELF_ORIGIN}")
+    log(f"cpapi chạy ở {LISTEN[0]}:{LISTEN[1]} → bảo vệ ws-scrcpy {UPSTREAM[1]}, trang chủ {SELF_ORIGIN}" + (f", đường thẳng {FAST_ORIGIN}" if FAST_ORIGIN else ""))
     Server(LISTEN, H).serve_forever()

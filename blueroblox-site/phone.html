@@ -442,7 +442,22 @@ const SRV = [
 ];
 const srv = m => { m = String(m ?? ""); if (LANG !== "en") return m; for (const [re, en] of SRV) if (re.test(m)) return m.replace(re, en); return m; };
 const CFG = { supabaseUrl: "https://nprftgodswlpzomcttal.supabase.co", supabaseAnonKey: "sb_publishable_qfNcnOMv70nq5LIlYXDJzg_UtdWHVze" };
-const PHONE = "https://phone.blueroblox.shop", API = PHONE + "/cpapi";
+/* Đường truyền: ưu tiên "đường thẳng" về máy chủ (fast, ít trễ); không tới được thì tự dùng Cloudflare (phone). */
+const CF_PHONE = "https://phone.blueroblox.shop", FAST_PHONE = "https://fast.blueroblox.shop:8443";
+let PHONE = CF_PHONE, API = PHONE + "/cpapi", ROUTE = "cf";
+function setRoute(r) { ROUTE = r; PHONE = r === "fast" ? FAST_PHONE : CF_PHONE; API = PHONE + "/cpapi"; }
+async function pickRoute() {
+  const want = new URLSearchParams(location.search).get("route") || store.get("cp_route") || "auto";
+  if (want === "cf") return setRoute("cf");
+  const ac = new AbortController(), t = setTimeout(() => ac.abort(), 1800);
+  try { await fetch(FAST_PHONE + "/__cp/inject.js?v=probe", { mode: "no-cors", cache: "no-store", signal: ac.signal }); setRoute("fast"); }
+  catch (e) { setRoute("cf"); }
+  clearTimeout(t);
+}
+async function fallbackCF() {     // đường thẳng rớt → chuyển sang Cloudflare (mở phiên ở đó rồi nối lại)
+  if (ROUTE !== "fast") return;
+  setRoute("cf"); try { await openSession(); } catch (e) {}
+}
 const CHUNK = 8 * 1024 * 1024;
 const KEYNAME = { 4: "back", 3: "home", 187: "recents", 24: "volup", 25: "voldown", 26: "power" };
 const ZOOMS = [0.5, 0.67, 0.8, 1, 1.25, 1.5, 1.75, 2, 2.5];
@@ -557,6 +572,7 @@ class Conn {
   arm(ms) { clearTimeout(this.t); this.t = setTimeout(() => this.retry(L("Không nhận được hình", "No video received")), ms); }
   retry(why) {
     clearTimeout(this.t); this.ok = false; this.fails++;
+    if (ROUTE === "fast" && this.fails >= 2) { this.fails = 0; fallbackCF().finally(() => this.p && this.open(this.p, this.q)); return; }
     if (!this.raw && this.fails >= 2) this.raw = true;       // tối ưu không chạy được → dùng chế độ gốc (như bản đầu)
     if (this.tries >= 5) {          // hết lượt → báo lỗi, rồi cứ 15 giây tự thử lại (máy chủ vừa khởi động lại thì tự lên hình)
       this.h.fail && this.h.fail(why);
@@ -599,7 +615,7 @@ class Conn {
   }
 }
 addEventListener("message", e => {
-  if (e.origin !== PHONE || !e.data || !e.data.cp) return;
+  if ((e.origin !== CF_PHONE && e.origin !== FAST_PHONE) || !e.data || !e.data.cp) return;
   for (const c of CONNS) if (c.f.contentWindow === e.source) { c.msg(e.data); break; }
 });
 async function pressKey(conn, p, code) {
@@ -649,7 +665,7 @@ window.cpApp = {
 /* ---------- 1 máy ---------- */
 const main = new Conn($("scr"), $("veil"), {
   connecting(n, raw) { setState("wait", n ? L("Đang kết nối lại…", "Reconnecting…") : L("Đang kết nối…", "Connecting…")); veil(true, n ? L(`Đang kết nối lại (lần ${n})…`, `Reconnecting (attempt ${n})…`) : L("Đang mở màn hình máy…", "Opening the phone screen…"), n ? (raw ? L("Chuyển sang chế độ hình gốc cho chắc chắn…", "Switching to basic video mode to be safe…") : L("Hình bị gián đoạn, đang tự nối lại.", "The video was interrupted, reconnecting automatically.")) : ""); },
-  ok() { veil(false); setState("ok", L("Đang chạy", "Running")); },
+  ok() { veil(false); setState("ok", L("Đang chạy", "Running") + (ROUTE === "fast" ? L(" · đường thẳng ⚡", " · direct ⚡") : "")); },
   progress(txt) { if (!$("veil").hidden) $("veild").textContent = txt; },
   fail(why) { setState("bad", L("Không kết nối được", "Can't connect")); veil(true, why || L("Không kết nối được màn hình", "Can't connect to the screen"), L("Trang tự thử lại sau 15 giây. Nếu vẫn không lên hình, hãy khởi động lại máy.", "Retrying automatically in 15 seconds. If it still won't show, restart the phone.") + '<br><button class="btn sm" id="vretry">' + L("Thử lại ngay", "Retry now") + '</button> <button class="btn sm gh" id="vreboot">' + L("Khởi động lại máy", "Restart phone") + '</button>', false); const b = $("vretry"); if (b) b.onclick = () => { main.tries = 0; main.fails = 0; main.raw = false; main.open(cur, quality); }; const rb = $("vreboot"); if (rb) rb.onclick = () => ACT.reboot(); },
   size() { try { if (cur && main.size) localStorage.setItem("cp_sz_" + cur.id + "_" + cur.res, main.size[0] + "x" + main.size[1]); } catch (e) {} fit(); info(); }, stat: () => info(),
@@ -1316,7 +1332,10 @@ applyStatic();
   if (!session) { setState("bad", L("Chưa đăng nhập", "Not signed in")); veil(true, L("Bạn chưa đăng nhập", "You're not signed in"), L('<a href="/">Về cửa hàng để đăng nhập</a>, rồi bấm “Điều khiển” trên máy của bạn.', '<a href="/">Go to the store to sign in</a>, then tap “Control” on your phone.'), false); return; }
   token = session.access_token; me = session.user;
   sb.auth.onAuthStateChange((_e, s) => { if (s) token = s.access_token; });
-  try { const s = await api("session", { method: "POST", json: {} }); if (s.admin) $("adminlink").hidden = false; }
+  await pickRoute();
+  let s0 = null;
+  try { s0 = await api("session", { method: "POST", json: {} }); } catch (e) { if (ROUTE === "fast") setRoute("cf"); }
+  try { const s = s0 || await api("session", { method: "POST", json: {} }); if (s.admin) $("adminlink").hidden = false; }
   catch (e) { setState("bad", L("Không kết nối được server", "Can't reach server")); veil(true, L("Không kết nối được máy chủ điện thoại", "Can't connect to the phone server"), esc(e.message) + '<br><a href="">' + L("Tải lại trang", "Reload page") + '</a>', false); return; }
   const p = await loadPhones(); loadBilling().catch(() => {});
   if (store.get("cp_view") === "multi" && phones.filter(x => x.status === "active").length > 1 && !new URLSearchParams(location.search).get("id")) { cur = p; renderHead(); setView("multi"); }

@@ -202,6 +202,15 @@ public class MainActivity extends Activity {
         head.addView(rf, Ui.wrap());
         body.addView(head, Ui.fill());
 
+        // Nhập mã chia sẻ / chuyển nhượng
+        LinearLayout cr = Ui.row(this, 8);
+        EditText code = Ui.input(this, Ui.L("🔑 Có mã chia sẻ? Nhập vào đây", "🔑 Have a share code? Enter it"), InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS);
+        cr.addView(code, Ui.weight(1));
+        Button cb = Ui.button(this, Ui.L("Nhập mã", "Redeem"), Ui.GHOST);
+        cb.setOnClickListener(v -> claim(code, cb));
+        cr.addView(cb, Ui.wrap());
+        body.addView(cr, Ui.fill());
+
         if (phones.length() == 0) {
             LinearLayout e = Ui.card(this);
             e.setGravity(Gravity.CENTER_HORIZONTAL);
@@ -257,6 +266,12 @@ public class MainActivity extends Activity {
             c.addView(Ui.text(this, Ui.L("Máy đang bị khoá", "This phone is locked") + (why.isEmpty() || why.equals("null") ? "" : ": " + why), 13, Ui.BAD, false), Ui.fill());
         }
         if ("pending".equals(st)) c.addView(Ui.muted(this, Ui.L("Máy đang khởi động và cài app sẵn, khoảng 2–3 phút. Trang tự cập nhật.", "Booting and installing apps, about 2–3 minutes.")), Ui.fill());
+        boolean shared = p.optBoolean("shared", false);
+        if (shared) {
+            long se = parseTime(p.optString("share_expires", ""));
+            c.addView(Ui.text(this, "👥 " + Ui.L("Được chia sẻ bởi ", "Shared by ") + p.optString("owner_name", "?")
+                    + (se > 0 ? Ui.L(" · đến ", " · until ") + fdate(se) : Ui.L(" · theo hạn máy", " · until expiry")), 13, Ui.SKY, false), Ui.fill());
+        }
 
         LinearLayout acts = Ui.row(this, 8);
         Button ctl = Ui.button(this, "▶ " + Ui.L("Điều khiển", "Control"), Ui.PRIMARY);
@@ -265,12 +280,22 @@ public class MainActivity extends Activity {
         ctl.setAlpha(canCtl ? 1f : .45f);
         ctl.setOnClickListener(v -> startActivity(new Intent(this, ControlActivity.class).putExtra("id", p.optString("id"))));
         acts.addView(ctl, Ui.weight(1.4f));
+        if (shared) {
+            Button lv = Ui.button(this, "🚪 " + Ui.L("Rời máy", "Leave"), Ui.GHOST);
+            lv.setOnClickListener(v -> Ui.confirm(this, Ui.L("Rời máy này?", "Leave this phone?"),
+                    Ui.L("Bạn sẽ không điều khiển được máy này nữa (chủ máy có thể chia sẻ lại).", "You will lose access (the owner can share it again)."),
+                    Ui.L("Rời máy", "Leave"), () -> Api.bg(() -> Api.rpc("cp_share_revoke", new JSONObject().put("p_id", p.optString("share_id"))),
+                            r -> { Ui.toast(this, Ui.L("Đã rời máy.", "You left the phone.")); refresh(); }, msg -> Ui.toast(this, msg))));
+            acts.addView(lv, Ui.weight(1));
+            c.addView(acts, Ui.fill());
+            return c;
+        }
         Button rn = Ui.button(this, Ui.L("Gia hạn", "Renew"), Ui.GHOST);
         rn.setOnClickListener(v -> renew(p));
         rn.setEnabled(!lk && ("active".equals(st) || "expired".equals(st)));
         acts.addView(rn, Ui.weight(1));
         Button more = Ui.button(this, "⋯", Ui.GHOST);
-        more.setOnClickListener(v -> rename(p));
+        more.setOnClickListener(v -> moreMenu(p));
         acts.addView(more, Ui.wrap());
         c.addView(acts, Ui.fill());
         return c;
@@ -326,6 +351,127 @@ public class MainActivity extends Activity {
             }, m -> { ok.setEnabled(true); Ui.toast(this, m); });
         });
         draw.run();
+        d.show();
+    }
+
+    void moreMenu(JSONObject p) {
+        LinearLayout c = Ui.col(this, 10);
+        Button sh = Ui.button(this, "👥 " + Ui.L("Chia sẻ / chuyển nhượng", "Share / transfer"), Ui.GHOST);
+        Button rn = Ui.button(this, "✏️ " + Ui.L("Đổi tên", "Rename"), Ui.GHOST);
+        boolean canShare = ("active".equals(p.optString("status")) || "pending".equals(p.optString("status"))) && !locked(p);
+        sh.setEnabled(canShare); sh.setAlpha(canShare ? 1f : .45f);
+        c.addView(sh, Ui.fill()); c.addView(rn, Ui.fill());
+        Dialog d = Ui.sheet(this, p.optString("name"), c);
+        sh.setOnClickListener(v -> { d.dismiss(); share(p); });
+        rn.setOnClickListener(v -> { d.dismiss(); rename(p); });
+        d.show();
+    }
+
+    void claim(EditText code, Button b) {
+        String s = code.getText().toString().toUpperCase(Locale.US).replaceAll("[^A-Z0-9]", "");
+        if (s.length() < 6) { Ui.toast(this, Ui.L("Nhập mã gồm 8 ký tự.", "Enter the 8-character code.")); return; }
+        b.setEnabled(false);
+        Api.bg(() -> Api.rpc("cp_share_claim", new JSONObject().put("p_code", s)), r -> {
+            b.setEnabled(true);
+            JSONObject o = r instanceof JSONObject ? (JSONObject) r : new JSONObject();
+            Ui.toast(this, "transfer".equals(o.optString("kind")) ? Ui.L("🎉 Máy \"" + o.optString("name") + "\" giờ là của bạn!", "🎉 \"" + o.optString("name") + "\" is now yours!")
+                    : Ui.L("✓ Đã thêm máy \"" + o.optString("name") + "\" được chia sẻ cho bạn.", "✓ \"" + o.optString("name") + "\" was shared with you."));
+            refresh();
+        }, msg -> { b.setEnabled(true); Ui.toast(this, msg); });
+    }
+
+    private void copyCode(String code) {
+        android.content.ClipboardManager cm = (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+        if (cm != null) cm.setPrimaryClip(android.content.ClipData.newPlainText("code", code));
+        Ui.toast(this, Ui.L("Đã copy mã: ", "Copied: ") + code);
+    }
+
+    private View codeBox(String code, String note) {
+        LinearLayout b = Ui.card(this);
+        LinearLayout r = Ui.row(this, 10);
+        TextView t = Ui.text(this, code, 24, Ui.FG, true);
+        t.setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD);
+        t.setLetterSpacing(.15f);
+        r.addView(t, Ui.weight(1));
+        Button cp = Ui.button(this, "📋 Copy", Ui.PRIMARY);
+        cp.setOnClickListener(v -> copyCode(code));
+        r.addView(cp, Ui.wrap());
+        b.addView(r, Ui.fill());
+        b.addView(Ui.muted(this, note), Ui.fill());
+        return b;
+    }
+
+    void share(JSONObject p) {
+        LinearLayout c = Ui.col(this, 12);
+        c.addView(Ui.h2(this, Ui.L("Chia sẻ dùng chung", "Share access")));
+        c.addView(Ui.muted(this, Ui.L("Người nhập mã được điều khiển máy như bạn (không gia hạn, huỷ hay chia sẻ tiếp được). Mỗi mã cho 1 người, thu hồi lúc nào cũng được.",
+                "Whoever enters the code can control this phone like you (not renew, cancel or re-share). One code per person; revoke any time.")));
+        final int[] days = {7};
+        Ui.Wrap w = new Ui.Wrap(this, 8);
+        int[] opts = {1, 3, 7, 30, 0};
+        for (int d : opts) {
+            TextView ch = Ui.chip(this, d == 0 ? Ui.L("Theo hạn máy", "Until expiry") : d + Ui.L(" ngày", "d"), d == days[0]);
+            ch.setTag(d);
+            ch.setOnClickListener(v -> { days[0] = (int) v.getTag(); for (int i = 0; i < w.getChildCount(); i++) Ui.setChip((TextView) w.getChildAt(i), (int) w.getChildAt(i).getTag() == days[0]); });
+            w.addView(ch);
+        }
+        c.addView(w, Ui.fill());
+        Button mk = Ui.button(this, Ui.L("Tạo mã chia sẻ", "Create share code"), Ui.PRIMARY);
+        c.addView(mk, Ui.fill());
+        LinearLayout newBox = Ui.col(this, 8), list = Ui.col(this, 8);
+        c.addView(newBox, Ui.fill()); c.addView(list, Ui.fill());
+
+        c.addView(Ui.h2(this, Ui.L("Chuyển nhượng máy", "Transfer ownership")));
+        c.addView(Ui.muted(this, Ui.L("Người nhập mã thành chủ mới của máy (giữ nguyên hạn còn lại và dữ liệu). Bạn sẽ mất máy này, mọi chia sẻ cũ bị huỷ.",
+                "Whoever enters the code becomes the new owner (time left and data are kept). You lose this phone; all shares are cancelled.")));
+        Button tr = Ui.button(this, Ui.L("Tạo mã chuyển nhượng", "Create transfer code"), Ui.DANGER);
+        c.addView(tr, Ui.fill());
+        LinearLayout trBox = Ui.col(this, 8);
+        c.addView(trBox, Ui.fill());
+
+        Runnable[] load = new Runnable[1];
+        load[0] = () -> Api.bg(() -> Api.rpc("cp_share_list", new JSONObject().put("p_phone", p.optString("id"))), r -> {
+            list.removeAllViews();
+            JSONArray a = r instanceof JSONArray ? (JSONArray) r : new JSONArray();
+            if (a.length() > 0) list.addView(Ui.muted(this, Ui.L("Mã đang hoạt động (", "Active codes (") + a.length() + ")"));
+            for (int i = 0; i < a.length(); i++) {
+                JSONObject s = a.optJSONObject(i);
+                LinearLayout row = Ui.row(this, 8);
+                long se = parseTime(s.optString("expires_at", ""));
+                String u = s.optString("user", ""); boolean used = !u.isEmpty() && !u.equals("null");
+                row.addView(Ui.text(this, s.optString("code") + "\n" + (used ? "👤 " + u : Ui.L("Chưa ai dùng", "Not used yet"))
+                        + (se > 0 ? Ui.L(" · đến ", " · until ") + fdate(se) : Ui.L(" · theo hạn máy", " · until expiry")), 13, Ui.FG, false), Ui.weight(1));
+                Button rv = Ui.button(this, used ? Ui.L("Thu hồi", "Revoke") : Ui.L("Huỷ mã", "Cancel"), Ui.DANGER);
+                rv.setOnClickListener(v -> Api.bg(() -> Api.rpc("cp_share_revoke", new JSONObject().put("p_id", s.optString("id"))),
+                        x -> { Ui.toast(this, Ui.L("Đã thu hồi.", "Revoked.")); load[0].run(); }, msg -> Ui.toast(this, msg)));
+                row.addView(rv, Ui.wrap());
+                list.addView(row, Ui.fill());
+            }
+        }, msg -> { list.removeAllViews(); list.addView(Ui.text(this, msg, 13, Ui.BAD, false)); });
+
+        mk.setOnClickListener(v -> {
+            mk.setEnabled(false);
+            Api.bg(() -> Api.rpc("cp_share_create", new JSONObject().put("p_phone", p.optString("id")).put("p_kind", "share").put("p_days", days[0] == 0 ? JSONObject.NULL : days[0])), r -> {
+                mk.setEnabled(true);
+                String code = r instanceof JSONObject ? ((JSONObject) r).optString("code") : "";
+                newBox.removeAllViews();
+                newBox.addView(codeBox(code, Ui.L("Gửi mã cho người cần dùng. Họ vào app hoặc blueroblox.shop → ĐT đám mây → nhập mã.",
+                        "Send this code. They open the app or blueroblox.shop → Cloud phones → enter the code.")), Ui.fill());
+                load[0].run();
+            }, msg -> { mk.setEnabled(true); Ui.toast(this, msg); });
+        });
+        tr.setOnClickListener(v -> Ui.confirm(this, Ui.L("Tạo mã chuyển nhượng?", "Create transfer code?"),
+                Ui.L("Ai nhập mã này sẽ thành chủ máy \"" + p.optString("name") + "\", bạn mất máy. Mã chuyển nhượng cũ (nếu có) bị huỷ.",
+                        "Whoever enters it becomes the owner of \"" + p.optString("name") + "\". Any older transfer code is cancelled."),
+                Ui.L("Tạo mã", "Create"), () -> Api.bg(() -> Api.rpc("cp_share_create", new JSONObject().put("p_phone", p.optString("id")).put("p_kind", "transfer").put("p_days", JSONObject.NULL)), r -> {
+                    String code = r instanceof JSONObject ? ((JSONObject) r).optString("code") : "";
+                    trBox.removeAllViews();
+                    trBox.addView(codeBox(code, Ui.L("Chỉ đưa mã sau khi đã nhận tiền. Muốn huỷ: tạo mã chuyển nhượng mới (mã cũ mất hiệu lực).",
+                            "Only hand this over after you've been paid. To cancel, create a new transfer code.")), Ui.fill());
+                }, msg -> Ui.toast(this, msg))));
+        Dialog d = Ui.sheet(this, "👥 " + p.optString("name"), c);
+        d.setOnDismissListener(x -> refresh());
+        load[0].run();
         d.show();
     }
 

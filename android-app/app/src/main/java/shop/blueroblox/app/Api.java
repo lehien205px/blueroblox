@@ -213,8 +213,17 @@ public final class Api {
         return a.length() > 0 ? a.getJSONObject(0) : new JSONObject();
     }
 
+    /** Máy của tôi + máy người khác chia sẻ cho tôi (có "shared": true, "owner_name", "share_id"). */
     public static JSONArray phones() throws Exception {
-        return (JSONArray) get("cloud_phones?user_id=eq." + uid + "&status=in.(active,pending,expired,error)&order=created_at.asc&select=*");
+        JSONArray own = (JSONArray) get("cloud_phones?user_id=eq." + uid + "&status=in.(active,pending,expired,error)&order=created_at.asc&select=*");
+        try {
+            Object sh = rpc("cp_shared_with_me", new JSONObject());
+            if (sh instanceof JSONArray) {
+                JSONArray s = (JSONArray) sh;
+                for (int i = 0; i < s.length(); i++) own.put(s.getJSONObject(i));
+            }
+        } catch (Exception ignored) { }        // máy chủ chưa chạy SQL v9 → bỏ qua
+        return own;
     }
 
     public static JSONObject pricing() throws Exception {
@@ -286,6 +295,15 @@ public final class Api {
                 {"BAD_FPS", "FPS ngoài giới hạn.", "FPS out of range."},
                 {"BAD_RES", "Độ phân giải không hợp lệ.", "Invalid resolution."},
                 {"BAD_QTY", "Số lượng không hợp lệ.", "Invalid quantity."},
+                {"OUT_OF_STOCK", "Đã hết hàng.", "Sold out."},
+                {"BAD_CODE", "Mã không đúng, đã bị huỷ hoặc đã hết hạn.", "Wrong, cancelled or expired code."},
+                {"CODE_USED", "Mã này đã có người dùng rồi.", "This code has already been used."},
+                {"OWN_PHONE", "Đây là máy của chính bạn.", "This is your own phone."},
+                {"ALREADY_SHARED", "Bạn đã được chia sẻ máy này rồi.", "This phone is already shared with you."},
+                {"SHARE_LIMIT", "Máy đã có quá nhiều mã chia sẻ (tối đa 20).", "Too many share codes (max 20)."},
+                {"PHONE_NOT_ACTIVE", "Máy phải đang chạy mới chia sẻ được.", "The phone must be running to share it."},
+                {"NOT_ALLOWED", "Bạn không có quyền làm việc này.", "Not allowed."},
+                {"cp_share", "Tính năng chia sẻ chưa bật trên máy chủ.", "Sharing is not enabled yet."},
         };
         for (String[] k : map) if (m.contains(k[0])) return Ui.L(k[1], k[2]);
         return m.isEmpty() ? Ui.L("Có lỗi, thử lại.", "Something went wrong.") : m;

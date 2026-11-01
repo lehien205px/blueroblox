@@ -129,20 +129,28 @@ fi
 
 # 9) ưu tiên luồng hình: khi game nặng (Roblox…) ngốn hết CPU, phần vẽ màn hình + nén hình + nhận chạm vẫn được chạy trước
 #    → khách điều khiển vẫn mượt, game chỉ giảm FPS một chút. Đặt độ ưu tiên -10 cho mọi luồng của các tiến trình này.
-python3 - <<'PYEOF' 2>/dev/null
+python3 - <<'PYEOF'
 import os
-PATS = (b"com.genymobile.scrcpy", b"/system/bin/surfaceflinger", b"android.hardware.media.omx", b"media.swcodec", b"media.codec")
+HIGH = (b"com.genymobile.scrcpy", b"android.hardware.media.omx", b"media.swcodec", b"mediaswcodec")   # gửi hình + nén hình + nhận chạm
+LOW = (b"com.roblox",)                                                                               # game nặng: nhường CPU cho luồng hình
+nh = nl = 0
 for pid in os.listdir("/proc"):
     if not pid.isdigit(): continue
-    try: cl = open(f"/proc/{pid}/cmdline", "rb").read()
+    try: cl = open(f"/proc/{pid}/cmdline", "rb").read().split(b"\0")[0:3]
     except OSError: continue
-    if not any(p in cl for p in PATS): continue
+    cl = b" ".join(cl)
+    want = -10 if any(p in cl for p in HIGH) else 8 if any(cl.startswith(p) for p in LOW) else None
+    if want is None: continue
     try: tids = os.listdir(f"/proc/{pid}/task")
     except OSError: continue
     for t in tids:
         try:
-            if os.getpriority(os.PRIO_PROCESS, int(t)) > -10: os.setpriority(os.PRIO_PROCESS, int(t), -10)
+            if os.getpriority(os.PRIO_PROCESS, int(t)) != want:
+                os.setpriority(os.PRIO_PROCESS, int(t), want)
+                if want < 0: nh += 1
+                else: nl += 1
         except OSError: pass
+if nh or nl: print(f"ưu tiên luồng hình: +{nh} luồng lên trước, {nl} luồng game nhường")
 PYEOF
 
 [ "$fixed" = 0 ] && echo "✓ Mọi thứ bình thường"

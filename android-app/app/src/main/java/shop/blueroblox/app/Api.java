@@ -293,6 +293,7 @@ public final class Api {
                 {"BAD_CPU", "CPU ngoài giới hạn.", "CPU out of range."},
                 {"BAD_DAYS", "Số ngày ngoài giới hạn.", "Days out of range."},
                 {"BAD_FPS", "FPS ngoài giới hạn.", "FPS out of range."},
+                {"FPS_TOO_HIGH", "Máy dưới 4 nhân chỉ chọn tối đa 60 FPS.", "Under 4 cores: max 60 FPS."},
                 {"BAD_RES", "Độ phân giải không hợp lệ.", "Invalid resolution."},
                 {"BAD_QTY", "Số lượng không hợp lệ.", "Invalid quantity."},
                 {"OUT_OF_STOCK", "Đã hết hàng.", "Sold out."},

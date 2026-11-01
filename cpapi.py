@@ -162,20 +162,37 @@ def lock_text(p):
     return "Máy đang bị khoá" + (when or " vĩnh viễn") + (": " + p["lock_reason"] if p.get("lock_reason") else "") + ". Liên hệ hỗ trợ nếu cần."
 
 
+_scache = {}
+def share_users(pid):
+    """Người đang được chủ máy chia sẻ quyền điều khiển (bảng cloud_phone_shares, SQL v9). Chưa chạy v9 → rỗng."""
+    now = time.time(); c = _scache.get(pid)
+    if c and c[1] > now: return c[0]
+    try:
+        rows = sb_get(f"/rest/v1/cloud_phone_shares?phone_id=eq.{pid}&kind=eq.share&revoked=is.false&grantee_id=not.is.null"
+                      f"&select=grantee_id,expires_at") or []
+        users = {r["grantee_id"] for r in rows if not r.get("expires_at") or datetime_parse(r["expires_at"]) > now}
+    except Exception:
+        users = set()
+    if len(_scache) > 5000: _scache.clear()
+    _scache[pid] = (users, now + 20)
+    return users
+
+
 def phone_of(me, pid):
     if not UUID.match(pid or ""): return None
     rows = sb_get(f"/rest/v1/cloud_phones?id=eq.{pid}&select=*") or []
     if not rows: return None
     p = rows[0]
-    if not me["admin"] and p.get("user_id") != me["uid"]: return None
+    if not me["admin"] and p.get("user_id") != me["uid"] and me["uid"] not in share_users(pid): return None
     return p
 
 
 def port_owners(port):
     now = time.time(); c = _pcache.get(port)
     if c and c[1] > now: return c[0]
-    rows = sb_get(f"/rest/v1/cloud_phones?port=eq.{int(port)}&status=eq.active&locked=is.false&select=user_id") or []
+    rows = sb_get(f"/rest/v1/cloud_phones?port=eq.{int(port)}&status=eq.active&locked=is.false&select=id,user_id") or []
     owners = {r["user_id"] for r in rows}
+    for r in rows: owners |= share_users(r["id"])          # người được chia sẻ cũng xem/điều khiển được
     _pcache[port] = (owners, now + 20)
     return owners
 

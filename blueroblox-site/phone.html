@@ -321,6 +321,7 @@ body.focus .exitfocus{display:block}
       <h6>Tệp &amp; ứng dụng</h6>
       <button class="tb" data-act="upload"><svg class="ic" viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v4h16v-4"/></svg>Tải file / APK</button>
       <button class="tb" data-act="fromurl"><svg class="ic" viewBox="0 0 24 24"><path d="M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 00-5.7 0l-3 3a4 4 0 005.7 5.7l1-1"/></svg>Cài từ link</button>
+      <button class="tb" data-act="store"><svg class="ic" viewBox="0 0 24 24"><path d="M4 7h16l-1.5 12a2 2 0 01-2 1.8h-9a2 2 0 01-2-1.8L4 7z"/><path d="M9 10V6a3 3 0 016 0v4"/></svg>Kho ứng dụng</button>
       <button class="tb" data-act="apps"><svg class="ic" viewBox="0 0 24 24"><rect x="4" y="4" width="6" height="6" rx="1.5"/><rect x="14" y="4" width="6" height="6" rx="1.5"/><rect x="4" y="14" width="6" height="6" rx="1.5"/><rect x="14" y="14" width="6" height="6" rx="1.5"/></svg>Ứng dụng</button>
       <button class="tb" data-act="text"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 10h.01M11 10h.01M15 10h.01M7 14h10"/></svg>Dán chữ</button>
       <button class="tb" data-act="copyout"><svg class="ic" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 00-1-1H5a1 1 0 00-1 1v10a1 1 0 001 1h3"/></svg>Copy từ máy</button>
@@ -382,7 +383,7 @@ const EN = {
   "Âm thanh": "Sound", "Tăng âm": "Volume up", "Giảm âm": "Volume down", "Màn hình": "Display", "Chất lượng": "Quality", "FPS & độ nét": "FPS & resolution",
   "Xoay": "Rotate", "Chụp màn": "Screenshot", "Toàn màn": "Full screen", "Tải lại hình": "Reload video", "Tệp & ứng dụng": "Files & apps",
   "Tải file / APK": "Upload file / APK", "Cài từ link": "Install from link", "Ứng dụng": "Apps", "Dán chữ": "Paste text", "Copy từ máy": "Copy from phone",
-  "Mở web": "Open website", "Lỗi Google": "Google sign-in", "Máy": "Phone", "Khởi động lại": "Restart", "Root máy": "Root phone", "Điều hướng nhanh": "Quick navigation", "Thoát toàn màn": "Exit full screen",
+  "Mở web": "Open website", "Lỗi Google": "Google sign-in", "Máy": "Phone", "Khởi động lại": "Restart", "Root máy": "Root phone", "Kho ứng dụng": "App store", "Điều hướng nhanh": "Quick navigation", "Thoát toàn màn": "Exit full screen",
   "Thả file vào đây": "Drop files here", "File APK sẽ tự cài · file khác lưu vào thư mục Download": "APK files install automatically · other files go to the Download folder",
   "Đóng": "Close", "Gửi": "Send", "📋 Máy ảo vừa copy": "📋 The cloud phone just copied", "Copy về máy tôi": "Copy to my device", "Ẩn": "Hide",
 };
@@ -1123,6 +1124,20 @@ const ACT = {
         const item = trayItem(u.split("/").pop().slice(0, 60) || L("Tải từ link", "From link"), 0); item.msg(L("Đang gửi yêu cầu…", "Sending request…"));
         try { const j = await api(cur.id + "/fromurl", { method: "POST", json: { url: u } }); pollJob(j.job, item); } catch (e) { item.fail(e.message); } } });
   },
+  async store() {
+    const PLAY = [["com.android.chrome", "Google Chrome", "🌐"], ["org.mozilla.firefox", "Firefox", "🦊"], ["com.roblox.client", "Roblox", "🟥"], ["com.discord", "Discord", "💬"],
+      ["org.telegram.messenger", "Telegram", "✈️"], ["com.zing.zalo", "Zalo", "💙"], ["com.facebook.katana", "Facebook", "📘"], ["com.facebook.orca", "Messenger", "💭"],
+      ["com.zhiliaoapp.musically", "TikTok", "🎵"], ["com.google.android.youtube", "YouTube", "▶️"], ["com.whatsapp", "WhatsApp", "🟢"], ["com.termux", "Termux", "⌨️"]];
+    ask({ title: L("🛍️ Kho ứng dụng", "🛍️ App store"), desc: L("Cài nhanh app có sẵn trên server (không cần tải về), hoặc mở trang app trên Google Play trong máy.", "Install ready-made apps from the server in one tap, or open the app's Google Play page on the phone."),
+      body: '<div class="apps" id="storelist"><div class="spin" style="margin:16px auto"></div></div>', noOk: true });
+    const play = (inst) => `<h4 style="margin:14px 0 6px">${L("Từ Google Play (đăng nhập Google trong máy)", "From Google Play (sign in to Google on the phone)")}</h4>` + PLAY.map(([p, n, i]) =>
+      `<div class="app"><span>${i} ${esc(n)}${inst.has(p) ? ` <small style="color:var(--ok)">✓ ${L("đã cài", "installed")}</small>` : ""}</span>${inst.has(p) ? `<button class="btn sm gh" data-app="launch" data-pkg="${p}">${L("Mở", "Open")}</button>` : `<button class="btn sm" data-play="${p}">${L("Mở CH Play", "Open Play")}</button>`}</div>`).join("");
+    try {
+      const { files, installed } = await api(cur.id + "/store"); const inst = new Set(installed || []);
+      $("storelist").innerHTML = (files.length ? `<h4 style="margin:4px 0 6px">${L("Có sẵn — cài 1 chạm", "Ready to install — one tap")}</h4>` + files.map(f =>
+        `<div class="app"><span title="${esc(f.name)}">📦 ${esc(f.name.replace(/\.(apk|apks|apkm|xapk)$/i, ""))} <small>${(f.size / 1048576).toFixed(0)}MB</small></span><button class="btn sm" data-store="${esc(f.name)}">${L("Cài", "Install")}</button></div>`).join("") : "") + play(inst);
+    } catch (e) { $("storelist").innerHTML = `<p style="color:var(--bad)">${esc(e.message)}</p>` + play(new Set()); }
+  },
   async apps() {
     ask({ title: L("Ứng dụng đã cài", "Installed apps"), desc: L("Ứng dụng bạn tự cài thêm trên máy.", "Apps you installed on the phone."), body: '<div class="apps" id="applist"><div class="spin" style="margin:16px auto"></div></div>', noOk: true });
     try {
@@ -1201,6 +1216,11 @@ const ACT = {
       } });
   },
 };
+document.addEventListener("click", async e => {
+  const st = e.target.closest("[data-store]"), pl = e.target.closest("[data-play]");
+  if (pl) { try { await api(cur.id + "/play", { method: "POST", json: { pkg: pl.dataset.play } }); toast(L("Đã mở CH Play trong máy — bấm Cài đặt trên màn hình máy.", "Opened Play Store on the phone — tap Install there.")); } catch (er) { toast(er.message, 1); } return; }
+  if (st) { st.disabled = true; try { const j = await api(cur.id + "/store", { method: "POST", json: { name: st.dataset.store } }); const item = trayItem(L("Cài ", "Install ") + st.dataset.store, 0); await pollJob(j.job, item); st.textContent = "✓"; } catch (er) { toast(er.message, 1); st.disabled = false; } return; }
+}, true);
 document.addEventListener("click", async e => {
   const b = e.target.closest("[data-app]"); if (!b) return;
   const act = b.dataset.app, pkg = b.dataset.pkg;

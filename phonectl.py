@@ -507,8 +507,10 @@ def su_install(name):
         sh(["docker", "exec", name, "/system/bin/sh", "-c", "chown 0:0 /system/xbin/su /system/xbin/cpsud; chmod 755 /system/xbin/su /system/xbin/cpsud; "
             "[ -e /system/bin/su ] || ln -s /system/xbin/su /system/bin/su 2>/dev/null; true"])
     if not su_works(name):
-        sh(["docker", "exec", name, "/system/bin/sh", "-c", "pkill -x cpsud; /system/xbin/cpsud"])
-        time.sleep(0.5)
+        sh(["docker", "exec", name, "/system/bin/sh", "-c", "pkill -x cpsud; true"])
+        # chạy nền bằng "docker exec -d" (tự tách nền kiểu fork bị docker tắt theo khi lệnh exec kết thúc)
+        sh(["docker", "exec", "-d", name, "/system/xbin/cpsud", "/dev/socket/cpsu", "fg"])
+        time.sleep(1)
     return su_works(name)
 def su_remove(name):
     sh(["docker", "exec", name, "/system/bin/sh", "-c", "pkill -x cpsud; rm -f /system/xbin/su /system/xbin/cpsud /dev/socket/cpsu; [ -L /system/bin/su ] && rm -f /system/bin/su; true"])

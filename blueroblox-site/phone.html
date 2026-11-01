@@ -446,7 +446,7 @@ const PHONE = "https://phone.blueroblox.shop", API = PHONE + "/cpapi";
 const CHUNK = 8 * 1024 * 1024;
 const KEYNAME = { 4: "back", 3: "home", 187: "recents", 24: "volup", 25: "voldown", 26: "power" };
 const ZOOMS = [0.5, 0.67, 0.8, 1, 1.25, 1.5, 1.75, 2, 2.5];
-const mkQual = () => ({ eco: [L("Tiết kiệm", "Data saver"), L("Nhẹ mạng, 30 FPS — hợp 4G/wifi yếu", "Light, 30 FPS — for 4G / weak Wi-Fi")], bal: [L("Cân bằng", "Balanced"), L("Rõ nét, mượt — khuyên dùng", "Sharp and smooth — recommended")], hd: [L("Siêu nét", "Ultra sharp"), L("Đúng độ phân giải máy — cần mạng khoẻ", "Full phone resolution — needs a strong connection")] });
+const mkQual = () => ({ eco: [L("Tiết kiệm", "Data saver"), L("Nhẹ nhất, 24 FPS — mạng 4G/wifi yếu", "Lightest, 24 FPS — weak 4G / Wi-Fi")], bal: [L("Ít trễ", "Low latency"), L("Mượt, phản hồi nhanh, 30 FPS — khuyên dùng", "Smooth & responsive, 30 FPS — recommended")], hd: [L("Siêu nét", "Ultra sharp"), L("Nét nhất, 60 FPS — cần máy ≥4 nhân + mạng khoẻ", "Sharpest, 60 FPS — needs 4+ cores & strong network")] });
 let QUAL = mkQual();
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));

@@ -11,6 +11,7 @@
 #   bash cloudphone-root.sh apply TÊN    # chỉ 1 máy (VD: cp_761fa7e548)
 #   bash cloudphone-root.sh check TÊN    # kiểm tra máy đã có root chưa
 #   bash cloudphone-root.sh off          # máy MỚI không root nữa (máy đã root giữ nguyên)
+#   bash cloudphone-root.sh undo         # TẮT ROOT + trả mọi máy về bản không root (khi root làm app văng)
 # =====================================================================
 set -u
 G='\033[1;32m'; Y='\033[1;33m'; R='\033[1;31m'; N='\033[0m'
@@ -85,6 +86,11 @@ check)
   echo "Image: ${img:-không thấy máy}"
   docker exec "$2" /system/bin/sh -c 'ls /sbin/magisk /system/etc/init/magisk/magisk 2>/dev/null; pm list packages 2>/dev/null | grep -i magisk; echo "su: $(which su 2>/dev/null)"' 2>/dev/null
   [[ "$img" == *_root ]] && ok "Máy đang chạy bản ROOT" || warn "Máy CHƯA root — chạy:  bash $0 apply $2" ;;
+
+undo)
+  conf_set ROOT 0
+  echo "== Trả mọi máy về bản KHÔNG root (giữ nguyên app + tài khoản, mỗi máy khởi động lại ~1 phút) =="
+  $PC unroot ${2:-} ;;
 
 off)
   conf_set ROOT 0; sudo systemctl restart cloudphoned 2>/dev/null

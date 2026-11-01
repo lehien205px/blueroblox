@@ -531,6 +531,34 @@ def cmd_rootfix(a):
             try: root_one(p, force=a.force)
             except Exception as e: print(f"ROOT_NO {p['name']}: {e}")
 
+def cmd_unroot(a):
+    """Trả máy về bản KHÔNG root (giữ nguyên dữ liệu) — dùng khi root làm app văng."""
+    st = load(); n = 0
+    for p in st["phones"]:
+        if is_gpu(p) or (a.name and p["name"] != a.name): continue
+        base = IMAGES[android_of(p.get("android", "11"))][0]
+        cur = (sh(["docker", "inspect", "-f", "{{.Config.Image}}", p["name"]]).stdout or "").strip()
+        if cur == base: print(f"✓ {p['name']}: đang là bản không root"); continue
+        was_on = is_running(p["name"], p)
+        sh(["docker", "exec", WSNAME, "adb", "disconnect", f"127.0.0.1:{p['port']}"]); rm_container(p["name"])
+        w, h = p.get("res", "720x1280").split("x"); img, tr = IMAGES[android_of(p.get("android", "11"))]
+        data = os.path.join(DATA_ROOT, p["name"])
+        r = sh(["docker", "run", "-itd", "--privileged", "--restart", "unless-stopped", "--name", p["name"], *mem_args(p["ram"]), *cpu_args(p["cpu"]),
+                "-v", f"{data}:/data", "-p", f"127.0.0.1:{p['port']}:5555", img, f"androidboot.redroid_width={w}", f"androidboot.redroid_height={h}",
+                f"androidboot.redroid_dpi={int(p.get('dpi', 0)) or auto_dpi(p.get('res', '720x1280'))}", f"androidboot.redroid_fps={p.get('fps', 30)}"] + (HOUDINI if tr == "houdini" else ARM))
+        if r.returncode != 0: print(f"! {p['name']}: LỖI {(r.stderr or r.stdout).strip()[:200]}"); continue
+        if not was_on: sh(["docker", "stop", p["name"]])
+        else: wait_boot(p["name"], p["port"], apps=False)
+        n += 1; print(f"✓ {p['name']}: đã trả về bản KHÔNG root")
+    print(f"✅ Xong — {n} máy")
+
+def cmd_crashes(a):
+    """Đọc lỗi văng app (bộ nhớ 'crash' của Android) trong từng máy đang chạy."""
+    for p in load()["phones"]:
+        if (a.name and p["name"] != a.name) or not is_running(p["name"], p): continue
+        r = ashell(p["name"], "logcat -d -b crash 2>/dev/null | grep -E 'FATAL|Process:|Exception|Error|signal|Abort|backtrace|#0[0-4] ' | tail -25")
+        print(f"===== {p['name']} (Android {p.get('android', '11')}{', GPU' if is_gpu(p) else ''})"); print((r.stdout or "").strip() or "   (không có lỗi văng nào)")
+
 def cmd_rootall(a):
     """Chuyển máy đang có sang bản ROOT: tạo lại container với CÙNG dữ liệu (app, tài khoản giữ nguyên), máy khởi động lại ~1 phút."""
     st = load(); n = 0
@@ -720,6 +748,8 @@ def main():
     for nm, fn in (("start", cmd_start), ("restart", cmd_restart), ("gpurun", cmd_gpurun)):
         x = sub.add_parser(nm); x.add_argument("name"); x.set_defaults(f=fn)
     sub.add_parser("gpuinfo").set_defaults(f=cmd_gpuinfo)
+    for nm, fn in (("unroot", cmd_unroot), ("crashes", cmd_crashes)):
+        x = sub.add_parser(nm); x.add_argument("name", nargs="?", default=""); x.set_defaults(f=fn)
     ra = sub.add_parser("rootall"); ra.add_argument("name", nargs="?", default=""); ra.set_defaults(f=cmd_rootall)
     rf = sub.add_parser("rootfix"); rf.add_argument("name", nargs="?", default=""); rf.add_argument("--all", action="store_true"); rf.add_argument("--force", action="store_true"); rf.set_defaults(f=cmd_rootfix)
     lr = sub.add_parser("liveres"); lr.add_argument("name"); lr.add_argument("--res", required=True); lr.set_defaults(f=cmd_liveres)

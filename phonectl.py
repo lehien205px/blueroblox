@@ -116,6 +116,11 @@ TUNE = (# tắt hẳn hiệu ứng chuyển cảnh → CPU không phải vẽ th
         "settings put global adaptive_battery_management_enabled 0; settings put global always_finish_activities 0; "
         "device_config put activity_manager_native_boot use_freezer false >/dev/null 2>&1; "
         "settings put global cached_apps_freezer disabled; "
+        # Cửa hàng Play KHÔNG tự cập nhật app chạy nền (đỡ lag, đỡ tốn mạng); khách mở Play vẫn tải/cập nhật tay được.
+        # Chỉ đặt khi chưa đặt — đổi quyền của app làm Android tắt app đó, đặt lặp lại sẽ văng Play khi đang dùng.
+        "case \"$(cmd appops get com.android.vending RUN_ANY_IN_BACKGROUND 2>/dev/null)\" in *ignore*) ;; *) "
+        "cmd appops set com.android.vending RUN_ANY_IN_BACKGROUND ignore; am set-standby-bucket com.android.vending restricted;; esac; "
+        "settings put global package_verifier_user_consent -1; settings put global upload_apk_enable 0; "
         "settings put global verifier_verify_adb_installs 0; settings put global stay_on_while_plugged_in 7; "
         "settings put system screen_off_timeout 2147483647; svc power stayon true; "
         # Cổng VPN: Android mở /dev/tun (docker chỉ có /dev/net/tun) → thiếu thì VPN báo "Failed to connect"

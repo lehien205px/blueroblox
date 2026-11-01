@@ -1372,6 +1372,11 @@ window.BR_CONFIG = {
         <div class="hint full">Trong lúc bảo trì, máy của khách <b>không bị tạm dừng hay xoá</b> khi hết hạn; tắt bảo trì xong khách có 30 phút để gia hạn.</div>
         <div class="acts full"><button class="btn" type="button" id="mt-save">Lưu bảo trì</button><span class="hint" id="mt-msg"></span></div>
       </div>
+      <div class="f mtbox">
+        <h3>🔓 Root máy (Magisk)</h3>
+        <div class="hint full">Máy mới tạo <b>tự có root</b>. Server cũng tự kiểm tra mỗi 5 phút: máy nào chưa root sẽ tự root (máy khởi động lại ~1 phút, app/tài khoản giữ nguyên) và tự cấp sẵn quyền root cho app khách cài. Khách cũng tự bấm <b>🔓 Root máy</b> được trong danh sách máy / trang điều khiển.</div>
+        <div class="acts full"><button class="btn" type="button" id="cpa-rootall">🔓 Root tất cả máy ngay</button></div>
+      </div>
       <div class="f mtbox freebox">
         <h3>🎁 Miễn phí ưu đãi</h3>
         <div class="hint full" id="fr-state"></div>
@@ -3795,6 +3800,7 @@ function renderCloud() {
         ${lk ? `<a class="btn sm" href="/phone.html?id=${encodeURIComponent(p.id)}" target="_blank" rel="noopener">▶ Điều khiển</a>`
            : `<button class="btn sm" disabled>${locked ? "🔒 Bị khoá" : p.status === "pending" ? "Đang tạo…" : p.status === "expired" ? "Đã tạm dừng" : "Chưa sẵn sàng"}</button>`}
         ${canRenew ? `<button class="btn ghost sm" data-cprenew="${p.id}">🔄 Gia hạn</button>` : ""}
+        ${lk ? `<button class="btn ghost sm" data-cproot="${p.id}" title="${L("Bật root (Magisk) để chạy tool cần root", "Enable root (Magisk) for root tools")}">🔓 ${L("Root máy", "Root")}</button>` : ""}
         ${p.shared ? `<button class="btn ghost sm" data-shleave="${p.share_id}">🚪 ${L("Rời máy", "Leave")}</button>` : `
         ${["active", "pending"].includes(p.status) && !locked ? `<button class="btn ghost sm" data-cpshare="${p.id}">👥 ${L("Chia sẻ", "Share")}</button>` : ""}
         <button class="btn ghost sm" data-cprename="${p.id}">✏️ Đổi tên</button>
@@ -3832,8 +3838,9 @@ document.addEventListener("click", e => {
   cpOrderUpd(); toast(L("Đã chọn cấu hình: ", "Selected: ") + L(x.vi, x.en));
 });
 function cpAndChips() {
-  const L0 = cpAndList(); if (!L0.includes(cpSel.android)) cpSel.android = L0.includes("11") ? "11" : L0[0];
-  $("cp-and").innerHTML = L0.map(v => `<button type="button" data-and="${v}" class="${v === cpSel.android ? "on" : ""}">Android ${v}${v !== "11" ? ` <small>${L("Mới", "New")}</small>` : ""}</button>`).join("");
+  const L0 = cpAndList().sort((a, b) => (a === "12" ? -1 : b === "12" ? 1 : 0));      // Android 12 chạy ổn nhất → ưu tiên, đứng đầu
+  if (!L0.includes(cpSel.android)) cpSel.android = L0.includes("12") ? "12" : L0.includes("11") ? "11" : L0[0];
+  $("cp-and").innerHTML = L0.map(v => `<button type="button" data-and="${v}" class="${v === cpSel.android ? "on" : ""}">Android ${v}${v === "12" ? ` <small>⭐ ${L("Khuyên dùng", "Recommended")}</small>` : v !== "11" ? ` <small>${L("Mới", "New")}</small>` : ""}</button>`).join("");
 }
 document.addEventListener("click", e => { const b = e.target.closest("[data-and]"); if (!b) return; cpSel.android = b.dataset.and; cpAndChips(); cpOrderUpd(); });
 async function openCpOrder(wantFree) {
@@ -3842,7 +3849,7 @@ async function openCpOrder(wantFree) {
   const why = cpBlocked(); if (why) { toast(why, 1); try { renderGrid(); } catch (e) {} return; }
   const p = CPpricing;
   const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
-  cpSel = { ram: clamp(2, p.min_ram, p.max_ram), cpu: clamp(2, p.min_cpu, p.max_cpu), days: clamp(7, p.min_days, p.max_days), res: "720x1280", fps: clamp(30, p.min_fps, p.max_fps), qty: 1, android: "11" };
+  cpSel = { ram: clamp(2, p.min_ram, p.max_ram), cpu: clamp(2, p.min_cpu, p.max_cpu), days: clamp(7, p.min_days, p.max_days), res: "720x1280", fps: clamp(30, p.min_fps, p.max_fps), qty: 1, android: cpAndList().includes("12") ? "12" : "11" };
   cpChips("cp-ram", CP_RAM.filter(v => v >= p.min_ram && v <= p.max_ram), "ram", "GB");
   cpChips("cp-cpu", CP_CPU.filter(v => v >= p.min_cpu && v <= p.max_cpu), "cpu", "");
   cpChips("cp-days", CP_DAYS.filter(v => v >= p.min_days && v <= p.max_days), "days", " ngày");
@@ -4860,6 +4867,30 @@ $("fr-off") && ($("fr-off").onclick = () => busy($("fr-off"), async () => {
   toast(`Đã tắt ưu đãi. Server đang xoá ${(data && data.removed) || 0} máy miễn phí.`); notifyTg && notifyTg(`🎁 Tắt ưu đãi miễn phí — xoá ${(data && data.removed) || 0} máy`);
   await loadCloudAdm();
 }));
+
+
+/* ========= ROOT MÁY (Magisk) — khách bấm ở danh sách máy, admin root tất cả ========= */
+async function cpRunJob(path, label) {
+  const j = await cpapiCall(path, { method: "POST", json: {} });
+  toast(label + "… " + L("(có thể mất 1–2 phút)", "(may take 1–2 minutes)"));
+  const t0 = Date.now();
+  while (Date.now() - t0 < 2 * 3600 * 1000) {
+    await new Promise(r => setTimeout(r, 2500));
+    let s; try { s = await cpapiCall("job?id=" + encodeURIComponent(j.job)); } catch (e) { if (e.status === 404) throw new Error(L("Mất theo dõi (server vừa khởi động lại) — thử lại.", "Lost track — try again.")); continue; }
+    if (s.state === "done") return s.msg;
+    if (s.state === "error") throw new Error(s.msg);
+  }
+  throw new Error(L("Quá lâu chưa xong.", "Took too long."));
+}
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-cproot]"); if (!b) return;
+  if (!confirm(L("Root máy này?\nMáy chưa root sẽ khởi động lại khoảng 1–2 phút — app và tài khoản vẫn giữ nguyên.", "Root this phone?\nIf it isn't rooted yet it restarts for 1–2 minutes — apps and accounts are kept."))) return;
+  busy(b, async () => { try { toast(await cpRunJob(b.dataset.cproot + "/root", L("Đang root máy", "Rooting")), 0); } catch (err) { toast(err.message, 1); } });
+});
+$("cpa-rootall") && ($("cpa-rootall").onclick = () => {
+  if (!confirm("Root TẤT CẢ máy chưa root?\nMỗi máy chưa root sẽ khởi động lại ~1–2 phút (app, tài khoản giữ nguyên). Máy đã root chỉ được kiểm tra lại.")) return;
+  busy($("cpa-rootall"), async () => { try { toast(await cpRunJob("admin/rootall", "Đang root các máy"), 0); } catch (err) { toast(err.message, 1); } });
+});
 
 </script>
 </body>

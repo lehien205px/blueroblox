@@ -525,7 +525,8 @@ def root_one(p, force=False):
 
 def cmd_rootfix(a):
     """rootfix TÊN [--force]  |  rootfix --all : máy nào chưa root → tự root (máy thường: tạo lại cùng dữ liệu; máy GPU: khởi động lại)."""
-    if CONF.get("ROOT", "1") == "0" and not a.force: print("ROOT_SKIP: root đang tắt (ROOT=0)"); return
+    if CONF.get("ROOT", "1") == "0":            # admin đã tắt root (VD root làm app ARM văng) → không root máy nào, kể cả khi khách bấm
+        print(f"ROOT_NO {a.name or 'all'}: chức năng root đang tạm tắt để bảo trì"); return
     for p in load()["phones"]:
         if (a.all or p["name"] == a.name):
             try: root_one(p, force=a.force)

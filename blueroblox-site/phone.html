@@ -1056,7 +1056,8 @@ const ACT = {
     };
     ask({ title: L("FPS & độ phân giải", "FPS & resolution"), desc: L(`Đang dùng <b>${esc(cur.res)}</b> · <b>${cur.fps || 30} FPS</b>. <br>• Chỉ đổi <b>độ phân giải</b>: đổi ngay trong vài giây, <b>app đang chạy không bị tắt</b>.<br>• Đổi <b>FPS</b>: máy khởi động lại (1–3 phút), dữ liệu vẫn giữ nhưng app đang mở sẽ đóng.`,
         `Current: <b>${esc(cur.res)}</b> · <b>${cur.fps || 30} FPS</b>. <br>• Changing only the <b>resolution</b> takes a few seconds and <b>running apps stay open</b>.<br>• Changing <b>FPS</b> restarts the phone (1–3 min). Your data is kept, but open apps will close.`),
-      body: `<span class="lbl">FPS (${lo}–${hi})</span><div class="chips" id="d-fps"></div><input class="in" id="d-fpsx" type="number" min="${lo}" max="${hi}" inputmode="numeric" placeholder="${L("Hoặc tự nhập FPS", "Or enter FPS")}">
+      body: `<button type="button" class="btn sm gh" id="d-light" style="width:100%;margin-bottom:6px">🪶 ${L("Chế độ treo nhiều tab: 540x960 · 30 FPS (nhẹ máy nhất)", "Multi-tab mode: 540x960 · 30 FPS (lightest)")}</button>
+             <span class="lbl">FPS (${lo}–${hi})</span><div class="chips" id="d-fps"></div><input class="in" id="d-fpsx" type="number" min="${lo}" max="${hi}" inputmode="numeric" placeholder="${L("Hoặc tự nhập FPS", "Or enter FPS")}">
              <span class="lbl">${L("Độ phân giải", "Resolution")}</span><div class="chips" id="d-res"></div><input class="in" id="d-resx" type="text" autocomplete="off" placeholder="${L("Hoặc tự nhập, VD 1080x2400", "Or enter one, e.g. 1080x2400")}">`,
       ok: L("Áp dụng", "Apply"),
       onOk: async () => {
@@ -1073,6 +1074,7 @@ const ACT = {
         } catch (e) { toast(e.message, 1); return false; }
       } });
     draw();
+    $("d-light").onclick = () => { res = "540x960"; fps = Math.min(Math.max(30, lo), hi); $("d-fpsx").value = ""; $("d-resx").value = ""; draw(); };
     $("d-fps").onclick = e => { const b = e.target.closest("[data-fps]"); if (b) { fps = +b.dataset.fps; $("d-fpsx").value = ""; draw(); } };
     $("d-res").onclick = e => { const b = e.target.closest("[data-res]"); if (b) { res = b.dataset.res; $("d-resx").value = ""; draw(); } };
     $("d-fpsx").oninput = e => { const v = parseInt(e.target.value, 10); if (v > 0) { fps = v; draw(); } };

@@ -4,6 +4,7 @@
 #  Chạy SONG SONG với hệ thống redroid hiện tại, KHÔNG đụng tới máy của khách.
 #
 #   bash gpu-phone-test.sh install   # cài SDK + Android 13 (có Google Play)  ~10 phút, ~6GB
+#   bash gpu-phone-test.sh xsetup    # màn hình ảo trên GTX 1080 (install tự gọi)
 #   bash gpu-phone-test.sh start     # bật máy thử (4 nhân, 4GB, 720x1280)
 #   bash gpu-phone-test.sh check     # xem máy có ĐANG DÙNG GTX 1080 không + CPU/RAM
 #   bash gpu-phone-test.sh stop      # tắt máy thử
@@ -20,6 +21,7 @@ LOG="$HOME/gpu-phone-test.log"
 export ANDROID_SDK_ROOT="$SDK" ANDROID_HOME="$SDK" ANDROID_AVD_HOME="$HOME/.android/avd"
 # adb riêng ở cổng 5038 — KHÔNG dùng chung adb (5037) của ws-scrcpy, tránh làm rớt hình máy khách
 export ANDROID_ADB_SERVER_PORT=5038 QT_QPA_PLATFORM=offscreen
+XD=":9"                      # màn hình ảo chạy trên GTX 1080 (không cần màn hình thật) — emulator cần nó để dùng GPU
 SM="$SDK/cmdline-tools/latest/bin/sdkmanager"; AM="$SDK/cmdline-tools/latest/bin/avdmanager"
 EMU="$SDK/emulator/emulator"; ADB="$SDK/platform-tools/adb"
 G='\033[1;32m'; Y='\033[1;33m'; R='\033[1;31m'; N='\033[0m'
@@ -50,14 +52,39 @@ install)
   set_cfg disk.dataPartition.size 16G; set_cfg hw.keyboard yes; set_cfg fastboot.forceColdBoot yes
   set_cfg hw.audioInput no; set_cfg hw.audioOutput no; set_cfg showDeviceFrame no
   ok "Cấu hình: 4 nhân · 4GB · 720x1280 · GPU host (GTX 1080)"
+  bash "$0" xsetup
   echo; warn "THOÁT SSH RỒI VÀO LẠI (để nhận quyền KVM), sau đó chạy:  bash $0 start" ;;
+
+xsetup)
+  echo "== Màn hình ảo $XD trên card NVIDIA (cần sudo) =="
+  BUS=$(nvidia-smi --query-gpu=pci.bus_id --format=csv,noheader | head -1)          # 00000000:02:00.0
+  IFS=':.' read -r _ b d f <<< "$BUS"; B="PCI:$((16#$b)):$((16#$d)):$((16#$f))"      # -> PCI:2:0:0
+  [ -n "$BUS" ] || { err "Không đọc được card NVIDIA (nvidia-smi)"; exit 1; }
+  V=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader | cut -d. -f1)
+  sudo apt-get install -y -qq xserver-xorg-core >/dev/null && ok "Xorg"
+  if ! ls /usr/lib/xorg/modules/drivers/nvidia_drv.so /usr/lib/x86_64-linux-gnu/nvidia/xorg/nvidia_drv.so >/dev/null 2>&1; then
+    sudo apt-get install -y -qq "xserver-xorg-video-nvidia-$V" >/dev/null 2>&1 && ok "Driver Xorg NVIDIA $V" || warn "Không cài được xserver-xorg-video-nvidia-$V"
+  fi
+  printf '%s\n' 'Section "ServerLayout"' '    Identifier "cloudgpu"' '    Screen 0 "Screen0"' 'EndSection' \
+    'Section "Files"' '    ModulePath "/usr/lib/x86_64-linux-gnu/nvidia/xorg"' '    ModulePath "/usr/lib/xorg/modules"' 'EndSection' \
+    'Section "Device"' '    Identifier "Device0"' '    Driver "nvidia"' "    BusID \"$B\"" \
+    '    Option "AllowEmptyInitialConfiguration" "True"' '    Option "UseDisplayDevice" "None"' 'EndSection' \
+    'Section "Screen"' '    Identifier "Screen0"' '    Device "Device0"' '    DefaultDepth 24' '    Option "AllowEmptyInitialConfiguration" "True"' \
+    '    SubSection "Display"' '        Depth 24' '        Virtual 1920 1080' '    EndSubSection' 'EndSection' | sudo tee /etc/X11/xorg-cloudgpu.conf >/dev/null
+  printf '%s\n' '[Unit]' 'Description=Man hinh ao tren GPU NVIDIA cho May GPU' 'After=systemd-user-sessions.service' '[Service]' \
+    "ExecStart=/usr/lib/xorg/Xorg $XD -config /etc/X11/xorg-cloudgpu.conf -noreset -nolisten tcp -novtswitch -sharevts vt9" \
+    'Restart=always' 'RestartSec=5' '[Install]' 'WantedBy=multi-user.target' | sudo tee /etc/systemd/system/cloudgpu-x.service >/dev/null
+  sudo systemctl daemon-reload; sudo systemctl enable cloudgpu-x >/dev/null 2>&1; sudo systemctl restart cloudgpu-x; sleep 5
+  if [ -S "/tmp/.X11-unix/X${XD#:}" ] && systemctl is-active -q cloudgpu-x; then ok "Màn hình ảo $XD đang chạy trên GTX 1080 ($B)"
+  else err "Màn hình ảo chưa chạy. Gửi kết quả lệnh:  sudo journalctl -u cloudgpu-x -n 30 --no-pager; grep -E 'EE|WW' /var/log/Xorg.${XD#:}.log | tail -20"; exit 1; fi ;;
 
 start)
   [ -x "$EMU" ] || { err "Chưa cài. Chạy:  bash $0 install"; exit 1; }
   [ -w /dev/kvm ] || { err "Chưa có quyền KVM — thoát SSH rồi vào lại"; exit 1; }
+  [ -S "/tmp/.X11-unix/X${XD#:}" ] || bash "$0" xsetup || exit 1
   pgrep -f "qemu.*-avd $AVD|emulator.*-avd $AVD" >/dev/null && { ok "Máy thử đang chạy rồi"; exit 0; }
   echo "== Bật máy thử bằng GPU NVIDIA =="
-  setsid nohup "$EMU" -avd "$AVD" -port "$PORT" -no-window -gpu host -no-audio -no-boot-anim -no-snapshot \
+  DISPLAY=$XD setsid nohup "$EMU" -avd "$AVD" -port "$PORT" -no-window -gpu host -feature -Vulkan -no-audio -no-boot-anim -no-snapshot \
       -camera-back none -camera-front none -netdelay none -netspeed full > "$LOG" 2>&1 < /dev/null &
   "$ADB" start-server >/dev/null 2>&1
   for i in $(seq 1 90); do

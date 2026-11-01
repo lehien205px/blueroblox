@@ -502,16 +502,16 @@ def su_install(name):
     want = hashlib.md5(open(os.path.join(SU_DIR, "su"), "rb").read()).hexdigest() + hashlib.md5(open(os.path.join(SU_DIR, "cpsud"), "rb").read()).hexdigest()
     have = (sh(["docker", "exec", name, "/system/bin/sh", "-c", "md5sum /system/xbin/su /system/xbin/cpsud 2>/dev/null | cut -d' ' -f1 | tr -d '\\n'"]).stdout or "").strip()
     if have != want:
-        sh(["docker", "exec", name, "/system/bin/sh", "-c", "mkdir -p /system/xbin; pkill -f /system/xbin/cpsud; rm -f /system/xbin/su /system/xbin/cpsud"])
+        sh(["docker", "exec", name, "/system/bin/sh", "-c", "mkdir -p /system/xbin; pkill -x cpsud; rm -f /system/xbin/su /system/xbin/cpsud"])
         for f in ("su", "cpsud"): sh(["docker", "cp", os.path.join(SU_DIR, f), f"{name}:/system/xbin/{f}"])
         sh(["docker", "exec", name, "/system/bin/sh", "-c", "chown 0:0 /system/xbin/su /system/xbin/cpsud; chmod 755 /system/xbin/su /system/xbin/cpsud; "
             "[ -e /system/bin/su ] || ln -s /system/xbin/su /system/bin/su 2>/dev/null; true"])
     if not su_works(name):
-        sh(["docker", "exec", name, "/system/bin/sh", "-c", "pkill -f /system/xbin/cpsud; /system/xbin/cpsud"])
+        sh(["docker", "exec", name, "/system/bin/sh", "-c", "pkill -x cpsud; /system/xbin/cpsud"])
         time.sleep(0.5)
     return su_works(name)
 def su_remove(name):
-    sh(["docker", "exec", name, "/system/bin/sh", "-c", "pkill -f /system/xbin/cpsud; rm -f /system/xbin/su /system/xbin/cpsud /dev/socket/cpsu; [ -L /system/bin/su ] && rm -f /system/bin/su; true"])
+    sh(["docker", "exec", name, "/system/bin/sh", "-c", "pkill -x cpsud; rm -f /system/xbin/su /system/xbin/cpsud /dev/socket/cpsu; [ -L /system/bin/su ] && rm -f /system/bin/su; true"])
 
 def root_state(p):
     """'root' = có Magisk chạy · 'image' = đã dùng bản root nhưng Android chưa lên · 'no' = chưa root."""

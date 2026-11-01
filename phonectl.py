@@ -17,7 +17,9 @@ STATE = os.path.expanduser("~/redroid/phones.json")
 DATA_ROOT = os.path.expanduser("~/redroid")
 IMAGE = "redroid/redroid:11.0.0_gapps_ndk"
 # Phiên bản Android khách chọn → image + bộ dịch ARM (image 12–14 dựng bằng android-test.sh build)
-IMAGES = {"11": (IMAGE, "ndk"),
+IMAGES = {"9": ("redroid/redroid:9.0.0_litegapps_houdini", "houdini"),        # dựng bằng: bash ~/android-versions.sh build
+          "10": ("redroid/redroid:10.0.0_litegapps_houdini", "houdini"),
+          "11": (IMAGE, "ndk"),
           "12": ("redroid/redroid:12.0.0_mindthegapps_ndk", "ndk"),
           "13": ("redroid/redroid:13.0.0_mindthegapps_houdini", "houdini"),
           "14": ("redroid/redroid:14.0.0_mindthegapps_houdini", "houdini")}
@@ -240,6 +242,13 @@ TUNE = (# tắt hẳn hiệu ứng chuyển cảnh → CPU không phải vẽ th
         "settings put global package_verifier_user_consent -1; settings put global upload_apk_enable 0; "
         "settings put global verifier_verify_adb_installs 0; settings put global stay_on_while_plugged_in 7; "
         "settings put system screen_off_timeout 2147483647; svc power stayon true; "
+        # Trình duyệt bị MÀN ĐEN (máy ảo không có chip đồ hoạ): Chrome / WebView vẽ bằng CPU, Firefox dùng WebRender phần mềm
+        "for f in /data/local/chrome-command-line /data/local/tmp/chrome-command-line /data/local/tmp/webview-command-line; do "
+        "grep -q disable-gpu $f 2>/dev/null || echo '_ --disable-gpu --disable-gpu-compositing --disable-features=Vulkan' > $f 2>/dev/null; "
+        "chmod 644 $f 2>/dev/null; done; "
+        "for d in /data/data/org.mozilla.firefox/files/mozilla/*.default*; do [ -d \"$d\" ] || continue; "
+        "grep -q webrender.software \"$d/user.js\" 2>/dev/null || { printf 'user_pref(\"gfx.webrender.software\", true);\\nuser_pref(\"layers.acceleration.disabled\", true);\\nuser_pref(\"gfx.canvas.accelerated\", false);\\n' >> \"$d/user.js\"; "
+        "chown $(stat -c %u \"$d\"):$(stat -c %g \"$d\") \"$d/user.js\"; }; done 2>/dev/null; "
         # Cổng VPN: Android mở /dev/tun (docker chỉ có /dev/net/tun) → thiếu thì VPN báo "Failed to connect"
         "[ -c /dev/tun ] || { rm -f /dev/tun; mknod /dev/tun c 10 200; }; chmod 666 /dev/tun")
 def tune(name):

@@ -681,6 +681,34 @@ class H(BaseHTTPRequestHandler):
             r = shell(port, "pm clear com.android.vending; pm clear com.google.android.gms", 60)
             return self.send_json(200, {"ok": True, "out": out(r)[-200:]})
 
+        if act == "store" and self.command == "GET":          # KHO ỨNG DỤNG: app có sẵn trên server (admin bỏ vào ~/apk-cai-san) + trạng thái đã cài
+            d = pre_dir()
+            try: fs = sorted(f for f in os.listdir(d) if f.lower().endswith(APK_EXT))
+            except OSError: fs = []
+            inst = set(l.split(":", 1)[1].strip() for l in out(shell(port, "pm list packages", 30)).splitlines() if l.startswith("package:"))
+            return self.send_json(200, {"files": [{"name": f, "size": os.path.getsize(os.path.join(d, f))} for f in fs], "installed": sorted(inst)})
+        if act == "store" and self.command == "POST":          # cài 1 app trong kho vào máy này
+            n = safe_name(str(self.jbody().get("name") or "")); fp = os.path.join(pre_dir(), n)
+            if not n.lower().endswith(APK_EXT) or not os.path.isfile(fp): return self.send_json(404, {"error": "Không có app này trong kho."})
+            jid = new_job(me["uid"], "Cài " + n)
+            def work(j):
+                JOBS[j]["msg"] = "Đang cài " + n + "…"
+                files, dst = stage_pkg(fp, n)
+                try:
+                    args = (["install", "-r", "-g", files[0]] if len(files) == 1 else ["install-multiple", "-r", "-g"] + files)
+                    o = out(adb(port, args, timeout=900))
+                finally:
+                    subprocess.run(["docker", "exec", WSNAME, "rm", "-rf", dst], capture_output=True, timeout=60)
+                if "Success" not in o: raise RuntimeError("Cài lỗi: " + o[-200:])
+                return "✅ Đã cài " + n
+            run_job(jid, work)
+            return self.send_json(200, {"job": jid})
+        if act == "play" and self.command == "POST":           # mở trang app trên Google Play trong máy (Chrome, Firefox…)
+            pkg = str(self.jbody().get("pkg") or "")
+            if not re.match(r"^[A-Za-z][\w]*(\.[A-Za-z_][\w]*)+$", pkg): return self.send_json(400, {"error": "Tên app không hợp lệ."})
+            r = shell(port, "am start -a android.intent.action.VIEW -d " + shlex.quote("market://details?id=" + pkg), 20)
+            return self.send_json(200, {"ok": True})
+
         if act == "apps":
             r = shell(port, "pm list packages -3", 30)
             pk = sorted(l.split(":", 1)[1].strip() for l in out(r).splitlines() if l.startswith("package:"))

@@ -16,6 +16,11 @@ import json, os, sys, subprocess, time, argparse, datetime, re
 STATE = os.path.expanduser("~/redroid/phones.json")
 DATA_ROOT = os.path.expanduser("~/redroid")
 IMAGE = "redroid/redroid:11.0.0_gapps_ndk"
+# Phiên bản Android khách chọn → image + bộ dịch ARM (image 12–14 dựng bằng android-test.sh build)
+IMAGES = {"11": (IMAGE, "ndk"),
+          "12": ("redroid/redroid:12.0.0_mindthegapps_ndk", "ndk"),
+          "13": ("redroid/redroid:13.0.0_mindthegapps_houdini", "houdini"),
+          "14": ("redroid/redroid:14.0.0_mindthegapps_houdini", "houdini")}
 WSNAME = "wsscrcpy"                 # container ws-scrcpy (để đăng ký máy cho điều khiển web)
 PORT_BASE = 5555
 PORT_MAX = 5585                    # adb emulator chỉ quét 5555..5585
@@ -239,14 +244,17 @@ def cmd_create(a):
     fps = clamp_fps(a.fps)
     sh(["docker", "rm", "-f", a.name])           # phòng còn container cũ trùng tên
     wipe_data(a.name)                             # đảm bảo máy MỚI TINH, không dính dữ liệu cũ
-    r = docker_run(a.name, a.ram, a.cpu, port, a.res, fps, a.dpi)
+    av = android_of(a.android)
+    if sh(["docker", "image", "inspect", IMAGES[av][0]]).returncode != 0:
+        print(f"LỖI: máy chủ chưa có Android {av} (chạy: bash ~/android-test.sh build)"); sys.exit(4)
+    r = docker_run(a.name, a.ram, a.cpu, port, a.res, fps, a.dpi, av)
     if r.returncode != 0:
         print("LỖI tạo máy:", (r.stderr or r.stdout).strip()); sys.exit(4)
     # chờ boot xong rồi mới đăng ký vào ws-scrcpy (tránh màn đen) — bỏ qua nếu --nowait (chương trình nền tự chờ song song)
     ok = True if a.nowait else wait_boot(a.name, port)
     exp = now() + datetime.timedelta(days=a.days)
     st["phones"].append({"name": a.name, "port": port, "ram": a.ram, "cpu": a.cpu, "res": a.res, "fps": fps,
-                          "dpi": a.dpi, "created": fmt(now()), "expires": exp.isoformat()})
+                          "dpi": a.dpi, "android": av, "created": fmt(now()), "expires": exp.isoformat()})
     save(st)
     print(f"✅ Đã tạo máy '{a.name}'  | cổng {port} | RAM {a.ram}GB CPU {a.cpu} | hết hạn {fmt(exp)}")
     print("   Android đã khởi động xong, sẵn sàng điều khiển." if ok else "   CẢNH BÁO: máy chưa kết nối được trình điều khiển, sẽ tự thử lại.")
@@ -268,14 +276,22 @@ def mem_args(ram):
     # swap cho mỗi máy tới 3 lần RAM (zram nhanh dùng trước, ổ cứng dùng sau) → đầy RAM thì chậm lại chứ không văng
     return [f"--memory={r + 1:g}g", f"--memory-swap={r * 4 + 2:g}g", f"--memory-reservation={r:g}g"]
 
-def docker_run(name, ram, cpu, port, res, fps, dpi=0):
+HOUDINI = [x.replace("libndk_translation.so", "libhoudini.so") for x in ARM if not x.startswith("ro.ndk_translation")] \
+          + ["ro.enable.native.bridge.exec64=1"]
+
+def android_of(v):
+    v = str(v or "11").split(".")[0]
+    return v if v in IMAGES else "11"
+
+def docker_run(name, ram, cpu, port, res, fps, dpi=0, android="11"):
     w, h = res.split("x")
+    img, tr = IMAGES[android_of(android)]
     data = os.path.join(DATA_ROOT, name); os.makedirs(data, exist_ok=True)
     return sh(["docker", "run", "-itd", "--privileged", "--restart", "unless-stopped", "--name", name,
                *mem_args(ram), f"--cpus={cpu}",
-               "-v", f"{data}:/data", "-p", f"127.0.0.1:{port}:5555", IMAGE,   # chỉ mở trong server, không lộ ra internet
+               "-v", f"{data}:/data", "-p", f"127.0.0.1:{port}:5555", img,   # chỉ mở trong server, không lộ ra internet
                f"androidboot.redroid_width={w}", f"androidboot.redroid_height={h}",
-               f"androidboot.redroid_dpi={int(dpi) or auto_dpi(res)}", f"androidboot.redroid_fps={fps}"] + ARM)
+               f"androidboot.redroid_dpi={int(dpi) or auto_dpi(res)}", f"androidboot.redroid_fps={fps}"] + (HOUDINI if tr == "houdini" else ARM))
 
 def cmd_reconfig(a):
     """Đổi FPS / độ phân giải: tạo lại container với CÙNG thư mục dữ liệu → giữ nguyên app, tài khoản."""
@@ -287,7 +303,7 @@ def cmd_reconfig(a):
     dpi = p.get("dpi", 0) if res == p.get("res") else 0
     sh(["docker", "exec", WSNAME, "adb", "disconnect", f"127.0.0.1:{p['port']}"])
     rm_container(a.name)                       # chỉ xoá container, KHÔNG xoá dữ liệu
-    r = docker_run(a.name, p["ram"], p["cpu"], p["port"], res, fps, dpi)
+    r = docker_run(a.name, p["ram"], p["cpu"], p["port"], res, fps, dpi, p.get("android", "11"))
     if r.returncode != 0:
         print("LỖI:", (r.stderr or r.stdout).strip()); sys.exit(4)
     p["res"], p["fps"], p["dpi"] = res, fps, dpi; save(st)
@@ -405,7 +421,7 @@ def cmd_reap(a):
 def main():
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest="cmd")
-    c = sub.add_parser("create"); c.add_argument("name"); c.add_argument("--ram", type=float, default=2); c.add_argument("--cpu", type=float, default=2); c.add_argument("--days", type=int, default=7); c.add_argument("--res", default="720x1280"); c.add_argument("--dpi", type=int, default=0); c.add_argument("--fps", type=int, default=30); c.add_argument("--nowait", action="store_true"); c.set_defaults(f=cmd_create)
+    c = sub.add_parser("create"); c.add_argument("name"); c.add_argument("--ram", type=float, default=2); c.add_argument("--cpu", type=float, default=2); c.add_argument("--days", type=int, default=7); c.add_argument("--res", default="720x1280"); c.add_argument("--dpi", type=int, default=0); c.add_argument("--fps", type=int, default=30); c.add_argument("--nowait", action="store_true"); c.add_argument("--android", default="11"); c.set_defaults(f=cmd_create)
     sub.add_parser("list").set_defaults(f=cmd_list)
     d = sub.add_parser("delete"); d.add_argument("name"); d.set_defaults(f=cmd_delete)
     r = sub.add_parser("renew"); r.add_argument("name"); r.add_argument("--days", type=int, default=7); r.set_defaults(f=cmd_renew)

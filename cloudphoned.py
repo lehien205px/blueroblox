@@ -92,7 +92,7 @@ def do_create(row):
         print(f"[tạo] đơn {row['id'][:8]} → {name} ({row['ram']}GB/{row['cpu']} {row['days']}n {row.get('fps') or 30}fps)")
         r = phonectl(["create", name, "--ram", str(row["ram"]), "--cpu", str(row["cpu"]),
                       "--days", str(row["days"]), "--res", row.get("res") or "720x1280",
-                      "--fps", str(row.get("fps") or 30), "--nowait"])
+                      "--fps", str(row.get("fps") or 30), "--android", str(row.get("android") or "11"), "--nowait"])
         if r.returncode == 2:   # HẾT HÀNG (quá 85%)
             refund(row, "Máy chủ đã đầy, chưa tạo được máy"); notify(f"⚠️ <b>Đơn ĐT đám mây bị hoàn tiền</b> vì {NODE_ID} đã đầy 85%."); return
         if r.returncode != 0:

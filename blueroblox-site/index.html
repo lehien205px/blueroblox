@@ -818,6 +818,29 @@ body.past-hero .stage, body.past-hero .stage *, body.past-hero h1 .ch, body.past
 .cpwarn{color:#ffc861}
 @media (max-width:980px){ .cpguide{grid-template-columns:repeat(2,minmax(0,1fr))} }
 
+/* ===== Ưu đãi miễn phí: dòng chữ chạy + khung trong form thuê ===== */
+.freebar{position:relative;z-index:1;overflow:hidden;cursor:pointer;background:linear-gradient(90deg,#ff7a18,#ffb800,#ff7a18);color:#1a0f00;font-weight:800;font-size:15px;line-height:36px;height:36px;white-space:nowrap;box-shadow:0 2px 10px rgba(0,0,0,.25)}
+.freebar .fb-track{display:inline-block;padding-left:12px;animation:fbmove var(--fb-dur,22s) linear infinite}
+.freebar .fb-track span{margin-right:80px}
+.freebar:hover .fb-track,.freebar:focus .fb-track{animation-play-state:paused}
+@keyframes fbmove{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+@media (prefers-reduced-motion:reduce){.freebar .fb-track{animation:none;padding-left:16px}}
+.cpfree{margin:4px 0 12px;padding:12px 14px;border-radius:14px;border:2px solid #ffb800;background:rgba(255,184,0,.1);display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.cpfree b{color:#ffcf4a}
+.cpfree .sw input:checked+i{background:#ffb800;border-color:#ffb800}
+.cpfree .fsw{display:flex;gap:10px;align-items:center;cursor:pointer;font-weight:700}
+.cpfree small{display:block;color:var(--muted);font-weight:400}
+.freebox{grid-template-columns:1fr 1fr!important}
+/* ===== Trang quản trị riêng (/admin): to như trang chính ===== */
+body.admin-page>header.top,body.admin-page>section.wrap,body.admin-page>footer,body.admin-page>.freebar{display:none!important}
+body.admin-page .drawer{background:#070b22;-webkit-backdrop-filter:none;backdrop-filter:none}
+body.admin-page .dpanel{width:100%;border-left:0;box-shadow:none}
+body.admin-page .dpanel>*{width:100%;max-width:1600px;margin-left:auto;margin-right:auto}
+body.admin-page .dhead h2{font-size:26px}
+body.admin-page .tabs button{font-size:16px}
+.adm-gate{display:none}
+body.admin-page .adm-gate{display:flex;position:fixed;inset:0;z-index:55;background:#070b22;align-items:center;justify-content:center;flex-direction:column;gap:14px;text-align:center;padding:24px;color:var(--text,#fff)}
+
 </style>
 <script>
 // Đã điền sẵn cho blueroblox.shop
@@ -833,6 +856,7 @@ window.BR_CONFIG = {
 <link rel="preload" as="script" href="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js">
 </head>
 <body>
+<div class="freebar" id="freebar" hidden role="button" tabindex="0" aria-label="Ưu đãi miễn phí"><div class="fb-track" id="fb-track"></div></div>
 <header class="top">
   <div class="wrap">
     <a class="logo" href="/" aria-label="BlueRoblox"><span class="mark"></span><span class="wm"><b><em>Blue</em>Roblox</b><small>Clone Roblox &amp; VPS GPU</small></span></a>
@@ -1348,6 +1372,17 @@ window.BR_CONFIG = {
         <div class="hint full">Trong lúc bảo trì, máy của khách <b>không bị tạm dừng hay xoá</b> khi hết hạn; tắt bảo trì xong khách có 30 phút để gia hạn.</div>
         <div class="acts full"><button class="btn" type="button" id="mt-save">Lưu bảo trì</button><span class="hint" id="mt-msg"></span></div>
       </div>
+      <div class="f mtbox freebox">
+        <h3>🎁 Miễn phí ưu đãi</h3>
+        <div class="hint full" id="fr-state"></div>
+        <label>Số ngày miễn phí<input id="fr-days" type="number" min="1" inputmode="numeric" value="1"></label>
+        <div class="hint" style="align-self:end">👤 Mỗi tài khoản chỉ được dùng thử <b>1 máy</b> mỗi đợt (đã nhận rồi thì không nhận lại được, kể cả khi máy đã hết hạn).</div>
+        <label>RAM tối đa (GB)<input id="fr-ram" type="number" min="1" inputmode="numeric" value="4"></label>
+        <label>CPU tối đa (nhân)<input id="fr-cpu" type="number" min="1" inputmode="numeric" value="4"></label>
+        <label class="full">Dòng chữ chạy trên web (để trống = tự viết)<input id="fr-msg" maxlength="200" placeholder="VD: 🎁 Miễn phí thuê điện thoại đám mây 3 ngày — nhận ngay!"></label>
+        <div class="hint full">Bật: khách nhận máy <b>0đ</b> (đúng số ngày trên), web hiện dòng chữ chạy. Hết số ngày → máy tự tắt, 30 phút sau tự xoá. Máy miễn phí không gia hạn được.<br><b>Tắt: quay lại tính phí và XOÁ SẠCH mọi máy miễn phí đã phát.</b></div>
+        <div class="acts full"><button class="btn" type="button" id="fr-on">Bật / Lưu ưu đãi</button><button class="btn ghost" type="button" id="fr-off" style="border-color:var(--bad);color:var(--bad)">Tắt ưu đãi & xoá máy miễn phí</button><span class="hint" id="fr-msgout"></span></div>
+      </div>
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><h3 style="margin:0">🖥️ Máy chủ</h3><span class="hint" id="cpa-nodesum"></span><button class="btn ghost sm" type="button" id="cpa-nodes-reload" style="margin-left:auto">Làm mới</button></div>
       <div class="nodes" id="cpa-nodes"><div class="empty">Đang tải…</div></div>
       <div class="f" style="grid-template-columns:1fr 1fr">
@@ -1492,6 +1527,7 @@ window.BR_CONFIG = {
 <div class="modal" id="cporderdlg" hidden>
   <div class="dlg cpwide" role="dialog" aria-modal="true" aria-labelledby="cpo-title">
     <div class="cphead"><h3 id="cpo-title">Thuê điện thoại đám mây</h3><div class="hint" id="cp-rate"></div></div>
+    <div class="cpfree" id="cp-free" hidden></div>
     <div class="cpf cpandf"><span class="cpl">Phiên bản Android</span><div class="cpand" id="cp-and"></div></div>
     <div class="cpguide" id="cp-guide"></div>
     <div class="cpgrid">
@@ -2132,6 +2168,7 @@ if (typeof module !== "undefined") module.exports = { drawDongSon };
 <script>
 /* BLUEROBLOX – giao diện khách + admin, nối Supabase */
 "use strict";
+const ADMIN_PAGE = /^\/admin\/?$/.test(location.pathname);
 const CFG = window.BR_CONFIG || {};
 const $ = id => document.getElementById(id);
 
@@ -2427,7 +2464,7 @@ $("f-login").onsubmit = e => { e.preventDefault(); busy($("li-btn"), async () =>
   await loadProfile();
   if (profile && profile.locked) { await sb.auth.signOut(); $("li-err").textContent = errMsg("LOCKED"); return; }
   $("f-login").reset(); show("auth", false); renderUser();
-  if (isAdmin()) openAdmin(); else toast(L("Đăng nhập thành công.", "Logged in."));
+  if (isAdmin() && ADMIN_PAGE) openAdmin(); else toast(L("Đăng nhập thành công.", "Logged in."));
 }); };
 let fgEmail = "";
 $("fg-send").onclick = () => busy($("fg-send"), async () => {
@@ -3082,7 +3119,8 @@ $("bf").onsubmit = e => { e.preventDefault(); const acc = $("bf-acc").value.repl
   saveSettings({ bankBin: $("bf-bin").value, bankAcc: acc, bankName: $("bf-name").value.trim().toUpperCase(), prefix: ($("bf-prefix").value.trim().toUpperCase().replace(/[^A-Z0-9]/g, "") || "BR"), minTop: Math.max(1000, +$("bf-min").value || 10000) }, $("bf-save"), "Đã lưu tài khoản ngân hàng."); };
 function setTab(t) { document.querySelectorAll("#adm-tabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === t)); ["stats", "prod", "cust", "tx", "ord", "vps", "biz", "cloud", "bank", "site"].forEach(x => show("pane-" + x, x === t)); if (t === "vps") renderVps(); if (t === "stats") loadStats(); if (t === "biz") loadBiz(); if (t === "cloud") loadCloudAdm(); }
 $("adm-tabs").onclick = e => { const b = e.target.closest("button"); if (!b) return; if (b.dataset.tab === "site" || b.dataset.tab === "bank") fillSite(); setTab(b.dataset.tab); };
-$("admin-open").onclick = openAdmin; $("admin-close").onclick = () => show("drawer", false);
+$("admin-open").onclick = () => ADMIN_PAGE ? openAdmin() : (location.href = "/admin");     // Quản trị → trang riêng /admin (to như trang chính)
+$("admin-close").onclick = () => ADMIN_PAGE ? (location.href = "/") : show("drawer", false);
 $("adm-refresh").onclick = () => busy($("adm-refresh"), async () => { await Promise.all([loadProducts(), loadSettings(), loadAdmin()]); toast("Đã tải lại."); });
 $("adm-logout").onclick = async () => { show("drawer", false); await logout(); };
 $("drawer").onclick = e => { if (e.target.id === "drawer") show("drawer", false); };
@@ -3643,6 +3681,7 @@ const CP_CARD_DEF = { name: "Điện thoại đám mây (Cloud Phone)", feats: "
 let CPpricing = null, cpSel = { ram: 2, cpu: 2, days: 7, res: "720x1280", fps: 30, qty: 1 }, myCloud = [], cpPollT = null;
 Object.assign(ERR, { BAD_RAM: "RAM nằm ngoài giới hạn cho phép.", BAD_CPU: "Số nhân CPU nằm ngoài giới hạn cho phép.", BAD_DAYS: "Số ngày nằm ngoài giới hạn cho phép.",
   BAD_RES: "Độ phân giải không hợp lệ (dạng 720x1280).", BAD_FPS: "FPS nằm ngoài giới hạn cho phép.", BAD_QTY: "Số lượng không hợp lệ.", PHONE_LOCKED: "Máy đang bị khoá, không gia hạn được. Liên hệ hỗ trợ.", BAD_DISCOUNT: "Chiết khấu phải từ 0 đến 90%.", NOT_ADMIN: "Chỉ admin mới làm được việc này.", MAINTENANCE: "Hệ thống đang bảo trì, vui lòng quay lại sau.",
+  FREE_OFF: "Ưu đãi miễn phí đã kết thúc.", FREE_LIMIT: "Máy miễn phí vượt cấu hình tối đa cho phép.", FREE_USED: "Mỗi tài khoản chỉ được dùng thử 1 máy miễn phí — bạn đã nhận rồi.", FREE_ONE: "Máy miễn phí chỉ nhận 1 máy mỗi lần.", FREE_NO_RENEW: "Máy miễn phí không gia hạn được — hãy thuê máy mới.",
   OUT_OF_CAPACITY: "Máy chủ đã hết chỗ cho cấu hình này. Chọn cấu hình nhỏ hơn hoặc quay lại sau.", SERVER_OFFLINE: "Máy chủ điện thoại đang tạm ngưng, vui lòng quay lại sau.", PHONE_GONE: "Máy đã bị xoá vì hết hạn quá 30 phút — hãy thuê máy mới.", NO_PHONE: "Không tìm thấy máy." });
 
 let CPstatus = null;
@@ -3666,11 +3705,12 @@ async function cpLoadPricing() {
     if (!error && data) { CPpricing = { ...CP_DEF }; for (const k in data) if (data[k] != null) CPpricing[k] = data[k]; }
   } catch (e) {}
   if (!CPpricing) CPpricing = { ...CP_DEF };
+  try { renderFreeBar(); } catch (e) {}
   return CPpricing;
 }
 const cpN = v => +v || 0;
 function cpPerDay(ram, cpu, pr) { pr = pr || CPpricing || CP_DEF; return ram * cpN(pr.price_ram_gb_day) + cpu * cpN(pr.price_cpu_day); }
-function cpPrice() { return cv(cpPerDay(cpSel.ram, cpSel.cpu) * cpSel.days) * (cpSel.qty || 1); }
+function cpPrice() { if (cpSel.free) return 0; return cv(cpPerDay(cpSel.ram, cpSel.cpu) * cpSel.days) * (cpSel.qty || 1); }
 function cpCardShow() {
   const c = cpCard(), p = CPpricing || {}; if (LANG !== "en") return c;
   const fe = (p.card_feats_en || "").trim();
@@ -3686,9 +3726,14 @@ function cpCard() {
 function cpNormRes(v) { return String(v || "").toLowerCase().replace(/\s+/g, "").replace(/[*×:]/g, "x"); }
 function cpCheck() {
   const p = CPpricing || CP_DEF;
+  if (cpSel.free) {
+    if (cpSel.ram > +p.free_max_ram) return L(`Máy miễn phí tối đa ${p.free_max_ram}GB RAM.`, `Free phones: max ${p.free_max_ram}GB RAM.`);
+    if (cpSel.cpu > +p.free_max_cpu) return L(`Máy miễn phí tối đa ${p.free_max_cpu} nhân.`, `Free phones: max ${p.free_max_cpu} cores.`);
+    if (cpSel.qty > 1) return L("Mỗi tài khoản chỉ được dùng thử 1 máy miễn phí.", "Only 1 free trial phone per account.");
+  }
   if (!(cpSel.ram >= p.min_ram && cpSel.ram <= p.max_ram)) return `RAM phải từ ${p.min_ram} đến ${p.max_ram} GB.`;
   if (!(cpSel.cpu >= p.min_cpu && cpSel.cpu <= p.max_cpu)) return `CPU phải từ ${p.min_cpu} đến ${p.max_cpu} nhân.`;
-  if (!(cpSel.days >= p.min_days && cpSel.days <= p.max_days)) return `Số ngày phải từ ${p.min_days} đến ${p.max_days}.`;
+  if (!cpSel.free && !(cpSel.days >= p.min_days && cpSel.days <= p.max_days)) return `Số ngày phải từ ${p.min_days} đến ${p.max_days}.`;
   if (!(cpSel.fps >= p.min_fps && cpSel.fps <= p.max_fps)) return `FPS phải từ ${p.min_fps} đến ${p.max_fps}.`;
   if (cpSel.cpu < 4 && cpSel.fps > 60) return L("Máy dưới 4 nhân chỉ chọn tối đa 60 FPS — treo game nên để 30 FPS cho mượt, hoặc chọn từ 4 nhân trở lên.", "Under 4 cores the limit is 60 FPS (30 FPS is smoothest for farming), or pick 4+ cores.");
   if (!(cpSel.qty >= 1 && cpSel.qty <= 20)) return "Số lượng máy phải từ 1 đến 20.";
@@ -3738,8 +3783,8 @@ function renderCloud() {
     const g = cpGraceLeft(p);
     const locked = cpLocked(p);
     const lk = p.status === "active" && p.stream_url && !locked ? cpLinks(p) : null;
-    const canRenew = !p.shared && !locked && (p.status === "active" || (p.status === "expired" && g > 0));
-    return `<div class="vmi"><div class="top"><div class="nm">📱 ${esc(p.name)}<small>Android ${esc(p.android || "11")} · ${p.ram}GB · ${p.cpu} nhân · ${esc(p.res || "")} · ${p.fps || 30} FPS</small></div>${cpPill(p)}</div>
+    const canRenew = !p.shared && !p.is_free && !locked && (p.status === "active" || (p.status === "expired" && g > 0));
+    return `<div class="vmi"><div class="top"><div class="nm">📱 ${esc(p.name)}<small>${p.is_free ? "🎁 " + L("Miễn phí", "Free") + " · " : ""}Android ${esc(p.android || "11")} · ${p.ram}GB · ${p.cpu} nhân · ${esc(p.res || "")} · ${p.fps || 30} FPS</small></div>${cpPill(p)}</div>
       ${exp ? `<div class="exp">${L("Hết hạn", "Expires")}: ${exp.toLocaleString(LANG === "en" ? "en-GB" : "vi-VN")}${left ? " · " + left : ""}</div>` : ""}
       ${p.status === "expired" ? `<div class="exp" style="color:var(--bad)">${g > 0 ? `Máy đã tạm dừng. Gia hạn trong <b>${g} phút</b> nữa để giữ dữ liệu, quá hạn máy sẽ bị xoá.` : "Đã quá 30 phút — máy đang bị xoá."}</div>` : ""}
       ${p.status === "pending" ? `<div class="exp">Máy đang khởi động (khoảng 2–3 phút), trang tự cập nhật.</div>` : ""}
@@ -3791,7 +3836,7 @@ function cpAndChips() {
   $("cp-and").innerHTML = L0.map(v => `<button type="button" data-and="${v}" class="${v === cpSel.android ? "on" : ""}">Android ${v}${v !== "11" ? ` <small>${L("Mới", "New")}</small>` : ""}</button>`).join("");
 }
 document.addEventListener("click", e => { const b = e.target.closest("[data-and]"); if (!b) return; cpSel.android = b.dataset.and; cpAndChips(); cpOrderUpd(); });
-async function openCpOrder() {
+async function openCpOrder(wantFree) {
   if (!profile) { openAuth("login"); return; }
   CPpricing = null; await Promise.all([cpLoadPricing(), cpLoadStatus()]);
   const why = cpBlocked(); if (why) { toast(why, 1); try { renderGrid(); } catch (e) {} return; }
@@ -3804,6 +3849,7 @@ async function openCpOrder() {
   cpChips("cp-fps", CP_FPS.filter(v => v >= p.min_fps && v <= p.max_fps), "fps", " FPS");
   cpChips("cp-qty", CP_QTY, "qty", " máy");
   cpResChips(); cpAndChips(); cpGuide();
+  cpSel.free = false; cpFreeBox(p.free_on && wantFree !== false);
   ["cp-ram-x", "cp-cpu-x", "cp-days-x", "cp-fps-x", "cp-qty-x"].forEach(id => { $(id).value = ""; });
   $("cp-fps-x").min = p.min_fps; $("cp-fps-x").max = p.max_fps;
   $("cp-ram-x").max = p.max_ram; $("cp-cpu-x").max = p.max_cpu; $("cp-days-x").max = p.max_days;
@@ -3814,6 +3860,13 @@ async function openCpOrder() {
 }
 function cpOrderUpd() {
   const price = cpPrice(), p = CPpricing || CP_DEF, bad = cpCheck();
+  if (cpSel.free) {
+    $("cp-calc").textContent = L(`🎁 Miễn phí ${p.free_days} ngày`, `🎁 Free for ${p.free_days} day(s)`) + (cpSel.qty > 1 ? ` × ${cpSel.qty} máy` : "");
+    $("cp-total").textContent = bad ? "—" : "0đ"; $("cp-bal").textContent = profile ? fmt(profile.balance) : "—";
+    $("cp-err").textContent = bad || ""; $("cp-obuy").textContent = L("🎁 Nhận máy miễn phí", "🎁 Get free phone");
+    $("cp-lim").innerHTML = L(`Máy miễn phí: tối đa ${p.free_max_ram}GB RAM · ${p.free_max_cpu} nhân · ${p.free_days} ngày. Hết hạn máy tự tắt, không gia hạn được.`, `Free phone: max ${p.free_max_ram}GB RAM · ${p.free_max_cpu} cores · ${p.free_days} day(s). Stops when it expires; can't be renewed.`);
+    return;
+  }
   $("cp-calc").textContent = `(${cpSel.ram}GB×${vnd(p.price_ram_gb_day)} + ${cpSel.cpu} nhân×${vnd(p.price_cpu_day)}) × ${cpSel.days} ngày` + (isCtv() ? ` − ${ctvPct()}% CTV` : "") + (cpSel.qty > 1 ? ` × ${cpSel.qty} máy` : "");
   $("cp-total").textContent = bad ? "—" : fmt(price);
   $("cp-bal").textContent = profile ? fmt(profile.balance) : "—";
@@ -3826,13 +3879,13 @@ function cpOrderUpd() {
 async function cpBuy() {
   const bad = cpCheck(); if (bad) { $("cp-err").textContent = bad; return; }
   const price = cpPrice();
-  if (profile.balance < price) { show("cporderdlg", false); openTopup(Math.max(+SITE.minTop || 10000, Math.ceil((price - profile.balance) / 1000) * 1000)); return; }
-  const { error } = await sb.rpc("cloudphone_order_custom", { p_ram: cpSel.ram, p_cpu: cpSel.cpu, p_days: cpSel.days, p_res: cpSel.res, p_name: null, p_fps: cpSel.fps, p_qty: cpSel.qty, ...(cpSel.android && cpSel.android !== "11" ? { p_android: cpSel.android } : {}) });
+  if (!cpSel.free && profile.balance < price) { show("cporderdlg", false); openTopup(Math.max(+SITE.minTop || 10000, Math.ceil((price - profile.balance) / 1000) * 1000)); return; }
+  const { error } = await sb.rpc("cloudphone_order_custom", { p_ram: cpSel.ram, p_cpu: cpSel.cpu, p_days: cpSel.days, p_res: cpSel.res, p_name: null, p_fps: cpSel.fps, p_qty: cpSel.qty, ...(cpSel.android && cpSel.android !== "11" ? { p_android: cpSel.android } : {}), ...(cpSel.free ? { p_free: true } : {}) });
   if (error) { $("cp-err").textContent = errMsg(error); return; }
   show("cporderdlg", false); await loadProfile(); renderUser();
   CPpricing = null; cpLoadPricing().then(() => { try { renderGrid(); } catch (e) {} });
   toast(cpSel.qty > 1 ? `Đã tạo đơn ${cpSel.qty} máy! Các máy đang khởi tạo (khoảng 2–3 phút mỗi máy).` : L("Đã tạo đơn! Máy đang khởi tạo (khoảng 2–3 phút).", "Order placed! Creating…"));
-  notifyTg && notifyTg(`📱 <b>Đơn ĐT đám mây mới</b>\n${cpSel.qty} máy × Android ${cpSel.android || 11} · ${cpSel.ram}GB / ${cpSel.cpu} nhân / ${cpSel.days} ngày / ${cpSel.res} / ${cpSel.fps} FPS\nGiá: ${vnd(price)}`);
+  notifyTg && notifyTg(`📱 <b>Đơn ĐT đám mây mới${cpSel.free ? " (🎁 MIỄN PHÍ)" : ""}</b>\n${cpSel.qty} máy × Android ${cpSel.android || 11} · ${cpSel.ram}GB / ${cpSel.cpu} nhân / ${cpSel.days} ngày / ${cpSel.res} / ${cpSel.fps} FPS\nGiá: ${vnd(price)}`);
   openCloud();
 }
 
@@ -4027,7 +4080,7 @@ async function loadCloudAdm() {
   if ($("cpa-andv")) $("cpa-andv").value = pr.android_versions || "11";
   $("cpa-stock").value = pr.stock == null ? "" : pr.stock;
   $("cpa-stockhint").textContent = pr.stock == null ? "Đang: không giới hạn" : +pr.stock <= 0 ? "Đang HẾT HÀNG" : "Đang còn " + pr.stock + " máy";
-  $("cpa-msg").textContent = ""; cpaAnalyze();
+  $("cpa-msg").textContent = ""; cpaAnalyze(); frFill(pr);
   const { data } = await sb.from("cloud_phones").select("*").order("created_at", { ascending: false });
   CPA_ROWS = (data || []).filter(r => r.status !== "cancelled"); cpaSel.clear(); renderCpaTbl();
 }
@@ -4694,6 +4747,119 @@ $("appnews").onclick = e => { if (e.target.id === "appnews") appNewsClose(); };
     if (profile) openTopup(); else { openAuth("login"); const iv = setInterval(() => { if (profile) { clearInterval(iv); show("auth", false); openTopup(); } }, 700); setTimeout(() => clearInterval(iv), 600000); }
   }, 300);
 })();
+
+
+/* ========= TRANG QUẢN TRỊ RIÊNG (/admin) ========= */
+function adminPageBoot() {
+  if (!ADMIN_PAGE) return;
+  document.body.classList.add("admin-page"); document.title = "Quản trị · BlueRoblox";
+  const g = document.createElement("div"); g.className = "adm-gate"; g.id = "adm-gate";
+  g.innerHTML = `<h2>Bảng quản trị BlueRoblox</h2><p id="adm-gate-msg">Đang kiểm tra đăng nhập…</p><div style="display:flex;gap:10px"><button class="btn" id="adm-gate-login" hidden>Đăng nhập admin</button><a class="btn ghost" href="/">Về trang chủ</a></div>`;
+  document.body.appendChild(g);
+  $("adm-gate-login").onclick = () => openAuth("login");
+  let t0 = Date.now();
+  const iv = setInterval(() => {
+    if (profile && isAdmin()) { if ($("drawer").hidden) openAdmin(); g.hidden = true; return; }
+    g.hidden = false;
+    if (profile) { $("adm-gate-msg").textContent = "Tài khoản này không phải admin."; $("adm-gate-login").hidden = true; }
+    else if (Date.now() - t0 > 2500) { $("adm-gate-msg").textContent = "Đăng nhập tài khoản admin để vào bảng quản trị."; $("adm-gate-login").hidden = false; }
+  }, 700);
+}
+adminPageBoot();
+
+/* ========= CẬP NHẬT TỨC THÌ (Supabase Realtime) — admin thấy đơn / nạp tiền / máy mới ngay, không chờ 20–30 giây ========= */
+let rtAdmin = null, rtPub = null;
+const rtDeb = {};
+function rtLater(k, fn, ms) { clearTimeout(rtDeb[k]); rtDeb[k] = setTimeout(() => { try { fn(); } catch (e) {} }, ms || 600); }
+function paneOn(id) { const el = $(id); return el && !el.hidden && !$("drawer").hidden; }
+async function cpaReloadRows() {
+  const { data } = await sb.from("cloud_phones").select("*").order("created_at", { ascending: false });
+  CPA_ROWS = (data || []).filter(r => r.status !== "cancelled"); renderCpaTbl();
+}
+function startRealtime() {
+  if (!sb.channel) return;
+  if (!rtPub) {          // mọi khách: ưu đãi miễn phí / giá bật tắt là dòng chữ chạy đổi ngay
+    rtPub = sb.channel("pub-pricing").on("postgres_changes", { event: "*", schema: "public", table: "cloudphone_pricing" },
+      () => rtLater("pr", () => { CPpricing = null; cpLoadPricing().then(() => { try { renderGrid(); } catch (e) {} }); }, 400)).subscribe();
+  }
+  if (rtAdmin || !profile || !isAdmin()) return;
+  const on = (ch, table, fn) => ch.on("postgres_changes", { event: "*", schema: "public", table }, fn);
+  const ch = sb.channel("adm-live");
+  ["orders", "topups", "profiles", "vps_machines"].forEach(t => on(ch, t, () => {
+    rtLater("pend", pollPending, 300);
+    if (!$("drawer").hidden) rtLater("adm", () => loadAdmin(), 800);
+  }));
+  on(ch, "biz_sync", () => { if (paneOn("pane-biz")) rtLater("biz", loadBiz, 500); });
+  on(ch, "cloud_phones", () => { if (paneOn("pane-cloud")) rtLater("cpa", cpaReloadRows, 600); });
+  rtAdmin = ch.subscribe();
+}
+startRealtime();
+setInterval(() => { if (profile && isAdmin() && !rtAdmin) startRealtime(); }, 2000);
+
+/* ========= MIỄN PHÍ ƯU ĐÃI ========= */
+function freeText(p) {
+  return (p.free_msg || "").trim() || L(`🎁 MIỄN PHÍ thuê điện thoại đám mây ${p.free_days} ngày — tối đa ${p.free_max_ram}GB RAM · ${p.free_max_cpu} nhân. Bấm vào đây để nhận máy ngay!`,
+    `🎁 FREE cloud phone for ${p.free_days} day(s) — up to ${p.free_max_ram}GB RAM · ${p.free_max_cpu} cores. Tap here to get yours now!`);
+}
+function renderFreeBar() {
+  const bar = $("freebar"), p = CPpricing; if (!bar) return;
+  if (!p || !p.free_on) { bar.hidden = true; return; }
+  const t = esc(freeText(p));
+  const half = `<span>${t}</span><span>${t}</span>`;        // 2 nửa giống hệt nhau → chạy vòng liên tục không bị hở
+  $("fb-track").innerHTML = half + half;
+  bar.style.setProperty("--fb-dur", Math.max(18, Math.round(t.length * 0.45)) + "s");
+  bar.hidden = false;
+}
+function openFree() { if (!profile) { openAuth("login"); return; } openCpOrder(true); }
+$("freebar") && ($("freebar").onclick = openFree);
+$("freebar") && $("freebar").addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openFree(); } });
+
+function cpFreeBox(on) {
+  const box = $("cp-free"), p = CPpricing || {}; if (!box) return;
+  if (!p.free_on) { box.hidden = true; cpSel.free = false; const df = $("cp-days") && $("cp-days").closest(".cpf"); if (df) df.hidden = false; return; }
+  box.hidden = false;
+  box.innerHTML = `<label class="fsw"><span class="sw"><input type="checkbox" id="cp-free-sw"${on ? " checked" : ""}><i></i></span>
+    <span>🎁 <b>${L(`Nhận máy MIỄN PHÍ ${p.free_days} ngày`, `Get a FREE phone for ${p.free_days} day(s)`)}</b>
+    <small>${L(`Tối đa ${p.free_max_ram}GB RAM · ${p.free_max_cpu} nhân · mỗi tài khoản chỉ dùng thử 1 máy. Tắt công tắc nếu muốn thuê trả phí lâu dài.`, `Up to ${p.free_max_ram}GB RAM · ${p.free_max_cpu} cores · 1 trial phone per account. Switch off to rent a paid phone instead.`)}</small></span></label>`;
+  cpSetFree(on);
+}
+function cpSetFree(on) {
+  const p = CPpricing || {};
+  cpSel.free = !!on;
+  if (on) {
+    cpSel.ram = Math.min(cpSel.ram, +p.free_max_ram || cpSel.ram); cpSel.cpu = Math.min(cpSel.cpu, +p.free_max_cpu || cpSel.cpu);
+    cpSel.qty = 1; cpSel.days = +p.free_days || 1;
+    [["cp-ram", "ram"], ["cp-cpu", "cpu"], ["cp-qty", "qty"]].forEach(([id, k]) => $(id).querySelectorAll("button").forEach(z => z.classList.toggle("on", +z.dataset.v === cpSel[k])));
+  }
+  const df = $("cp-days") && $("cp-days").closest(".cpf"); if (df) df.hidden = !!on;
+  cpOrderUpd();
+}
+document.addEventListener("change", e => { if (e.target && e.target.id === "cp-free-sw") cpSetFree(e.target.checked); });
+
+// ----- admin: bật / tắt ưu đãi -----
+function frFill(pr) {
+  if (!$("fr-days")) return;
+  $("fr-days").value = pr.free_days || 1;
+  $("fr-ram").value = pr.free_max_ram || 4; $("fr-cpu").value = pr.free_max_cpu || 4; $("fr-msg").value = pr.free_msg || "";
+  const n = (CPA_ROWS || []).filter(r => r.is_free && r.status !== "cancelled").length;
+  $("fr-state").innerHTML = pr.free_on == null ? "⚠️ Chưa chạy file SQL <b>cloud-phones-v12.sql</b> trên Supabase."
+    : pr.free_on ? `🟢 <b>ĐANG BẬT</b> — khách nhận máy 0đ ${pr.free_days} ngày. Đang có <b>${n}</b> máy miễn phí.` : `⚪ Đang tắt (tính phí bình thường).`;
+}
+$("fr-on") && ($("fr-on").onclick = () => busy($("fr-on"), async () => {
+  const n = id => Math.max(1, Math.floor(+$(id).value || 1));
+  const { error } = await sb.rpc("cloudphone_free_set", { p_on: true, p_days: n("fr-days"), p_max_ram: n("fr-ram"), p_max_cpu: n("fr-cpu"), p_per_user: 1, p_msg: $("fr-msg").value });
+  if (error) return toast(/cloudphone_free_set|function/.test(error.message || "") ? "Chưa chạy file SQL cloud-phones-v12.sql trên Supabase." : errMsg(error), 1);
+  toast("🎁 Đã BẬT ưu đãi miễn phí — web đang hiện dòng chữ chạy."); notifyTg && notifyTg(`🎁 Bật ưu đãi miễn phí ${n("fr-days")} ngày`);
+  await loadCloudAdm();
+}));
+$("fr-off") && ($("fr-off").onclick = () => busy($("fr-off"), async () => {
+  const n = (CPA_ROWS || []).filter(r => r.is_free && r.status !== "cancelled").length;
+  if (!confirm(`Tắt ưu đãi miễn phí và XOÁ SẠCH ${n} máy miễn phí (cả dữ liệu trong máy)?\nKhông hoàn tác được.`)) return;
+  const { data, error } = await sb.rpc("cloudphone_free_set", { p_on: false });
+  if (error) return toast(errMsg(error), 1);
+  toast(`Đã tắt ưu đãi. Server đang xoá ${(data && data.removed) || 0} máy miễn phí.`); notifyTg && notifyTg(`🎁 Tắt ưu đãi miễn phí — xoá ${(data && data.removed) || 0} máy`);
+  await loadCloudAdm();
+}));
 
 </script>
 </body>

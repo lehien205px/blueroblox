@@ -36,6 +36,9 @@
       ]
     }
   ],
+  "rewrites": [
+    { "source": "/admin", "destination": "/index.html" }
+  ],
   "crons": [
     {
       "path": "/api/vps-expiry-cron",

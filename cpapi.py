@@ -657,6 +657,16 @@ class H(BaseHTTPRequestHandler):
             self.end_headers()
             return self.wfile.write(r.stdout)
 
+        if act == "gsf":          # mã thiết bị Google (GSF ID) → khách đăng ký ở google.com/android/uncertified để đăng nhập Google được
+            r = shell(port, "content query --uri content://com.google.android.gsf.gservices --where \"name='android_id'\"", 20)
+            m = re.search(r"value=(\d{6,25})", out(r))
+            if not m: return self.send_json(409, {"error": "Chưa lấy được mã — mở Cửa hàng Play 1 lần, đợi 1 phút rồi thử lại."})
+            return self.send_json(200, {"gsf": m.group(1)})
+
+        if act == "gfix" and self.command == "POST":      # sau khi đăng ký mã: xoá dữ liệu Google Play để nhận chứng nhận mới
+            r = shell(port, "pm clear com.android.vending; pm clear com.google.android.gms", 60)
+            return self.send_json(200, {"ok": True, "out": out(r)[-200:]})
+
         if act == "apps":
             r = shell(port, "pm list packages -3", 30)
             pk = sorted(l.split(":", 1)[1].strip() for l in out(r).splitlines() if l.startswith("package:"))
@@ -715,6 +725,8 @@ class H(BaseHTTPRequestHandler):
             res = re.sub(r"\s", "", str(b.get("res") or p.get("res") or "720x1280")).lower().replace("*", "x").replace("×", "x")
             m = re.match(r"^(\d{3,4})x(\d{3,4})$", res)
             if not (lo <= fps <= hi): return self.send_json(400, {"error": f"FPS phải từ {lo} đến {hi}."})
+            if fps > 60 and float(p.get("cpu") or 0) < 4:      # máy nhỏ chạy FPS cao → quá tải, giật, xám màn hình
+                return self.send_json(400, {"error": "Máy dưới 4 nhân chỉ chọn tối đa 60 FPS (treo game nên để 30 FPS cho mượt)."})
             if not m or not all(320 <= int(v) <= 4096 for v in m.groups()): return self.send_json(400, {"error": "Độ phân giải phải dạng rộng x cao, VD 1080x1920."})
             if pid in _busy: return self.send_json(409, {"error": "Máy đang được đổi cấu hình, đợi chút."})
             jid = new_job(me["uid"], f"{res} · {fps} FPS")

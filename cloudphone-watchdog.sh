@@ -112,5 +112,15 @@ for c in $(docker ps -a --filter status=restarting --format '{{.Names}}' | grep 
   if [ "$(bad "rs_$c")" -ge 3 ]; then log "$c kẹt khởi động → chạy lại"; docker restart "$c" >/dev/null 2>&1; good "rs_$c"; fixed=1; fi
 done
 
+# 7) máy Android bị treo (chạy > 6 phút mà Android không lên / mất màn hình) → 3 phút liền thì tự khởi động lại máy đó
+now=$(date +%s)
+for c in $(docker ps --format '{{.Names}}' | grep -E '^cp_'); do
+  st=$(date -d "$(docker inspect -f '{{.State.StartedAt}}' "$c" 2>/dev/null)" +%s 2>/dev/null || echo "$now")
+  [ $((now - st)) -lt 360 ] && { good "hang_$c"; continue; }
+  okb=$(timeout 15 docker exec "$c" /system/bin/sh -c 'getprop sys.boot_completed; pidof surfaceflinger >/dev/null && echo SF; pidof system_server >/dev/null && echo SS' 2>/dev/null | tr -d '\r' | tr '\n' ' ')
+  if [[ "$okb" == 1*SF*SS* ]]; then good "hang_$c"
+  elif [ "$(bad "hang_$c")" -ge 3 ]; then log "$c bị treo (Android: '${okb:-không phản hồi}') 3 phút liền → khởi động lại máy"; docker restart "$c" >/dev/null 2>&1; good "hang_$c"; fixed=1; fi
+done
+
 [ "$fixed" = 0 ] && echo "✓ Mọi thứ bình thường"
 exit 0

@@ -785,6 +785,21 @@ h1 .ch{text-shadow:0 2px 0 rgba(61,123,255,.4),0 0 28px rgba(140,190,255,.5);wil
 body.past-hero .stage, body.past-hero .stage *, body.past-hero h1 .ch, body.past-hero h1 .spk, body.past-hero .eyebrow::before{animation-play-state:paused!important}
 @media (max-width:760px), (hover:none){ h1 .ch{animation:chIn .8s cubic-bezier(.2,.8,.2,1) backwards!important;animation-delay:calc(var(--i) * 32ms + .1s)!important} }
 
+/* ===== form thuê máy: rộng, 2–3 cột, không phải kéo lên kéo xuống ===== */
+.dlg.cpwide{width:min(1120px,100%);gap:12px;padding:20px 22px}
+.cphead{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}.cphead .hint{margin:0}
+.cpgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px 18px}
+.cpf{display:grid;gap:7px;align-content:start;padding:12px;border:1px solid var(--line);border-radius:14px;background:rgba(6,10,28,.35)}
+.cpf .cpl{margin:0!important;font-weight:600;color:var(--fg)}
+.cpf .amts{grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:6px!important}
+.cpf .amts button{padding:8px 4px!important;min-height:0!important;font-size:13.5px!important}
+.cpf .cpx{padding:8px 10px;font-size:13px}
+.cpfoot{display:grid;grid-template-columns:1.1fr 1fr;gap:12px 18px;align-items:start}
+.cpsum{display:grid;gap:6px}.cpsum .sum{margin:0}
+.cpside{display:grid;gap:8px}.cpside .note{margin:0!important;font-size:12.5px}
+@media (max-width:980px){ .cpgrid{grid-template-columns:repeat(2,minmax(0,1fr))} }
+@media (max-width:640px){ .cpgrid,.cpfoot{grid-template-columns:1fr} .dlg.cpwide{padding:16px} }
+
 </style>
 <script>
 // Đã điền sẵn cho blueroblox.shop
@@ -1456,34 +1471,35 @@ window.BR_CONFIG = {
 </div>
 <!-- ĐIỆN THOẠI ĐÁM MÂY — thuê máy mới -->
 <div class="modal" id="cporderdlg" hidden>
-  <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="cpo-title">
-    <h3 id="cpo-title">Thuê điện thoại đám mây</h3>
-    <div class="hint" id="cp-rate"></div>
-    <label class="cpl" for="cp-ram-x">RAM (GB)</label>
-    <div class="amts" id="cp-ram"></div>
-    <input class="in cpx" id="cp-ram-x" type="number" min="1" step="1" inputmode="numeric" placeholder="Hoặc tự nhập số GB, VD 32">
-    <label class="cpl" for="cp-cpu-x">CPU (số nhân)</label>
-    <div class="amts" id="cp-cpu"></div>
-    <input class="in cpx" id="cp-cpu-x" type="number" min="1" step="1" inputmode="numeric" placeholder="Hoặc tự nhập số nhân, VD 12">
-    <label class="cpl" for="cp-days-x">Số ngày thuê</label>
-    <div class="amts" id="cp-days"></div>
-    <input class="in cpx" id="cp-days-x" type="number" min="1" step="1" inputmode="numeric" placeholder="Hoặc tự nhập số ngày, VD 45">
-    <label class="cpl" for="cp-qty-x">Số lượng máy (cùng cấu hình)</label>
-    <div class="amts" id="cp-qty"></div>
-    <input class="in cpx" id="cp-qty-x" type="number" min="1" max="20" step="1" inputmode="numeric" placeholder="Hoặc tự nhập số máy, tối đa 20">
-    <label class="cpl" for="cp-res">Độ phân giải (rộng x cao)</label>
-    <div class="amts" id="cp-resq"></div>
-    <input class="in cpx" id="cp-res" type="text" autocomplete="off" placeholder="Hoặc tự nhập, VD 1080x2400">
-    <label class="cpl" for="cp-fps-x">FPS (số khung hình mỗi giây — càng cao càng mượt)</label>
-    <div class="amts" id="cp-fps"></div>
-    <input class="in cpx" id="cp-fps-x" type="number" min="10" max="120" step="1" inputmode="numeric" placeholder="Hoặc tự nhập FPS, VD 45">
-    <div class="hint" id="cp-lim" style="margin-top:8px"></div>
-    <div class="sum" style="margin-top:12px"><span>Cách tính</span><span id="cp-calc" style="font-family:var(--mono);font-size:12px;text-align:right"></span></div>
-    <div class="sum"><span>Tổng thanh toán</span><b id="cp-total"></b></div>
-    <div class="sum"><span>Số dư hiện tại</span><span id="cp-bal" style="font-family:var(--mono)"></span></div>
-    <div class="note" style="margin-top:10px">Mỗi máy là một điện thoại Android <b>mới tinh</b>, không có dữ liệu hay tài khoản Gmail của ai. Hết hạn máy tạm dừng; không gia hạn trong <b>30 phút</b> thì máy và toàn bộ dữ liệu bị xoá.</div>
-    <div class="err" id="cp-err"></div>
-    <div class="acts"><button class="btn ghost" type="button" id="cp-ocancel">Đóng</button><button class="btn" type="button" id="cp-obuy">Thanh toán &amp; tạo máy</button></div>
+  <div class="dlg cpwide" role="dialog" aria-modal="true" aria-labelledby="cpo-title">
+    <div class="cphead"><h3 id="cpo-title">Thuê điện thoại đám mây</h3><div class="hint" id="cp-rate"></div></div>
+    <div class="cpgrid">
+      <div class="cpf"><label class="cpl" for="cp-ram-x">RAM (GB)</label><div class="amts" id="cp-ram"></div>
+        <input class="in cpx" id="cp-ram-x" type="number" min="1" step="1" inputmode="numeric" placeholder="Hoặc tự nhập số GB, VD 32"></div>
+      <div class="cpf"><label class="cpl" for="cp-cpu-x">CPU (số nhân)</label><div class="amts" id="cp-cpu"></div>
+        <input class="in cpx" id="cp-cpu-x" type="number" min="1" step="1" inputmode="numeric" placeholder="Hoặc tự nhập số nhân, VD 12"></div>
+      <div class="cpf"><label class="cpl" for="cp-days-x">Số ngày thuê</label><div class="amts" id="cp-days"></div>
+        <input class="in cpx" id="cp-days-x" type="number" min="1" step="1" inputmode="numeric" placeholder="Hoặc tự nhập số ngày, VD 45"></div>
+      <div class="cpf"><label class="cpl" for="cp-qty-x">Số lượng máy (cùng cấu hình)</label><div class="amts" id="cp-qty"></div>
+        <input class="in cpx" id="cp-qty-x" type="number" min="1" max="20" step="1" inputmode="numeric" placeholder="Hoặc tự nhập số máy, tối đa 20"></div>
+      <div class="cpf"><label class="cpl" for="cp-res">Độ phân giải (rộng x cao)</label><div class="amts" id="cp-resq"></div>
+        <input class="in cpx" id="cp-res" type="text" autocomplete="off" placeholder="Hoặc tự nhập, VD 1080x2400"></div>
+      <div class="cpf"><label class="cpl" for="cp-fps-x">FPS (khung hình/giây — càng cao càng mượt, càng tốn CPU)</label><div class="amts" id="cp-fps"></div>
+        <input class="in cpx" id="cp-fps-x" type="number" min="10" max="120" step="1" inputmode="numeric" placeholder="Hoặc tự nhập FPS, VD 45"></div>
+    </div>
+    <div class="cpfoot">
+      <div class="cpsum">
+        <div class="hint" id="cp-lim"></div>
+        <div class="sum"><span>Cách tính</span><span id="cp-calc" style="font-family:var(--mono);font-size:12px;text-align:right"></span></div>
+        <div class="sum"><span>Tổng thanh toán</span><b id="cp-total"></b></div>
+        <div class="sum"><span>Số dư hiện tại</span><span id="cp-bal" style="font-family:var(--mono)"></span></div>
+      </div>
+      <div class="cpside">
+        <div class="note" style="margin-top:10px">Mỗi máy là một điện thoại Android <b>mới tinh</b>, không có dữ liệu hay tài khoản Gmail của ai. Hết hạn máy tạm dừng; không gia hạn trong <b>30 phút</b> thì máy và toàn bộ dữ liệu bị xoá.</div>
+        <div class="err" id="cp-err"></div>
+        <div class="acts"><button class="btn ghost" type="button" id="cp-ocancel">Đóng</button><button class="btn" type="button" id="cp-obuy">Thanh toán &amp; tạo máy</button></div>
+      </div>
+    </div>
   </div>
 </div>
 <div class="modal" id="ctvdlg" hidden>
@@ -3653,6 +3669,7 @@ function cpCheck() {
   if (!(cpSel.cpu >= p.min_cpu && cpSel.cpu <= p.max_cpu)) return `CPU phải từ ${p.min_cpu} đến ${p.max_cpu} nhân.`;
   if (!(cpSel.days >= p.min_days && cpSel.days <= p.max_days)) return `Số ngày phải từ ${p.min_days} đến ${p.max_days}.`;
   if (!(cpSel.fps >= p.min_fps && cpSel.fps <= p.max_fps)) return `FPS phải từ ${p.min_fps} đến ${p.max_fps}.`;
+  if (cpSel.cpu < 4 && cpSel.fps > 60) return L("Máy dưới 4 nhân chỉ chọn tối đa 60 FPS — treo game nên để 30 FPS cho mượt, hoặc chọn từ 4 nhân trở lên.", "Under 4 cores the limit is 60 FPS (30 FPS is smoothest for farming), or pick 4+ cores.");
   if (!(cpSel.qty >= 1 && cpSel.qty <= 20)) return "Số lượng máy phải từ 1 đến 20.";
   if (p.stock != null && cpSel.qty > +p.stock && !isAdmin()) return +p.stock <= 0 ? L("Đã hết hàng.", "Sold out.") : L(`Chỉ còn ${p.stock} máy — chọn số lượng nhỏ hơn.`, `Only ${p.stock} left — choose a smaller quantity.`);
   const s = CPstatus;
@@ -3823,10 +3840,10 @@ async function cpRenew(id) {
 /* ===== CHIA SẺ / CHUYỂN NHƯỢNG MÁY (SQL v9) ===== */
 Object.assign(ERR, { BAD_CODE: "Mã không đúng, đã bị huỷ hoặc đã hết hạn.", CODE_USED: "Mã này đã có người dùng rồi.", OWN_PHONE: "Đây là máy của chính bạn.",
   ALREADY_SHARED: "Bạn đã được chia sẻ máy này rồi.", SHARE_LIMIT: "Máy này đã có quá nhiều mã chia sẻ (tối đa 20). Thu hồi bớt rồi tạo lại.",
-  PHONE_NOT_ACTIVE: "Máy phải đang chạy mới chia sẻ được.", NOT_ALLOWED: "Bạn không có quyền làm việc này." });
+  PHONE_NOT_ACTIVE: "Máy phải đang chạy mới chia sẻ được.", FPS_TOO_HIGH: "Máy dưới 4 nhân chỉ chọn tối đa 60 FPS.", NOT_ALLOWED: "Bạn không có quyền làm việc này." });
 Object.assign(ERR_EN, { BAD_CODE: "Wrong, cancelled or expired code.", CODE_USED: "This code has already been used.", OWN_PHONE: "This is your own phone.",
   ALREADY_SHARED: "This phone is already shared with you.", SHARE_LIMIT: "Too many share codes for this phone (max 20). Revoke some first.",
-  PHONE_NOT_ACTIVE: "The phone must be running to share it.", NOT_ALLOWED: "You are not allowed to do this." });
+  PHONE_NOT_ACTIVE: "The phone must be running to share it.", FPS_TOO_HIGH: "Phones with under 4 cores are limited to 60 FPS.", NOT_ALLOWED: "You are not allowed to do this." });
 const shErr = e => /cp_share|cp_shared|function .* does not exist|schema cache/i.test(String(e && e.message)) ? L("Tính năng chia sẻ chưa bật (admin cần chạy SQL cloud-phones-v9).", "Sharing is not enabled yet.") : errMsg(e);
 let shPhone = null, shDays = 7;
 function shCodeBox(code, note) {

@@ -365,7 +365,7 @@ def cmd_create(a):
     # Android 11 + card còn chỗ → máy GPU. Máy GPU CHƯA root được → khi đã có bản root, máy mới ưu tiên bản ROOT
     # (muốn ưu tiên GPU hơn root: thêm GPU_OVER_ROOT=1 vào ~/cloudphone.conf)
     rooted = pick_image(IMAGES[av][0]) != IMAGES[av][0]
-    gpu = av == "11" and not a.nogpu and (not rooted or CONF.get("GPU_OVER_ROOT") == "1") and gpu_slot(st)
+    gpu = av == "11" and not a.nogpu and (not rooted or gpu_rooted() or CONF.get("GPU_OVER_ROOT") == "1") and gpu_slot(st)
     port = gpu_port(st) if gpu else free_port(st)
     if gpu and not port: gpu, port = False, free_port(st)
     if not port: print("LỖI: hết cổng (tối đa 30 máy/node)."); sys.exit(3)
@@ -454,6 +454,73 @@ def cmd_boost(a):
         if r.returncode == 0: n += 1; print(f"✓ {p['name']}: thuê {p.get('cpu', 2):g} nhân → được dùng tới {cpu_args(p.get('cpu', 2))[0].split('=')[1]} nhân khi server rảnh")
         else: print(f"! {p['name']}: {(r.stderr or r.stdout).strip()[:120]}")
     print(f"✅ Đã tăng tốc {n} máy")
+
+# ===================== ROOT (Magisk) =====================
+GPU_ROOT_MARK = os.path.expanduser("~/.cloudphone-gpu-rooted")      # cloudphone-root.sh gpu ghi khi đã root ảnh Android của máy GPU
+def gpu_rooted(): return os.path.exists(GPU_ROOT_MARK)
+MAGISK_PKGS = ("com.topjohnwu.magisk", "io.github.huskydg.magisk", "io.github.vvb2060.magisk")
+def magisk_apk():
+    for f in (os.path.expanduser("~/.cache/cloudphone-root/magisk/system/etc/init/magisk/magisk.apk"), os.path.expanduser("~/rootAVD/Magisk.zip")):
+        if os.path.isfile(f): return f
+    return None
+# cho phép root sâu: ADB + app đều dùng được root, và CẤP SẴN quyền root cho mọi app khách cài (tool khỏi phải bấm "Cho phép")
+GRANT_SH = ("M=$(command -v magisk || ls /sbin/magisk /debug_ramdisk/magisk 2>/dev/null | head -1); [ -n \"$M\" ] || exit 0; "
+            "$M --sqlite \"REPLACE INTO settings (key,value) VALUES('root_access',3)\" >/dev/null 2>&1; "
+            "for u in 2000 $(cmd package list packages -3 -U 2>/dev/null | sed -n 's/.*uid:\\([0-9]*\\).*/\\1/p' | sort -u); do "
+            "$M --sqlite \"REPLACE INTO policies (uid,policy,until,logging,notification) VALUES($u,2,0,1,1)\" >/dev/null 2>&1; done; echo GRANTED")
+def root_state(p):
+    """'root' = có Magisk chạy · 'image' = đã dùng bản root nhưng Android chưa lên · 'no' = chưa root."""
+    if is_gpu(p):
+        o = (ashell(p["name"], "command -v su; command -v magisk").stdout or "")   # máy GPU (bản Play) gốc KHÔNG có su → có su = đã có Magisk
+        return "root" if "/su" in o or "magisk" in o else "no"
+    img = (sh(["docker", "inspect", "-f", "{{.Config.Image}}", p["name"]]).stdout or "").strip()
+    if not img.endswith("_root"): return "no"
+    o = (sh(["docker", "exec", p["name"], "/system/bin/sh", "-c", "ls /sbin/magisk /debug_ramdisk/magisk 2>/dev/null"]).stdout or "")
+    return "root" if "magisk" in o else "image"
+
+def root_one(p, force=False):
+    """Kiểm tra + tự root 1 máy. In 1 dòng kết quả: ROOT_OK / ROOT_WAIT / ROOT_NO."""
+    name = p["name"]
+    if not is_running(name, p): print(f"ROOT_SKIP {name}: máy đang tắt"); return
+    stt = root_state(p)
+    if stt == "no" and not force:                 # tự root: mỗi máy thử tối đa 1 lần / 6 giờ (không khởi động lại máy khách liên tục)
+        st = load(); r0 = rec(name, st)
+        if r0 and time.time() - float(r0.get("root_try", 0)) < 6 * 3600: print(f"ROOT_WAIT {name}: vừa thử root, chờ lần sau"); return
+        if r0: r0["root_try"] = time.time(); save(st)
+    if is_gpu(p):
+        if stt != "root":
+            if gpu_rooted():
+                gpu_svc("restart", name); wait_boot(name, p["port"], apps=False); stt = root_state(p)
+            if stt != "root": print(f"ROOT_NO {name}: máy GPU chưa root được (admin chạy: bash ~/cloudphone-root.sh gpu)"); return
+        apk = magisk_apk()
+        has = (ashell(name, "pm list packages 2>/dev/null").stdout or "")
+        if apk and not any(k in has for k in MAGISK_PKGS):
+            import shutil; tmp = "/tmp/magisk-app.apk"; shutil.copyfile(apk, tmp); install_file(p["port"], tmp)
+        print(f"ROOT_OK {name}: đã root (Magisk) — tool xin quyền thì bấm Cho phép"); return
+    if stt == "no":
+        base = IMAGES[android_of(p.get("android", "11"))][0]
+        if not image_ok(root_img(base)): print(f"ROOT_NO {name}: server chưa có bản root Android {p.get('android', '11')} (admin chạy: bash ~/cloudphone-root.sh build)"); return
+        if not force and CONF.get("ROOT_AUTO", "1") == "0": print(f"ROOT_NO {name}: chưa root (tự root đang tắt)"); return
+        sh(["docker", "exec", WSNAME, "adb", "disconnect", f"127.0.0.1:{p['port']}"])
+        rm_container(name)
+        r = docker_run(name, p["ram"], p["cpu"], p["port"], p.get("res", "720x1280"), p.get("fps", 30), p.get("dpi", 0), p.get("android", "11"))
+        if r.returncode != 0: print(f"ROOT_NO {name}: lỗi tạo lại máy {(r.stderr or r.stdout).strip()[:150]}"); return
+        wait_boot(name, p["port"], apps=False); stt = root_state(p)
+    if stt == "image":                          # Android vừa lên, Magisk chưa sẵn sàng → đợi thêm chút
+        for _ in range(15):
+            time.sleep(4); stt = root_state(p)
+            if stt == "root": break
+    if stt != "root": print(f"ROOT_WAIT {name}: đang bật root, thử lại sau 1 phút"); return
+    g = sh(["docker", "exec", name, "/system/bin/sh", "-c", GRANT_SH]).stdout or ""
+    print(f"ROOT_OK {name}: đã root (Magisk)" + (" · đã cấp sẵn quyền root cho mọi app" if "GRANTED" in g else ""))
+
+def cmd_rootfix(a):
+    """rootfix TÊN [--force]  |  rootfix --all : máy nào chưa root → tự root (máy thường: tạo lại cùng dữ liệu; máy GPU: khởi động lại)."""
+    if CONF.get("ROOT", "1") == "0" and not a.force: print("ROOT_SKIP: root đang tắt (ROOT=0)"); return
+    for p in load()["phones"]:
+        if (a.all or p["name"] == a.name):
+            try: root_one(p, force=a.force)
+            except Exception as e: print(f"ROOT_NO {p['name']}: {e}")
 
 def cmd_rootall(a):
     """Chuyển máy đang có sang bản ROOT: tạo lại container với CÙNG dữ liệu (app, tài khoản giữ nguyên), máy khởi động lại ~1 phút."""
@@ -645,6 +712,7 @@ def main():
         x = sub.add_parser(nm); x.add_argument("name"); x.set_defaults(f=fn)
     sub.add_parser("gpuinfo").set_defaults(f=cmd_gpuinfo)
     ra = sub.add_parser("rootall"); ra.add_argument("name", nargs="?", default=""); ra.set_defaults(f=cmd_rootall)
+    rf = sub.add_parser("rootfix"); rf.add_argument("name", nargs="?", default=""); rf.add_argument("--all", action="store_true"); rf.add_argument("--force", action="store_true"); rf.set_defaults(f=cmd_rootfix)
     lr = sub.add_parser("liveres"); lr.add_argument("name"); lr.add_argument("--res", required=True); lr.set_defaults(f=cmd_liveres)
     pi = sub.add_parser("preinstall"); pi.add_argument("name", nargs="?", default=""); pi.add_argument("--all", action="store_true"); pi.add_argument("--force", action="store_true"); pi.set_defaults(f=cmd_preinstall)
     a = ap.parse_args()

@@ -323,7 +323,7 @@ if __name__ == "__main__":
     try:                                    # nới RAM cho máy đang chạy (chống văng app khi hết RAM)
         r = phonectl(["memfix"]); print(r.stdout.strip())
     except Exception as e: print("lỗi memfix:", e)
-    n = 0; last = 0.0
+    n = 0; last = 0.0; _rootjob = [None]
     while True:
         try: tick_orders()                  # đơn mới: kiểm tra mỗi 3 giây → nhận đơn gần như tức thì
         except Exception as e: print("lỗi vòng lặp:", e)
@@ -346,5 +346,10 @@ if __name__ == "__main__":
                     if ln.strip(): print("  ", ln.strip())
                 phonectl(["perms"])
             except Exception as e: print("lỗi cài app sẵn / mở quyền APK:", e)
+        if n % 20 == 12:                    # ~5 phút: máy nào chưa root → tự root (chạy nền, không chặn việc nhận đơn)
+            try:
+                if _rootjob[0] is None or _rootjob[0].poll() is not None:
+                    _rootjob[0] = subprocess.Popen(["python3", PHONECTL, "rootfix", "--all"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            except Exception as e: print("lỗi tự root:", e)
         n += 1
         time.sleep(3)

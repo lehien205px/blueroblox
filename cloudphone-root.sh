@@ -5,8 +5,9 @@
 #    • Máy MỚI tạo sau đó tự có root. Máy ĐANG CÓ: chạy "apply" để chuyển sang bản root (giữ nguyên app + tài khoản)
 #    • Trong máy có app Magisk: tool xin quyền root → hiện bảng "Cho phép" (Grant) → bấm là xong
 #
-#   bash cloudphone-root.sh build        # dựng bản root (tải Magisk ~15MB, vài phút)
-#   bash cloudphone-root.sh apply        # chuyển TẤT CẢ máy đang có sang bản root (mỗi máy khởi động lại ~1 phút)
+#   bash cloudphone-root.sh build        # dựng bản root cho máy thường (ưu tiên Android 12) — tải Magisk ~15MB, vài phút
+#   bash cloudphone-root.sh gpu          # root luôn máy GPU (Android 11 Emulator, dùng rootAVD) — vài phút
+#   bash cloudphone-root.sh apply        # root NGAY mọi máy đang có (server cũng tự làm mỗi 5 phút)
 #   bash cloudphone-root.sh apply TÊN    # chỉ 1 máy (VD: cp_761fa7e548)
 #   bash cloudphone-root.sh check TÊN    # kiểm tra máy đã có root chưa
 #   bash cloudphone-root.sh off          # máy MỚI không root nữa (máy đã root giữ nguyên)
@@ -18,7 +19,7 @@ ok() { echo -e "${G}✓${N} $*"; }; warn() { echo -e "${Y}!${N} $*"; }; err() { 
 RS="$HOME/redroid-script"; CONF="$HOME/cloudphone.conf"; PC="python3 $HOME/phonectl.py"
 conf_set() { touch "$CONF"; grep -v "^$1=" "$CONF" > "$CONF.tmp"; echo "$1=$2" >> "$CONF.tmp"; cat "$CONF.tmp" > "$CONF"; rm -f "$CONF.tmp"; chmod 600 "$CONF"; }
 # các bản Android đang bán (giống phonectl.py)
-BASES="redroid/redroid:11.0.0_gapps_ndk redroid/redroid:12.0.0_mindthegapps_ndk redroid/redroid:13.0.0_mindthegapps_houdini redroid/redroid:14.0.0_mindthegapps_houdini"
+BASES="redroid/redroid:12.0.0_mindthegapps_ndk redroid/redroid:11.0.0_gapps_ndk redroid/redroid:13.0.0_mindthegapps_houdini redroid/redroid:14.0.0_mindthegapps_houdini"
 
 case "${1:-}" in
 build)
@@ -46,12 +47,37 @@ build)
   conf_set ROOT 1
   sudo systemctl restart cloudphoned 2>/dev/null
   echo; ok "XONG: máy MỚI tạo từ giờ tự có root (Magisk)."
-  echo "   Chuyển máy ĐANG CÓ sang root (giữ nguyên app/tài khoản, mỗi máy khởi động lại ~1 phút):"
-  echo "       bash $0 apply" ;;
+  echo "   Máy ĐANG CÓ: server tự root dần (mỗi 5 phút). Muốn root ngay tất cả:  bash $0 apply"
+  echo "   Root luôn máy GPU:  bash $0 gpu" ;;
+
+gpu)
+  SDK="$HOME/android-sdk"; IMG_DIR="system-images/android-30/google_apis_playstore/x86_64"
+  [ -f "$SDK/$IMG_DIR/ramdisk.img" ] || { err "Chưa có Android 11 cho máy GPU (chạy: bash ~/gpu-phone-test.sh install)"; exit 1; }
+  export ANDROID_HOME="$SDK" ANDROID_SDK_ROOT="$SDK" ANDROID_ADB_SERVER_PORT=5038 PATH="$SDK/platform-tools:$PATH"
+  echo "== 1) Tải rootAVD =="
+  if [ -d "$HOME/rootAVD/.git" ]; then git -C "$HOME/rootAVD" pull -q; else git clone -q --depth 1 https://github.com/newbit1/rootAVD "$HOME/rootAVD"; fi && ok "rootAVD"
+  [ -f "$SDK/$IMG_DIR/ramdisk.img.cloudphone-goc" ] || cp "$SDK/$IMG_DIR/ramdisk.img" "$SDK/$IMG_DIR/ramdisk.img.cloudphone-goc"
+  ok "Đã sao lưu ramdisk gốc (khôi phục: bash $0 gpu-undo)"
+  echo "== 2) Bật máy thử GPU (gputest) để vá =="
+  bash "$HOME/gpu-phone-test.sh" start >/dev/null 2>&1
+  adb -s emulator-5600 wait-for-device; sleep 5
+  [ "$(adb -s emulator-5600 shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ] || { err "Máy thử GPU chưa lên (xem: bash ~/gpu-phone-test.sh check)"; exit 1; }
+  echo "== 3) Vá root (Magisk) vào Android 11 của máy GPU — 2–5 phút, cứ để yên =="
+  (cd "$HOME/rootAVD" && ANDROID_SERIAL=emulator-5600 ./rootAVD.sh "$IMG_DIR/ramdisk.img") > "$HOME/rootavd.log" 2>&1 < /dev/null
+  if cmp -s "$SDK/$IMG_DIR/ramdisk.img" "$SDK/$IMG_DIR/ramdisk.img.cloudphone-goc"; then err "Vá chưa thành công — gửi: tail -40 ~/rootavd.log"; exit 1; fi
+  touch "$HOME/.cloudphone-gpu-rooted"; ok "Đã vá root cho máy GPU"
+  bash "$HOME/gpu-phone-test.sh" stop >/dev/null 2>&1
+  echo "== 4) Khởi động lại các máy GPU đang chạy để nhận root =="
+  for u in $(systemctl list-units --no-legend 'cloudgpu@*' | awk '{print $1}'); do sudo -n /usr/bin/systemctl restart "$u" && ok "$u"; done
+  ok "XONG: máy GPU mới + cũ đều có root. Server tự cài app Magisk cho từng máy trong vài phút." ;;
+
+gpu-undo)
+  SDK="$HOME/android-sdk"; IMG_DIR="system-images/android-30/google_apis_playstore/x86_64"
+  [ -f "$SDK/$IMG_DIR/ramdisk.img.cloudphone-goc" ] && cp "$SDK/$IMG_DIR/ramdisk.img.cloudphone-goc" "$SDK/$IMG_DIR/ramdisk.img" && rm -f "$HOME/.cloudphone-gpu-rooted" && ok "Đã trả máy GPU về không root (máy khởi động lại sẽ hết root)" ;;
 
 apply)
-  echo "== Chuyển máy sang bản ROOT ${2:+(chỉ $2)} — mỗi máy khởi động lại ~1 phút, app + tài khoản giữ nguyên =="
-  $PC rootall ${2:-} ;;
+  echo "== Root ngay ${2:-tất cả máy} — máy chưa root khởi động lại ~1 phút, app + tài khoản giữ nguyên =="
+  if [ -n "${2:-}" ]; then $PC rootfix "$2" --force; else $PC rootfix --all --force; fi ;;
 
 check)
   [ -n "${2:-}" ] || { err "Ghi tên máy:  bash $0 check cp_xxxxxxxx   (xem tên: python3 ~/phonectl.py list)"; exit 1; }

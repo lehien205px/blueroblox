@@ -590,6 +590,16 @@ class H(BaseHTTPRequestHandler):
                 jid = new_job(me["uid"], ADMIN_FILES[fid][1])
                 run_job(jid, lambda j: bulk_install(j, fid, ids, every, bool(b.get("keep"))))
                 return self.send_json(200, {"job": jid})
+            if act == "rootall" and self.command == "POST":       # admin: root lại toàn bộ máy chưa root
+                jid = new_job(me["uid"], "Root tất cả máy")
+                def work(j):
+                    JOBS[j]["msg"] = "Đang root các máy chưa root (mỗi máy khởi động lại ~1 phút)…"
+                    r = subprocess.run(["python3", os.path.join(HOME, "phonectl.py"), "rootfix", "--all", "--force"], capture_output=True, text=True, timeout=7200)
+                    ls = [l for l in (r.stdout or "").splitlines() if l.startswith("ROOT_")]
+                    ok = sum(l.startswith("ROOT_OK") for l in ls); bad = [l.split(" ", 1)[1] for l in ls if l.startswith(("ROOT_NO", "ROOT_WAIT"))]
+                    return f"Đã root {ok} máy." + (" Chưa được: " + "; ".join(bad[:8]) if bad else "")
+                run_job(jid, work)
+                return self.send_json(200, {"job": jid})
             if act == "preset" and self.command == "GET":
                 d = pre_dir(); fs = sorted(f for f in os.listdir(d) if f.lower().endswith(APK_EXT))
                 return self.send_json(200, {"files": [{"name": f, "size": os.path.getsize(os.path.join(d, f))} for f in fs]})
@@ -753,6 +763,20 @@ class H(BaseHTTPRequestHandler):
                     return f"Đã đổi sang {res} · {fps} FPS. Dữ liệu vẫn giữ nguyên."
                 finally:
                     _busy.discard(pid)
+            run_job(jid, work)
+            return self.send_json(200, {"job": jid})
+
+        if act == "root" and self.command == "POST":        # khách bấm "Root máy": kiểm tra + bật root (Magisk) + cấp sẵn quyền root cho app
+            if not cont: return self.send_json(409, {"error": "Không xác định được máy."})
+            jid = new_job(me["uid"], "Root máy")
+            def work(j):
+                JOBS[j]["msg"] = "Đang kiểm tra / bật root (máy có thể khởi động lại ~1 phút)…"
+                r = subprocess.run(["python3", os.path.join(HOME, "phonectl.py"), "rootfix", cont, "--force"], capture_output=True, text=True, timeout=600)
+                line = next((l for l in (r.stdout or "").splitlines() if l.startswith("ROOT_")), "")
+                msg = line.split(":", 1)[1].strip() if ":" in line else "Không kiểm tra được, thử lại sau."
+                if line.startswith("ROOT_OK"): return "✅ Máy đã ROOT (Magisk). Mở tool là dùng được — nếu hiện bảng Magisk thì bấm Cho phép (Grant)."
+                if line.startswith("ROOT_WAIT"): return "⏳ Máy đang bật root, chờ 1 phút rồi bấm lại."
+                raise RuntimeError("Chưa root được: " + msg)
             run_job(jid, work)
             return self.send_json(200, {"job": jid})
 

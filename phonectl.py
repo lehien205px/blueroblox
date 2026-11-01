@@ -100,14 +100,23 @@ def is_running(name):
     r = sh(["docker", "inspect", "-f", "{{.State.Running}}", name])
     return (r.stdout or "").strip() == "true"
 
-TUNE = ("settings put global window_animation_scale 0.5; settings put global transition_animation_scale 0.5; "
-        "settings put global animator_duration_scale 0.5; settings put global package_verifier_enable 0; "
+TUNE = (# tắt hẳn hiệu ứng chuyển cảnh → CPU không phải vẽ thêm
+        "settings put global window_animation_scale 0; settings put global transition_animation_scale 0; "
+        "settings put global animator_duration_scale 0; settings put global package_verifier_enable 0; "
+        # cửa sổ nổi: mở nhiều app/tab cùng lúc (có hiệu lực sau lần khởi động lại máy kế tiếp)
+        "settings put global enable_freeform_support 1; settings put global force_resizable_activities 1; "
+        "settings put global enable_sizecompat_freeform 1; "
+        # treo game qua đêm: không ngủ đông (doze), không xếp app vào nhóm hạn chế, không đóng băng app chạy nền
+        "dumpsys deviceidle disable >/dev/null 2>&1; settings put global app_standby_enabled 0; "
+        "settings put global adaptive_battery_management_enabled 0; settings put global always_finish_activities 0; "
+        "device_config put activity_manager_native_boot use_freezer false >/dev/null 2>&1; "
+        "settings put global cached_apps_freezer disabled; "
         "settings put global verifier_verify_adb_installs 0; settings put global stay_on_while_plugged_in 7; "
         "settings put system screen_off_timeout 2147483647; svc power stayon true; "
         # Cổng VPN: Android mở /dev/tun (docker chỉ có /dev/net/tun) → thiếu thì VPN báo "Failed to connect"
         "[ -c /dev/tun ] || { rm -f /dev/tun; mknod /dev/tun c 10 200; }; chmod 666 /dev/tun")
 def tune(name):
-    """Cho máy mượt hơn: giảm hiệu ứng chuyển cảnh, cài APK không phải chờ quét, màn hình không tự tắt."""
+    """Cho máy mượt hơn: tắt hiệu ứng, bật cửa sổ nổi, không ngủ đông/đóng băng app nền, cài APK không phải chờ quét, màn hình không tự tắt."""
     sh(["docker", "exec", name, "/system/bin/sh", "-c", TUNE])
 def _pre_dir():
     """Thư mục app cài sẵn: cạnh phonectl.py, hoặc ~/apk-cai-san, hoặc /home/*/apk-cai-san (dịch vụ chạy bằng user nào cũng tìm thấy)."""
@@ -246,7 +255,8 @@ def mem_args(ram):
     Android trong container không biết giới hạn RAM → nếu chạm trần, lõi Android bị tắt → văng hết app, màn đen.
     Chừa dư + cho phép tràn sang swap thì máy chậm lại một chút thay vì văng."""
     r = float(ram)
-    return [f"--memory={r + 1:g}g", f"--memory-swap={r * 2 + 2:g}g", f"--memory-reservation={r:g}g"]
+    # swap cho mỗi máy tới 3 lần RAM (zram nhanh dùng trước, ổ cứng dùng sau) → đầy RAM thì chậm lại chứ không văng
+    return [f"--memory={r + 1:g}g", f"--memory-swap={r * 4 + 2:g}g", f"--memory-reservation={r:g}g"]
 
 def docker_run(name, ram, cpu, port, res, fps, dpi=0):
     w, h = res.split("x")

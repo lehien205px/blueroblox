@@ -163,6 +163,12 @@ echo "   Đang cài app sẵn cho các máy đang chạy (có thể mất vài p
 asu "python3 '$H/phonectl.py' preinstall --all; python3 '$H/phonectl.py' perms" 2>&1 | grep -E "^\s*[+!]" || true
 
 # ---------------------------------------------------------------------
+# Tối ưu máy chủ: zram + swap ổ cứng (chừa 200GB) + CPU performance + thông số nhân
+step "Tối ưu máy chủ (RAM ảo, CPU)"
+if curl -fsSL -o /tmp/cloudphone-tune.sh "$REPO_RAW/cloudphone-tune.sh?t=$(date +%s)" && bash -n /tmp/cloudphone-tune.sh; then
+  bash /tmp/cloudphone-tune.sh install | sed 's/^/   /'
+else warn "Chưa tải được cloudphone-tune.sh — up file đó lên GitHub rồi chạy lại lệnh cài"; fi
+
 # Người gác: tự kiểm tra + tự sửa mỗi 1 phút, tự chạy lại sau khi máy khởi động
 step "Watchdog (tự kiểm tra, tự sửa khi lỗi / mất điện)"
 if curl -fsSL -o /tmp/cloudphone-watchdog.sh "$REPO_RAW/cloudphone-watchdog.sh?t=$(date +%s)" && bash -n /tmp/cloudphone-watchdog.sh; then
@@ -182,6 +188,7 @@ case "\${1:-}" in
     printf "%-18s %s\n" "ws-scrcpy" "\$(docker inspect -f '{{.State.Status}}' $WSNAME 2>/dev/null || echo không có)"
     lsmod | grep -q binder && echo "binder             bật" || echo "binder             TẮT (sudo modprobe binder_linux)"
     df -h / | tail -1 | awk '{print "ổ cứng             trống "\$4" / "\$2}'
+    free -g | awk '/^Swap:/{print "RAM ảo (swap)      "\$2" GB (đang dùng "\$3" GB)"}'
     grep -q "def preinstall" "\$H/phonectl.py" && echo "phonectl.py        bản mới (có cài app sẵn)" || echo "phonectl.py        BẢN CŨ → chạy: cloudphone update"
     echo "app cài sẵn        \$(ls "\$H/apk-cai-san" 2>/dev/null | tr '\n' ' ')"
     run python3 "\$H/phonectl.py" capacity ;;
@@ -193,13 +200,14 @@ case "\${1:-}" in
     sudo systemctl restart cpapi cloudphoned && echo "✓ Đã khởi động lại dịch vụ"
     curl -fsSL -o /tmp/cpwd.sh "\$RAW/cloudphone-watchdog.sh?t=\$(date +%s)" && bash -n /tmp/cpwd.sh && sudo bash /tmp/cpwd.sh install >/dev/null && echo "✓ watchdog" ;;
   restart) sudo systemctl restart cpapi cloudphoned; docker restart $WSNAME >/dev/null; for s in cloudflared-phone cloudflared; do systemctl is-enabled -q \$s 2>/dev/null && sudo systemctl restart \$s; done; echo "✓ Đã khởi động lại (dịch vụ + phát hình + tunnel)" ;;
+  tune)    curl -fsSL -o /tmp/cptune.sh "\$RAW/cloudphone-tune.sh?t=\$(date +%s)" && bash -n /tmp/cptune.sh && sudo bash /tmp/cptune.sh install ;;
   watch)   tail -n "\${2:-30}" /var/log/cloudphone-watchdog.log 2>/dev/null || echo "Chưa có nhật ký watchdog" ;;
   logs)    sudo journalctl -u "\${2:-cloudphoned}" -n "\${3:-50}" --no-pager ;;
   list)    run python3 "\$H/phonectl.py" list ;;
   apps)    run python3 "\$H/phonectl.py" preinstall --all; run python3 "\$H/phonectl.py" perms; echo "✓ Xong (máy nào đã có app thì bỏ qua)" ;;
   perms)   run python3 "\$H/phonectl.py" perms && echo "✓ Đã mở quyền cài APK cho mọi máy" ;;
   memfix)  run python3 "\$H/phonectl.py" memfix ;;
-  *) echo "cloudphone [status|update|restart|watch|logs [cpapi|cloudphoned]|list|apps|perms|memfix]" ;;
+  *) echo "cloudphone [status|update|restart|tune|watch|logs [cpapi|cloudphoned]|list|apps|perms|memfix]" ;;
 esac
 EOF
 chmod +x /usr/local/bin/cloudphone

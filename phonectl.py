@@ -343,6 +343,9 @@ def wait_boot(name, port, apps=True):
         if (r.stdout or "").strip() == "1": break
         time.sleep(2)
     tune(name)
+    if not is_gpu(rec(name)):
+        try: su_install(name)                      # máy vừa bật lại → bật lại root daemon
+        except Exception: pass
     time.sleep(1.5)
     for _ in range(8):
         adb_connect(port)
@@ -441,7 +444,9 @@ def root_img(base):
     return base + "_root"
 
 def pick_image(base):
-    return root_img(base) if CONF.get("ROOT", "1") != "0" and image_ok(root_img(base)) else base
+    # Bản Magisk làm HỎNG bộ dịch ARM (Roblox/app ARM văng) → chỉ dùng khi admin cố ý đặt ROOT=magisk.
+    # Mặc định root bằng "cloudphone-su" (daemon, không sửa hệ thống) → xem su_install().
+    return root_img(base) if CONF.get("ROOT", "1") == "magisk" and image_ok(root_img(base)) else base
 
 def docker_run(name, ram, cpu, port, res, fps, dpi=0, android="11"):
     w, h = res.split("x")
@@ -477,13 +482,37 @@ GRANT_SH = ("M=$(command -v magisk || ls /sbin/magisk /debug_ramdisk/magisk 2>/d
             "$M --sqlite \"REPLACE INTO settings (key,value) VALUES('root_access',3)\" >/dev/null 2>&1; "
             "for u in 2000 $(cmd package list packages -3 -U 2>/dev/null | sed -n 's/.*uid:\\([0-9]*\\).*/\\1/p' | sort -u); do "
             "$M --sqlite \"REPLACE INTO policies (uid,policy,until,logging,notification) VALUES($u,2,0,1,1)\" >/dev/null 2>&1; done; echo GRANTED")
+# ----- ROOT kiểu daemon (cloudphone-su): su + cpsud chép vào máy, KHÔNG đổi image, KHÔNG khởi động lại, KHÔNG đụng bộ dịch ARM -----
+SU_DIR = os.path.expanduser("~/cloudphone-su")
+def su_ready(): return os.path.isfile(os.path.join(SU_DIR, "su")) and os.path.isfile(os.path.join(SU_DIR, "cpsud"))
+def su_works(name):
+    r = sh(["docker", "exec", "--user", "2000", name, "/system/xbin/su", "-c", "id -u"])
+    return (r.stdout or "").strip().endswith("0") and r.returncode == 0
+def su_install(name):
+    """Cài / bật lại root daemon trong máy thường. Trả về True nếu app trong máy dùng được su."""
+    if not su_ready() or CONF.get("ROOT", "1") == "0": return False
+    import hashlib
+    want = hashlib.md5(open(os.path.join(SU_DIR, "su"), "rb").read()).hexdigest() + hashlib.md5(open(os.path.join(SU_DIR, "cpsud"), "rb").read()).hexdigest()
+    have = (sh(["docker", "exec", name, "/system/bin/sh", "-c", "md5sum /system/xbin/su /system/xbin/cpsud 2>/dev/null | cut -d' ' -f1 | tr -d '\\n'"]).stdout or "").strip()
+    if have != want:
+        sh(["docker", "exec", name, "/system/bin/sh", "-c", "mkdir -p /system/xbin; pkill -f /system/xbin/cpsud; rm -f /system/xbin/su /system/xbin/cpsud"])
+        for f in ("su", "cpsud"): sh(["docker", "cp", os.path.join(SU_DIR, f), f"{name}:/system/xbin/{f}"])
+        sh(["docker", "exec", name, "/system/bin/sh", "-c", "chown 0:0 /system/xbin/su /system/xbin/cpsud; chmod 755 /system/xbin/su /system/xbin/cpsud; "
+            "[ -e /system/bin/su ] || ln -s /system/xbin/su /system/bin/su 2>/dev/null; true"])
+    if not su_works(name):
+        sh(["docker", "exec", name, "/system/bin/sh", "-c", "pkill -f /system/xbin/cpsud; /system/xbin/cpsud"])
+        time.sleep(0.5)
+    return su_works(name)
+def su_remove(name):
+    sh(["docker", "exec", name, "/system/bin/sh", "-c", "pkill -f /system/xbin/cpsud; rm -f /system/xbin/su /system/xbin/cpsud /dev/socket/cpsu; [ -L /system/bin/su ] && rm -f /system/bin/su; true"])
+
 def root_state(p):
     """'root' = có Magisk chạy · 'image' = đã dùng bản root nhưng Android chưa lên · 'no' = chưa root."""
     if is_gpu(p):
         o = (ashell(p["name"], "command -v su; command -v magisk").stdout or "")   # máy GPU (bản Play) gốc KHÔNG có su → có su = đã có Magisk
         return "root" if "/su" in o or "magisk" in o else "no"
     img = (sh(["docker", "inspect", "-f", "{{.Config.Image}}", p["name"]]).stdout or "").strip()
-    if not img.endswith("_root"): return "no"
+    if not img.endswith("_root"): return "root" if su_works(p["name"]) else "no"
     o = (sh(["docker", "exec", p["name"], "/system/bin/sh", "-c", "ls /sbin/magisk /debug_ramdisk/magisk 2>/dev/null"]).stdout or "")
     return "root" if "magisk" in o else "image"
 
@@ -492,7 +521,7 @@ def root_one(p, force=False):
     name = p["name"]
     if not is_running(name, p): print(f"ROOT_SKIP {name}: máy đang tắt"); return
     stt = root_state(p)
-    if stt == "no" and not force:                 # tự root: mỗi máy thử tối đa 1 lần / 6 giờ (không khởi động lại máy khách liên tục)
+    if stt == "no" and is_gpu(p) and not force:   # máy GPU cần khởi động lại để có root → tối đa 1 lần / 6 giờ
         st = load(); r0 = rec(name, st)
         if r0 and time.time() - float(r0.get("root_try", 0)) < 6 * 3600: print(f"ROOT_WAIT {name}: vừa thử root, chờ lần sau"); return
         if r0: r0["root_try"] = time.time(); save(st)
@@ -506,22 +535,14 @@ def root_one(p, force=False):
         if apk and not any(k in has for k in MAGISK_PKGS):
             import shutil; tmp = "/tmp/magisk-app.apk"; shutil.copyfile(apk, tmp); install_file(p["port"], tmp)
         print(f"ROOT_OK {name}: đã root (Magisk) — tool xin quyền thì bấm Cho phép"); return
-    if stt == "no":
-        base = IMAGES[android_of(p.get("android", "11"))][0]
-        if not image_ok(root_img(base)): print(f"ROOT_NO {name}: server chưa có bản root Android {p.get('android', '11')} (admin chạy: bash ~/cloudphone-root.sh build)"); return
-        if not force and CONF.get("ROOT_AUTO", "1") == "0": print(f"ROOT_NO {name}: chưa root (tự root đang tắt)"); return
-        sh(["docker", "exec", WSNAME, "adb", "disconnect", f"127.0.0.1:{p['port']}"])
-        rm_container(name)
-        r = docker_run(name, p["ram"], p["cpu"], p["port"], p.get("res", "720x1280"), p.get("fps", 30), p.get("dpi", 0), p.get("android", "11"))
-        if r.returncode != 0: print(f"ROOT_NO {name}: lỗi tạo lại máy {(r.stderr or r.stdout).strip()[:150]}"); return
-        wait_boot(name, p["port"], apps=False); stt = root_state(p)
-    if stt == "image":                          # Android vừa lên, Magisk chưa sẵn sàng → đợi thêm chút
-        for _ in range(15):
-            time.sleep(4); stt = root_state(p)
-            if stt == "root": break
-    if stt != "root": print(f"ROOT_WAIT {name}: đang bật root, thử lại sau 1 phút"); return
-    g = sh(["docker", "exec", name, "/system/bin/sh", "-c", GRANT_SH]).stdout or ""
-    print(f"ROOT_OK {name}: đã root (Magisk)" + (" · đã cấp sẵn quyền root cho mọi app" if "GRANTED" in g else ""))
+    img = (sh(["docker", "inspect", "-f", "{{.Config.Image}}", name]).stdout or "").strip()
+    if img.endswith("_root") and CONF.get("ROOT", "1") != "magisk":   # máy đang dùng bản Magisk (làm văng app ARM) → trả về bản thường
+        recreate_base(p); print(f"   {name}: đã bỏ bản Magisk (gây văng app), chuyển sang root an toàn")
+    if not su_ready(): print(f"ROOT_NO {name}: server chưa có bộ root (admin chạy: bash ~/cloudphone-root.sh su)"); return
+    ok = su_install(name)
+    if not ok:
+        time.sleep(3); ok = su_install(name)
+    print(f"ROOT_OK {name}: đã root — tool gọi su là chạy bằng quyền root" if ok else f"ROOT_WAIT {name}: chưa bật được root, thử lại sau 1 phút")
 
 def cmd_rootfix(a):
     """rootfix TÊN [--force]  |  rootfix --all : máy nào chưa root → tự root (máy thường: tạo lại cùng dữ liệu; máy GPU: khởi động lại)."""
@@ -532,6 +553,19 @@ def cmd_rootfix(a):
             try: root_one(p, force=a.force)
             except Exception as e: print(f"ROOT_NO {p['name']}: {e}")
 
+def recreate_base(p):
+    """Tạo lại container bằng image gốc (không Magisk), giữ nguyên dữ liệu."""
+    was_on = is_running(p["name"], p)
+    sh(["docker", "exec", WSNAME, "adb", "disconnect", f"127.0.0.1:{p['port']}"]); rm_container(p["name"])
+    w, h = p.get("res", "720x1280").split("x"); img, tr = IMAGES[android_of(p.get("android", "11"))]
+    data = os.path.join(DATA_ROOT, p["name"])
+    r = sh(["docker", "run", "-itd", "--privileged", "--restart", "unless-stopped", "--name", p["name"], *mem_args(p["ram"]), *cpu_args(p["cpu"]),
+            "-v", f"{data}:/data", "-p", f"127.0.0.1:{p['port']}:5555", img, f"androidboot.redroid_width={w}", f"androidboot.redroid_height={h}",
+            f"androidboot.redroid_dpi={int(p.get('dpi', 0)) or auto_dpi(p.get('res', '720x1280'))}", f"androidboot.redroid_fps={p.get('fps', 30)}"] + (HOUDINI if tr == "houdini" else ARM))
+    if r.returncode != 0: raise RuntimeError((r.stderr or r.stdout).strip()[:200])
+    if not was_on: sh(["docker", "stop", p["name"]])
+    else: wait_boot(p["name"], p["port"], apps=False)
+
 def cmd_unroot(a):
     """Trả máy về bản KHÔNG root (giữ nguyên dữ liệu) — dùng khi root làm app văng."""
     st = load(); n = 0
@@ -539,7 +573,10 @@ def cmd_unroot(a):
         if is_gpu(p) or (a.name and p["name"] != a.name): continue
         base = IMAGES[android_of(p.get("android", "11"))][0]
         cur = (sh(["docker", "inspect", "-f", "{{.Config.Image}}", p["name"]]).stdout or "").strip()
-        if cur == base: print(f"✓ {p['name']}: đang là bản không root"); continue
+        if is_running(p["name"], p): su_remove(p["name"])
+        if cur == base: print(f"✓ {p['name']}: đã gỡ root"); continue
+        try: recreate_base(p); n += 1; print(f"✓ {p['name']}: đã trả về bản KHÔNG root"); continue
+        except Exception as e: print(f"! {p['name']}: LỖI {e}"); continue
         was_on = is_running(p["name"], p)
         sh(["docker", "exec", WSNAME, "adb", "disconnect", f"127.0.0.1:{p['port']}"]); rm_container(p["name"])
         w, h = p.get("res", "720x1280").split("x"); img, tr = IMAGES[android_of(p.get("android", "11"))]

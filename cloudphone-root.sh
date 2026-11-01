@@ -5,7 +5,8 @@
 #    • Máy MỚI tạo sau đó tự có root. Máy ĐANG CÓ: chạy "apply" để chuyển sang bản root (giữ nguyên app + tài khoản)
 #    • Trong máy có app Magisk: tool xin quyền root → hiện bảng "Cho phép" (Grant) → bấm là xong
 #
-#   bash cloudphone-root.sh build        # dựng bản root cho máy thường (ưu tiên Android 12) — tải Magisk ~15MB, vài phút
+#   bash cloudphone-root.sh su           # ★ ROOT AN TOÀN (khuyên dùng): app/tool gọi su là có root, KHÔNG làm văng app ARM
+#   bash cloudphone-root.sh build        # (cũ) dựng bản Magisk — LÀM VĂNG app ARM, không dùng nữa
 #   bash cloudphone-root.sh gpu          # root luôn máy GPU (Android 11 Emulator, dùng rootAVD) — vài phút
 #   bash cloudphone-root.sh apply        # root NGAY mọi máy đang có (server cũng tự làm mỗi 5 phút)
 #   bash cloudphone-root.sh apply TÊN    # chỉ 1 máy (VD: cp_761fa7e548)
@@ -23,6 +24,18 @@ conf_set() { touch "$CONF"; grep -v "^$1=" "$CONF" > "$CONF.tmp"; echo "$1=$2" >
 BASES="redroid/redroid:12.0.0_mindthegapps_ndk redroid/redroid:10.0.0_litegapps_houdini redroid/redroid:9.0.0_litegapps_houdini redroid/redroid:11.0.0_gapps_ndk redroid/redroid:13.0.0_mindthegapps_houdini redroid/redroid:14.0.0_mindthegapps_houdini"
 
 case "${1:-}" in
+su)
+  # ROOT AN TOÀN (khuyên dùng): su + dịch vụ root chạy nền trong máy. KHÔNG đổi Android, KHÔNG làm hỏng bộ dịch ARM (Roblox/Noka chạy bình thường)
+  RAW="https://raw.githubusercontent.com/lehien205px/blueroblox/main"; S="$HOME/cloudphone-su"; mkdir -p "$S"
+  echo "== 1) Tải bộ root (su) =="
+  curl -fsSL -o "$S/su.new" "$RAW/cpsu-su.bin?t=$(date +%s)" && curl -fsSL -o "$S/cpsud.new" "$RAW/cpsu-daemon.bin?t=$(date +%s)" || { err "Không tải được — đã tải cpsu-su.bin + cpsu-daemon.bin lên GitHub chưa?"; exit 1; }
+  file "$S/su.new" 2>/dev/null | grep -q ELF || head -c 4 "$S/su.new" | grep -q ELF || { err "File su tải về không đúng"; exit 1; }
+  mv "$S/su.new" "$S/su"; mv "$S/cpsud.new" "$S/cpsud"; chmod 755 "$S/su" "$S/cpsud"; ok "Bộ root đã sẵn sàng"
+  conf_set ROOT 1
+  echo "== 2) Root mọi máy đang chạy (KHÔNG khởi động lại máy; máy nào đang dùng bản Magisk sẽ được trả về bản thường ~1 phút) =="
+  $PC rootfix --all --force
+  echo; ok "XONG: máy mới + máy cũ tự có root (server tự kiểm tra mỗi 5 phút, máy khởi động lại cũng tự bật lại root)." ;;
+
 build)
   echo "== 1) Chuẩn bị công cụ (cần mật khẩu sudo) =="
   sudo apt-get install -y -qq git python3-venv python3-pip lzip unzip >/dev/null && ok "git, python"

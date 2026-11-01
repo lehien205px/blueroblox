@@ -288,15 +288,32 @@ def android_of(v):
     v = str(v or "11").split(".")[0]
     return v if v in IMAGES else "11"
 
+def cpu_args(cpu):
+    """CPU "tăng tốc" như UgPhone: máy ảo vẽ màn hình + nén hình bằng CPU (không có chip đồ hoạ riêng),
+    nên giới hạn cứng đúng số nhân thuê làm máy chạm trần 100% → giật/trễ.
+    → Mỗi máy được ƯU TIÊN đúng số nhân đã thuê (cpu-shares), và khi server rảnh được mượn thêm tới 3 lần (tối đa 16 nhân).
+      Server đông máy thì chia theo tỉ lệ đã thuê, không máy nào giành của máy khác."""
+    c = float(cpu)
+    return [f"--cpus={min(c * 3, max(c, 16)):g}", f"--cpu-shares={int(c * 1024)}"]
+
 def docker_run(name, ram, cpu, port, res, fps, dpi=0, android="11"):
     w, h = res.split("x")
     img, tr = IMAGES[android_of(android)]
     data = os.path.join(DATA_ROOT, name); os.makedirs(data, exist_ok=True)
     return sh(["docker", "run", "-itd", "--privileged", "--restart", "unless-stopped", "--name", name,
-               *mem_args(ram), f"--cpus={cpu}",
+               *mem_args(ram), *cpu_args(cpu),
                "-v", f"{data}:/data", "-p", f"127.0.0.1:{port}:5555", img,   # chỉ mở trong server, không lộ ra internet
                f"androidboot.redroid_width={w}", f"androidboot.redroid_height={h}",
                f"androidboot.redroid_dpi={int(dpi) or auto_dpi(res)}", f"androidboot.redroid_fps={fps}"] + (HOUDINI if tr == "houdini" else ARM))
+
+def cmd_boost(a):
+    """Áp dụng ngay chế độ CPU tăng tốc cho mọi máy đang có (không cần khởi động lại máy)."""
+    st = load(); n = 0
+    for p in st["phones"]:
+        r = sh(["docker", "update", *cpu_args(p.get("cpu", 2)), p["name"]])
+        if r.returncode == 0: n += 1; print(f"✓ {p['name']}: thuê {p.get('cpu', 2):g} nhân → được dùng tới {cpu_args(p.get('cpu', 2))[0].split('=')[1]} nhân khi server rảnh")
+        else: print(f"! {p['name']}: {(r.stderr or r.stdout).strip()[:120]}")
+    print(f"✅ Đã tăng tốc {n} máy")
 
 def cmd_reconfig(a):
     """Đổi FPS / độ phân giải: tạo lại container với CÙNG thư mục dữ liệu → giữ nguyên app, tài khoản."""
@@ -438,6 +455,7 @@ def main():
     sub.add_parser("capacity").set_defaults(f=cmd_capacity)
     sub.add_parser("perms").set_defaults(f=cmd_perms)
     sub.add_parser("memfix").set_defaults(f=cmd_memfix)
+    sub.add_parser("boost").set_defaults(f=cmd_boost)
     lr = sub.add_parser("liveres"); lr.add_argument("name"); lr.add_argument("--res", required=True); lr.set_defaults(f=cmd_liveres)
     pi = sub.add_parser("preinstall"); pi.add_argument("name", nargs="?", default=""); pi.add_argument("--all", action="store_true"); pi.add_argument("--force", action="store_true"); pi.set_defaults(f=cmd_preinstall)
     a = ap.parse_args()

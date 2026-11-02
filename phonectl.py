@@ -271,13 +271,72 @@ def _pre_dir():
         if os.path.isdir(d): return d
     return os.path.expanduser("~/apk-cai-san")
 PRE_DIR = _pre_dir()   # bỏ file .apk/.apkm vào đây → mọi máy mới tự cài sẵn (trình duyệt, Gmail…)
+def apk_min_sdk(path):
+    """Đọc minSdkVersion (bản Android thấp nhất app cần) từ file .apk / gói .apks. Không đọc được → 0 (coi như cài được)."""
+    import zipfile, struct
+    try:
+        with zipfile.ZipFile(path) as z:
+            data = None
+            if "AndroidManifest.xml" in z.namelist(): data = z.read("AndroidManifest.xml")
+            else:
+                ns = [n for n in z.namelist() if n.lower().endswith(".apk") and "/" not in n.strip("/")]
+                ns.sort(key=lambda n: (0 if n.lower() in ("base.apk",) else 1 if "split" not in n.lower() else 2, n))
+                if ns:
+                    import io
+                    with zipfile.ZipFile(io.BytesIO(z.read(ns[0]))) as b: data = b.read("AndroidManifest.xml")
+        if not data: return 0
+        strs, resmap, off = [], [], 8
+        while off + 8 <= len(data):
+            typ, hsz, sz = struct.unpack_from("<HHI", data, off)
+            if sz < 8: break
+            if typ == 0x0001:                                  # bảng chữ
+                cnt, _, flags, sstart = struct.unpack_from("<IIII", data, off + 8)
+                utf8 = flags & 0x100
+                for i in range(cnt):
+                    p = off + struct.unpack_from("<I", data, off + hsz + i * 4)[0] + sstart
+                    if utf8:
+                        n = data[p]; p += 2 if n & 0x80 else 1
+                        n = data[p]; q = p + (2 if n & 0x80 else 1)
+                        if n & 0x80: n = ((n & 0x7f) << 8) | data[p + 1]
+                        strs.append(data[q:q + n].decode("utf-8", "replace"))
+                    else:
+                        n = struct.unpack_from("<H", data, p)[0]
+                        strs.append(data[p + 2:p + 2 + n * 2].decode("utf-16le", "replace"))
+            elif typ == 0x0180:
+                resmap = list(struct.unpack_from("<%dI" % ((sz - 8) // 4), data, off + 8))
+            elif typ == 0x0102:                                # thẻ mở
+                name = struct.unpack_from("<I", data, off + 20)[0]
+                if 0 <= name < len(strs) and strs[name] == "uses-sdk":
+                    astart, asize, acnt = struct.unpack_from("<HHH", data, off + 24)
+                    for i in range(acnt):
+                        a = off + 16 + astart + i * asize
+                        an = struct.unpack_from("<I", data, a + 4)[0]
+                        dtype, val = data[a + 15], struct.unpack_from("<I", data, a + 16)[0]
+                        if (an < len(resmap) and resmap[an] == 0x0101020c) or (an < len(strs) and strs[an] == "minSdkVersion"):
+                            return val if dtype in (0x10, 0x11) else int(strs[val]) if dtype == 0x03 and strs[val].isdigit() else 0
+                    return 1
+            off += sz
+    except Exception:
+        return 0
+    return 0
+
+_MINSDK = {}
+def min_sdk(path):
+    k = (path, os.path.getmtime(path))
+    if k not in _MINSDK: _MINSDK[k] = apk_min_sdk(path)
+    return _MINSDK[k]
+
 def preinstall(name, port, force=False):
     """Cài các APK trong ~/apk-cai-san vào máy (mỗi APK chỉ cài 1 lần / máy, lưu dấu trong /data của máy)."""
     try: apks = sorted(f for f in os.listdir(PRE_DIR) if f.lower().endswith((".apk", ".apks", ".apkm", ".xapk")))
     except OSError: print(f"   ! Không thấy thư mục app cài sẵn {PRE_DIR}"); return
     todo = []
+    try: sdk = int((ashell(name, "getprop ro.build.version.sdk", port).stdout or "").strip() or 0)
+    except ValueError: sdk = 0
     for f in apks:
         mark = "/data/local/tmp/.cp_pre_" + re.sub(r"[^\w.-]", "_", f)
+        if sdk and min_sdk(os.path.join(PRE_DIR, f)) > sdk:
+            continue                              # app cần Android mới hơn máy này (VD Chrome mới không chạy Android 9) → bỏ qua
         if not force and (ashell(name, f"test -f {mark} && echo y", port).stdout or "").strip() == "y":
             continue
         todo.append((f, mark))

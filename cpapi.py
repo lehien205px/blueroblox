@@ -301,6 +301,61 @@ APK_EXT = (".apk", ".apks", ".apkm", ".xapk")
 ADMIN_FILES = {}          # mã file → (đường dẫn, tên)
 
 
+def apk_min_sdk(path):
+    """Đọc minSdkVersion (bản Android thấp nhất app cần) từ file .apk / gói .apks. Không đọc được → 0 (coi như cài được)."""
+    import zipfile, struct
+    try:
+        with zipfile.ZipFile(path) as z:
+            data = None
+            if "AndroidManifest.xml" in z.namelist(): data = z.read("AndroidManifest.xml")
+            else:
+                ns = [n for n in z.namelist() if n.lower().endswith(".apk") and "/" not in n.strip("/")]
+                ns.sort(key=lambda n: (0 if n.lower() in ("base.apk",) else 1 if "split" not in n.lower() else 2, n))
+                if ns:
+                    import io
+                    with zipfile.ZipFile(io.BytesIO(z.read(ns[0]))) as b: data = b.read("AndroidManifest.xml")
+        if not data: return 0
+        strs, resmap, off = [], [], 8
+        while off + 8 <= len(data):
+            typ, hsz, sz = struct.unpack_from("<HHI", data, off)
+            if sz < 8: break
+            if typ == 0x0001:                                  # bảng chữ
+                cnt, _, flags, sstart = struct.unpack_from("<IIII", data, off + 8)
+                utf8 = flags & 0x100
+                for i in range(cnt):
+                    p = off + struct.unpack_from("<I", data, off + hsz + i * 4)[0] + sstart
+                    if utf8:
+                        n = data[p]; p += 2 if n & 0x80 else 1
+                        n = data[p]; q = p + (2 if n & 0x80 else 1)
+                        if n & 0x80: n = ((n & 0x7f) << 8) | data[p + 1]
+                        strs.append(data[q:q + n].decode("utf-8", "replace"))
+                    else:
+                        n = struct.unpack_from("<H", data, p)[0]
+                        strs.append(data[p + 2:p + 2 + n * 2].decode("utf-16le", "replace"))
+            elif typ == 0x0180:
+                resmap = list(struct.unpack_from("<%dI" % ((sz - 8) // 4), data, off + 8))
+            elif typ == 0x0102:                                # thẻ mở
+                name = struct.unpack_from("<I", data, off + 20)[0]
+                if 0 <= name < len(strs) and strs[name] == "uses-sdk":
+                    astart, asize, acnt = struct.unpack_from("<HHH", data, off + 24)
+                    for i in range(acnt):
+                        a = off + 16 + astart + i * asize
+                        an = struct.unpack_from("<I", data, a + 4)[0]
+                        dtype, val = data[a + 15], struct.unpack_from("<I", data, a + 16)[0]
+                        if (an < len(resmap) and resmap[an] == 0x0101020c) or (an < len(strs) and strs[an] == "minSdkVersion"):
+                            return val if dtype in (0x10, 0x11) else int(strs[val]) if dtype == 0x03 and strs[val].isdigit() else 0
+                    return 1
+            off += sz
+    except Exception:
+        return 0
+    return 0
+
+_MINSDK = {}
+def min_sdk(path):
+    k = (path, os.path.getmtime(path))
+    if k not in _MINSDK: _MINSDK[k] = apk_min_sdk(path)
+    return _MINSDK[k]
+
 def pre_dir():
     import glob
     for d in [os.path.join(os.path.dirname(os.path.abspath(__file__)), "apk-cai-san"), os.path.join(HOME, "apk-cai-san")] + sorted(glob.glob("/home/*/apk-cai-san")):
@@ -686,6 +741,9 @@ class H(BaseHTTPRequestHandler):
             try: fs = sorted(f for f in os.listdir(d) if f.lower().endswith(APK_EXT))
             except OSError: fs = []
             inst = set(l.split(":", 1)[1].strip() for l in out(shell(port, "pm list packages", 30)).splitlines() if l.startswith("package:"))
+            try: sdk = int(out(shell(port, "getprop ro.build.version.sdk", 15)).strip() or 0)
+            except ValueError: sdk = 0
+            fs = [f for f in fs if not sdk or min_sdk(os.path.join(d, f)) <= sdk]   # ẩn app không chạy được trên bản Android của máy này
             return self.send_json(200, {"files": [{"name": f, "size": os.path.getsize(os.path.join(d, f))} for f in fs], "installed": sorted(inst)})
         if act == "store" and self.command == "POST":          # cài 1 app trong kho vào máy này
             n = safe_name(str(self.jbody().get("name") or "")); fp = os.path.join(pre_dir(), n)
@@ -699,6 +757,7 @@ class H(BaseHTTPRequestHandler):
                     o = out(adb(port, args, timeout=900))
                 finally:
                     subprocess.run(["docker", "exec", WSNAME, "rm", "-rf", dst], capture_output=True, timeout=60)
+                if "OLDER_SDK" in o: raise RuntimeError("App này cần bản Android mới hơn máy của bạn — hãy chọn máy Android 10 trở lên, hoặc cài bản cũ hơn từ CH Play.")
                 if "Success" not in o: raise RuntimeError("Cài lỗi: " + o[-200:])
                 return "✅ Đã cài " + n
             run_job(jid, work)

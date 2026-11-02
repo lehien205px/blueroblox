@@ -575,10 +575,17 @@ def pick_image(base):
     # Mặc định root bằng "cloudphone-su" (daemon, không sửa hệ thống) → xem su_install().
     return root_img(base) if CONF.get("ROOT", "1") == "magisk" and image_ok(root_img(base)) else base
 
-def boot_extra():
+def boot_extra(android=None):
     """Máy chủ có /dev/ashmem (module ashmem_linux) → Android dùng ashmem thật thay memfd.
-    Chrome / Chromium / WebView BẮT BUỘC ashmem (memfd → Chrome văng ngay lúc mở: SharedMemoryRegionGetProtectionFlags failed)."""
-    return ["androidboot.use_memfd=false"] if os.path.exists("/dev/ashmem") else []
+    Chrome / Chromium / WebView BẮT BUỘC ashmem (memfd → Chrome văng ngay lúc mở: SharedMemoryRegionGetProtectionFlags failed).
+    Android 9/10/11: ÉP vẽ hình bằng CPU (gpu_mode=guest). Mặc định "auto" thấy /dev/dri của card NVIDIA trên server → thử dùng card
+    → card NVIDIA không chạy được → mọi app có đồ hoạ (Chrome, game) màn trắng 2 giây rồi văng ("GPU process isn't usable")."""
+    ex = ["androidboot.use_memfd=false"] if os.path.exists("/dev/ashmem") else []
+    gm = CONF.get("GPU_MODE", "guest")
+    try: old = int(str(android or "11").split(".")[0]) <= 11
+    except ValueError: old = True
+    if gm in ("guest", "host") and (old or CONF.get("GPU_MODE_ALL") == "1"): ex.append(f"androidboot.redroid_gpu_mode={gm}")
+    return ex
 
 def docker_run(name, ram, cpu, port, res, fps, dpi=0, android="11"):
     w, h = res.split("x")
@@ -589,7 +596,7 @@ def docker_run(name, ram, cpu, port, res, fps, dpi=0, android="11"):
                *mem_args(ram), *cpu_args(cpu),
                "-v", f"{data}:/data", "-p", f"127.0.0.1:{port}:5555", img,   # chỉ mở trong server, không lộ ra internet
                f"androidboot.redroid_width={w}", f"androidboot.redroid_height={h}",
-               f"androidboot.redroid_dpi={int(dpi) or auto_dpi(res)}", f"androidboot.redroid_fps={fps}"] + boot_extra() + (HOUDINI if tr == "houdini" else ARM))
+               f"androidboot.redroid_dpi={int(dpi) or auto_dpi(res)}", f"androidboot.redroid_fps={fps}"] + boot_extra(android) + (HOUDINI if tr == "houdini" else ARM))
 
 def cmd_boost(a):
     """Áp dụng ngay chế độ CPU tăng tốc cho mọi máy đang có (không cần khởi động lại máy)."""
@@ -708,7 +715,7 @@ def recreate_base(p):
     data = os.path.join(DATA_ROOT, p["name"])
     r = sh(["docker", "run", "-itd", "--privileged", "--restart", "unless-stopped", "--name", p["name"], *mem_args(p["ram"]), *cpu_args(p["cpu"]),
             "-v", f"{data}:/data", "-p", f"127.0.0.1:{p['port']}:5555", img, f"androidboot.redroid_width={w}", f"androidboot.redroid_height={h}",
-            f"androidboot.redroid_dpi={int(p.get('dpi', 0)) or auto_dpi(p.get('res', '720x1280'))}", f"androidboot.redroid_fps={p.get('fps', 30)}"] + boot_extra() + (HOUDINI if tr == "houdini" else ARM))
+            f"androidboot.redroid_dpi={int(p.get('dpi', 0)) or auto_dpi(p.get('res', '720x1280'))}", f"androidboot.redroid_fps={p.get('fps', 30)}"] + boot_extra(p.get("android", "11")) + (HOUDINI if tr == "houdini" else ARM))
     if r.returncode != 0: raise RuntimeError((r.stderr or r.stdout).strip()[:200])
     if not was_on: sh(["docker", "stop", p["name"]])
     else: wait_boot(p["name"], p["port"], apps=False)

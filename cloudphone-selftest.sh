@@ -60,8 +60,8 @@ for CUR in $LIST; do
   case "$TOP" in *setupwizard*) bad "Kẹt ở trình cài đặt Google (màn đen) → cloudphone update rồi chạy lại" ;; "") warn "Không đọc được màn hình đang mở" ;; *) ok "Màn hình đang mở: $TOP" ;; esac
   docker exec "$WS" adb connect "127.0.0.1:$P" >/dev/null 2>&1
   [ "$(A get-state)" = device ] && ok "Kết nối điều khiển (adb) OK" || { bad "adb không kết nối được → web không có hình"; continue; }
-  N=$(timeout 30 docker exec "$WS" adb -s "127.0.0.1:$P" exec-out screencap -p 2>/dev/null | head -c 8 | od -An -tx1 | tr -d ' \n')
-  [ "$N" = 89504e470d0a1a0a ] && ok "Chụp màn hình OK" || bad "Chụp màn hình lỗi"
+  PNGH=$(timeout 30 docker exec "$WS" adb -s "127.0.0.1:$P" exec-out screencap -p 2>/dev/null | head -c 8 | od -An -tx1 | tr -d ' \n')
+  [ "$PNGH" = 89504e470d0a1a0a ] && ok "Chụp màn hình OK" || bad "Chụp màn hình lỗi"
   A shell input keyevent 224 >/dev/null && ok "Bấm phím (bật màn) OK" || bad "Bấm phím lỗi"
   A shell 'settings get system user_rotation' | grep -qE '^[0-3]$' && ok "Xoay màn hình: đọc được cài đặt" || warn "Không đọc được cài đặt xoay"
   # máy đang mở app (khách đang dùng) → KHÔNG mở app thử để khỏi phá khách
@@ -83,8 +83,8 @@ for CUR in $LIST; do
   fi
   # chép file vào Download (nút Tải file với file không phải APK)
   echo "blueroblox selftest" > "$T/selftest.txt"; docker cp "$T/selftest.txt" "$WS:/tmp/selftest.txt" >/dev/null 2>&1
-  A push /tmp/selftest.txt /sdcard/Download/selftest.txt >/dev/null; [ "$(S 'cat /sdcard/Download/selftest.txt')" = "blueroblox selftest" ] && ok "Chép file vào thư mục Download OK" || bad "Chép file vào Download lỗi"
-  S 'rm -f /sdcard/Download/selftest.txt' >/dev/null
+  A push /tmp/selftest.txt /sdcard/Download/selftest.txt >/dev/null; [ "$(A shell cat /sdcard/Download/selftest.txt)" = "blueroblox selftest" ] && ok "Chép file vào thư mục Download OK" || bad "Chép file vào Download lỗi"
+  A shell rm -f /sdcard/Download/selftest.txt >/dev/null
   # root
   R1=$(timeout 20 docker exec --user 2000 "$CUR" /system/xbin/su -c id 2>&1 | tr -d '\r')
   case "$R1" in *uid=0*) ok "Root (su) OK: app gọi su → uid=0" ;; *) bad "Root chưa chạy (bấm Root máy, hoặc: python3 ~/phonectl.py rootfix $CUR --force)" ;; esac
@@ -98,11 +98,14 @@ for CUR in $LIST; do
   ABI=$(S 'getprop ro.product.cpu.abilist'); case "$ABI" in *arm64*) ok "Chạy được app ARM 64-bit ($ABI)" ;; *armeabi*) warn "Chỉ chạy app ARM 32-bit ($ABI) — Roblox mới cần 64-bit" ;; *) bad "Không có bộ dịch ARM ($ABI) → Roblox không chạy" ;; esac
   S 'pm path com.roblox.client' | grep -q package && ok "Roblox đã cài" || warn "Roblox chưa cài (khách tự cài từ CH Play)"
   # clone tab
-  MU=$(S 'pm get-max-users' | tr -dc 0-9); [ "${MU:-1}" -gt 1 ] && ok "Clone tab: Android cho phép $MU người dùng" || bad "Clone tab: Android chỉ cho 1 người dùng (fw.max_users) → không clone được"
+  S 'setprop fw.max_users 8' >/dev/null
+  MU=$(S 'pm get-max-users' | tr -dc 0-9); FE=$(S 'pm list features' | grep -c managed_users)
+  if [ "${MU:-1}" -gt 1 ] && [ "$FE" -gt 0 ]; then ok "Clone tab: sẵn sàng (tối đa $MU người dùng, có hồ sơ công việc)"
+  else bad "Clone tab chưa dùng được (max_users=$MU, managed_users=$FE)"; fi
   # GPS
   if [ "$SDK" -ge 31 ]; then
     O=$(S 'appops set com.android.shell android:mock_location allow; cmd location providers add-test-provider gps 2>&1; cmd location providers set-test-provider-enabled gps true 2>&1; cmd location providers set-test-provider-location gps --location 21.0285,105.8542 2>&1; cmd location providers remove-test-provider gps 2>&1')
-    echo "$O" | grep -qi "exception\|unknown\|error" && bad "GPS giả lỗi: $(echo "$O" | head -1)" || ok "Đổi vị trí GPS OK"
+    echo "$O" | grep -qi "exception\|unknown\|error" && bad "GPS giả lỗi: $(echo "$O" | grep -iv '^\s*at ' | grep -v '^\s*$' | head -4 | tr '\n' ' ')" || ok "Đổi vị trí GPS OK"
   else warn "GPS giả cần Android 12+ (máy này Android $VER — nút báo khách rõ ràng)"; fi
   # mạng
   S 'ping -c1 -W3 8.8.8.8 >/dev/null 2>&1 && echo y' | grep -q y && ok "Có mạng Internet" || bad "Máy KHÔNG có mạng"

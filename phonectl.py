@@ -231,7 +231,9 @@ def cmd_gpurun(a):
             "-netdelay", "none", "-netspeed", "full"]
     os.execve(emu, args, GPU_ENV)
 
-TUNE = (# Trình cài đặt ban đầu của Google bị lỗi trên máy ảo (Android 9/10 kẹt ở MÀN ĐEN) → tắt nó + đánh dấu "đã cài đặt xong"
+TUNE = (# CLONE TAB cần Android cho phép nhiều người dùng (máy ảo mặc định chỉ 1) — mất khi khởi động lại nên đặt lại mỗi lần
+        "[ \"$(getprop fw.max_users)\" = 8 ] || setprop fw.max_users 8; "
+        # Trình cài đặt ban đầu của Google bị lỗi trên máy ảo (Android 9/10 kẹt ở MÀN ĐEN) → tắt nó + đánh dấu "đã cài đặt xong"
         "if pm path com.google.android.setupwizard >/dev/null 2>&1 && [ \"$(settings get secure user_setup_complete)\" != 1 ]; then "
         "settings put global device_provisioned 1; settings put secure user_setup_complete 1; "
         "pm disable com.google.android.setupwizard >/dev/null 2>&1; am start -a android.intent.action.MAIN -c android.intent.category.HOME >/dev/null 2>&1; fi; "
@@ -326,6 +328,14 @@ def min_sdk(path):
     if k not in _MINSDK: _MINSDK[k] = apk_min_sdk(path)
     return _MINSDK[k]
 
+def for_sdk(fname, path, sdk):
+    """App trong kho có chạy được trên máy SDK này không. File tên có '-sdkNN-' (lấy riêng cho Android cũ) chỉ dành cho đúng máy SDK đó;
+    file thường bị ẩn trên máy cũ nếu cần Android mới hơn, và nhường chỗ cho bản '-sdkNN-' cùng tên nếu có."""
+    if not sdk: return True
+    m = re.search(r"-sdk(\d+)-", fname)
+    if m: return int(m.group(1)) == sdk
+    return min_sdk(path) <= sdk
+
 def preinstall(name, port, force=False):
     """Cài các APK trong ~/apk-cai-san vào máy (mỗi APK chỉ cài 1 lần / máy, lưu dấu trong /data của máy)."""
     try: apks = sorted(f for f in os.listdir(PRE_DIR) if f.lower().endswith((".apk", ".apks", ".apkm", ".xapk")))
@@ -335,7 +345,7 @@ def preinstall(name, port, force=False):
     except ValueError: sdk = 0
     for f in apks:
         mark = "/data/local/tmp/.cp_pre_" + re.sub(r"[^\w.-]", "_", f)
-        if sdk and min_sdk(os.path.join(PRE_DIR, f)) > sdk:
+        if not for_sdk(f, os.path.join(PRE_DIR, f), sdk):
             continue                              # app cần Android mới hơn máy này (VD Chrome mới không chạy Android 9) → bỏ qua
         if not force and (ashell(name, f"test -f {mark} && echo y", port).stdout or "").strip() == "y":
             continue

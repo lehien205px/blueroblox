@@ -889,14 +889,16 @@ class H(BaseHTTPRequestHandler):
             jid = new_job(me["uid"], "Clone " + pkg)
             def work(j):
                 JOBS[j]["msg"] = "Đang tạo bản clone (lần đầu ~20 giây)…"
+                if cont and not str(cont).startswith("cloudgpu"):   # máy ảo mặc định chỉ cho 1 người dùng → mở thêm (cần quyền root của server)
+                    subprocess.run(["docker", "exec", cont, "/system/bin/sh", "-c", "setprop fw.max_users 8"], capture_output=True, timeout=20)
                 q = shlex.quote(pkg)
                 o = out(shell(port, f"pm path {q} >/dev/null 2>&1 || echo NOPKG; U=$({CU}); "
                                     f"[ -n \"$U\" ] || U=$(pm create-user --profileOf 0 --managed CloneTab 2>&1 | sed -n 's/.*created user id \\([0-9]*\\).*/\\1/p'); "
-                                    f"[ -n \"$U\" ] || {{ echo NOUSER; exit 0; }}; am start-user $U >/dev/null 2>&1; "
+                                    f"[ -n \"$U\" ] || {{ echo NOUSER; pm create-user --profileOf 0 --managed CloneTab 2>&1 | tail -1; exit 0; }}; am start-user $U >/dev/null 2>&1; "
                                     f"pm install-existing --user $U {q} >/dev/null 2>&1; settings put global package_verifier_enable 0; "
                                     f"pm list packages --user $U | grep -qx package:{q} && echo CLONED$U", 120))
                 if "NOPKG" in o: raise RuntimeError("Máy chưa cài app này — cài bản chính trước rồi mới clone.")
-                if "NOUSER" in o: raise RuntimeError("Android trong máy không cho tạo hồ sơ clone.")
+                if "NOUSER" in o: raise RuntimeError("Android trong máy không cho tạo hồ sơ clone: " + o[-150:])
                 if "CLONED" not in o: raise RuntimeError("Chưa clone được: " + o[-150:])
                 return "✅ Đã clone! Mở danh sách ứng dụng → tab Công việc (Work) → app có biểu tượng cặp tài liệu nhỏ là bản thứ 2."
             run_job(jid, work)

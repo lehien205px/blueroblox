@@ -259,6 +259,41 @@ body.focus .exitfocus{display:block}
 @media (max-width:420px){.langsw .ls{display:none!important}.top .meta{display:none}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
+<style id="cloudblue">
+/* ===== CLOUD BLUE (mệnh Thuỷ) — theo chế độ Sáng/Tối chọn ở trang chủ (br_theme) ===== */
+html[data-theme=dark]{--bg:#071226;--panel:#0d1d3d;--panel2:#10244a;--line:rgba(90,175,255,.20);--line2:rgba(90,175,255,.34);--fg:#e8f1ff;--muted:#9fb4d8;--blue:#3d86ff;--sky:#8cc4ff;
+  --sunk:#06112a;--soft:rgba(140,196,255,.08);--hdr:rgba(7,18,38,.97);--txt2:#d7e6ff;--warnc:#ffd666;color-scheme:dark}
+html[data-theme=light]{--bg:#f3f7fc;--panel:#ffffff;--panel2:#eef5ff;--line:rgba(43,110,240,.16);--line2:rgba(43,110,240,.30);--fg:#0a1a3a;--muted:#4a5d82;--blue:#2b6ef0;--sky:#2b6ef0;--ok:#0e9f74;--wait:#c27a00;--bad:#e0354f;
+  --sunk:#eef4fc;--soft:rgba(43,110,240,.07);--hdr:rgba(243,247,252,.97);--txt2:#1f3360;--warnc:#9a5b00;color-scheme:light}
+html[data-theme]:not(.embed) body{background:var(--bg) radial-gradient(circle at 50% 50%,rgba(120,180,255,.06) 0 32%,transparent 42%) 0 0/36px 36px}
+html[data-theme=light]:not(.embed) body{background:var(--bg) radial-gradient(circle at 50% 50%,#fff 0 32%,rgba(12,40,100,.05) 34%,transparent 42%) 0 0/36px 36px}
+html[data-theme] .top{background:var(--hdr);backdrop-filter:none;-webkit-backdrop-filter:none;border-bottom:2px solid var(--line2)}
+html[data-theme] .dm-r:hover,html[data-theme] .dm-app:hover{background:var(--soft)}
+html[data-theme] .seg button,html[data-theme] .tb,html[data-theme] .tbar button{color:var(--txt2)}
+html[data-theme] .tb:hover{color:var(--fg)}
+html[data-theme] .seg button.on,html[data-theme] .chips button.on{background:linear-gradient(180deg,#5c9dff,#2b6ef0);color:#fff}
+html[data-theme] .tb.on{background:var(--soft);color:var(--blue)}
+html[data-theme] .tools,html[data-theme] .mbar,html[data-theme] .exitfocus{background:var(--panel);backdrop-filter:none;-webkit-backdrop-filter:none}
+html[data-theme] .in,html[data-theme] .chips button{background:var(--sunk);color:var(--fg)}
+html[data-theme] .btn{background:linear-gradient(180deg,#5c9dff,#2b6ef0);color:#fff;border-color:transparent}
+html[data-theme] .btn.gh{background:var(--panel);color:var(--fg);box-shadow:0 0 0 2px var(--line2)}
+html[data-theme] .btn.red{background:rgba(255,107,129,.12);color:var(--bad)}
+html[data-theme] .fitbar{background:var(--soft);color:var(--txt2)}
+html[data-theme=light] .expbar{color:var(--warnc)}
+html[data-theme=light] .expbar.bad,html[data-theme=light] .toast.bad{color:#b0213a}
+html[data-theme] .lv-warn{color:var(--warnc)}
+html[data-theme] .langsw{background:var(--panel);box-shadow:0 0 0 2px var(--line2)}
+html[data-theme] .langsw button{color:var(--muted)}
+html[data-theme] .langsw button.on{background:linear-gradient(180deg,#5c9dff,#2b6ef0);color:#fff}
+html[data-theme] .langsw button:not(.on):hover{background:var(--soft)}
+html[data-theme] .getapp,html[data-theme] .appcta i{background:linear-gradient(180deg,#5c9dff,#2b6ef0)}
+html[data-theme] .appcta{background:linear-gradient(160deg,rgba(43,110,240,.18),rgba(43,110,240,.06));border-color:var(--line2)}
+html[data-theme=light] .dlg,html[data-theme=light] .sheetbg.open,html[data-theme=light] .drop{background:rgba(10,26,58,.4)}
+html[data-theme=light] .drop div{background:rgba(255,255,255,.9)}
+html[data-theme=light] .veil{background:#0b1a36;color:#e8f1ff}
+html[data-theme=light] .veil b,html[data-theme=light] .veil span{color:#e8f1ff}html[data-theme=light] .veil a{color:#8cc4ff}
+</style>
+<script>(function(){var t=null;try{t=localStorage.getItem("br_theme")}catch(e){}if(t!=="light"&&t!=="dark")t=matchMedia&&matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t;var m=document.querySelector('meta[name=theme-color]');if(m)m.content=t==="light"?"#f3f7fc":"#071226";})();</script>
 </head>
 <body>
 <header class="top">

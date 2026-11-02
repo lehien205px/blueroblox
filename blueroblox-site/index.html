@@ -11,7 +11,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="BlueRoblox">
-<meta name="theme-color" content="#060a1c">
+<meta name="theme-color" content="#071226" id="meta-tc">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap" media="print" onload="this.media='all'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap"></noscript>
 <style>
@@ -960,6 +960,209 @@ html.lite body{background-attachment:scroll!important}
 .fxbar small{color:var(--muted);font-size:12px}
 
 </style>
+<style>
+/* ================================================================
+   CLOUD BLUE — giao diện mệnh Thuỷ (xanh nước · trắng bạc · mực)
+   Lớp này nằm SAU styles.css: chỉ đổi màu/hình, không đụng chức năng.
+   2 chế độ: html[data-theme=dark] (Thuỷ đêm) · html[data-theme=light] (Thuỷ ngày)
+   Nhẹ cho máy yếu: bỏ làm mờ nền, bỏ cá koi/sao nền/trống xoay, nền chấm tĩnh.
+   ================================================================ */
+
+/* ---------- biến màu ---------- */
+html[data-theme=dark]{
+  --bg:#071226; --bg2:#0b1a36; --panel:#0d1d3d; --panel-solid:#0d1d3d; --panel2:#10244a;
+  --line:rgba(90,175,255,.22); --line2:rgba(90,175,255,.36);
+  --fg:#e8f1ff; --muted:#9fb4d8; --blue:#3d86ff; --blue2:#2b6ef0; --sky:#8cc4ff; --cyan:#8cc4ff;
+  --gold:#c9d7ee; --gold-hi:#f2f7ff; --gold-lo:#7a89a8; --ok:#3ce0b0; --bad:#ff6b81;
+  --card:#0d1d3d; --card2:#10244a; --sunk:rgba(3,10,26,.55); --soft:rgba(140,196,255,.07);
+  --hdr:rgba(7,18,38,.97); --ring:rgba(90,175,255,.30); --ring2:rgba(90,175,255,.85);
+  --money:#f2f7ff; --warn:#ffd666; --deep:#8cc4ff;
+  --dot:rgba(120,180,255,.07); --dot2:rgba(0,0,0,.25);
+  color-scheme:dark;
+}
+html[data-theme=light]{
+  --bg:#f3f7fc; --bg2:#e9f0fa; --panel:#ffffff; --panel-solid:#ffffff; --panel2:#eef5ff;
+  --line:rgba(43,110,240,.16); --line2:rgba(43,110,240,.30);
+  --fg:#0a1a3a; --muted:#4a5d82; --blue:#2b6ef0; --blue2:#1f5fe0; --sky:#2b6ef0; --cyan:#1b7fd6;
+  --gold:#2b6ef0; --gold-hi:#0f3fb3; --gold-lo:#1b53d6; --ok:#0e9f74; --bad:#e0354f;
+  --card:#ffffff; --card2:#f2f8ff; --sunk:#eef4fc; --soft:rgba(43,110,240,.06);
+  --hdr:rgba(243,247,252,.97); --ring:rgba(70,165,255,.30); --ring2:rgba(70,165,255,.85);
+  --money:#0f3fb3; --warn:#b26b00; --deep:#0f3fb3;
+  --dot:rgba(255,255,255,.95); --dot2:rgba(12,40,100,.05);
+  color-scheme:light;
+}
+
+/* ---------- nền "bảng bong bóng" tĩnh như logo ---------- */
+html[data-theme] body{background-color:var(--bg);background-attachment:scroll;
+  background-image:radial-gradient(circle at 50% 50%,var(--dot) 0 32%,var(--dot2) 34%,transparent 42%);background-size:36px 36px;color:var(--fg)}
+html[data-theme] body::after{display:none}
+html[data-theme] body::before{background:var(--bg)}
+#fx-bg,#school,.fx-drums{display:none!important}
+
+/* ---------- đầu trang ---------- */
+html[data-theme] .top,html[data-theme] .top.scrolled,html.lite[data-theme] .top{background:var(--hdr)!important;-webkit-backdrop-filter:none;backdrop-filter:none;border-bottom:2px solid var(--ring);box-shadow:none}
+html[data-theme] .top::after{display:none}
+html[data-theme] .logo .wm b{color:var(--fg)}
+html[data-theme] .logo .wm b em{background:none;-webkit-background-clip:border-box;background-clip:border-box;color:var(--blue)}
+html[data-theme=dark] .logo .wm b em{color:#5aa8ff}
+html[data-theme] .top nav{background:var(--card);border:0;box-shadow:0 0 0 2px var(--ring)}
+html[data-theme] .top nav a{color:var(--muted)}
+html[data-theme] .top nav a:hover{color:var(--fg);background:var(--soft)}
+html[data-theme] .top nav a.on{color:#fff;background:linear-gradient(180deg,#5c9dff,#2b6ef0);box-shadow:0 6px 16px -6px rgba(43,110,240,.7),inset 0 1px 0 rgba(255,255,255,.45)}
+/* ngôn ngữ: viên thuốc trắng/mực, viền neon (bỏ cam) */
+html[data-theme] .langsw{background:var(--card);box-shadow:0 0 0 2px var(--ring)}
+html[data-theme] .langsw button{color:var(--muted)}
+html[data-theme] .langsw button.on{background:linear-gradient(180deg,#5c9dff,#2b6ef0);color:#fff;box-shadow:0 4px 14px rgba(43,110,240,.35)}
+html[data-theme] .langsw button:not(.on):hover{background:var(--soft)}
+html[data-theme] .langsw button:focus-visible{outline-color:var(--sky)}
+/* nút Sáng / Tối */
+.thsw{display:inline-flex;flex:none;align-items:center;gap:2px;padding:3px;border-radius:999px;background:var(--card);box-shadow:0 0 0 2px var(--ring)}
+.thsw button{width:36px;height:34px;border:0;border-radius:999px;background:none;display:grid;place-items:center;color:var(--muted);cursor:pointer;transition:background .25s,color .25s}
+.thsw button svg{width:18px;height:18px}
+.thsw button:hover{color:var(--fg)}
+.thsw button.on{background:linear-gradient(180deg,#5c9dff,#2b6ef0);color:#fff;box-shadow:0 4px 14px rgba(43,110,240,.35)}
+html.tx,html.tx *{transition:background-color .35s,color .35s,border-color .35s,box-shadow .35s!important}
+
+/* ---------- nút ---------- */
+html[data-theme] .btn{background:linear-gradient(180deg,#5c9dff,#2b6ef0);color:#fff;box-shadow:0 8px 20px -10px rgba(43,110,240,.8),inset 0 1px 0 rgba(255,255,255,.4)}
+html[data-theme] .btn.ghost{background:var(--card);color:var(--fg);border:0;box-shadow:0 0 0 2px var(--ring)}
+html[data-theme] .btn.ghost:hover{background:var(--card2)}
+html[data-theme=dark] .btn.gold{background:linear-gradient(180deg,#ffffff,#d4e6ff);color:#0f3fb3;box-shadow:0 0 0 2px rgba(140,196,255,.6),0 10px 26px -12px rgba(140,196,255,.8),inset 0 1px 0 #fff}
+html[data-theme=light] .btn.gold{background:linear-gradient(180deg,#3c7bff,#0f3fb3);color:#fff;box-shadow:0 10px 24px -10px rgba(15,63,179,.7),inset 0 1px 0 rgba(255,255,255,.35)}
+html[data-theme] .card .btn[disabled]{background:var(--sunk);color:var(--muted);box-shadow:none}
+html[data-theme] .seg,html[data-theme] .who{background:var(--card);border-color:var(--line2)}
+html[data-theme] .bal{background:var(--card);border-color:var(--line2)}
+html[data-theme] .bal b{color:var(--money)}
+
+/* ---------- đầu trang chủ ---------- */
+html[data-theme] .eyebrow{background:var(--card);border:0;box-shadow:0 0 0 2px var(--ring);color:var(--deep);font-weight:700}
+html[data-theme] .eyebrow::before{animation:none}
+html[data-theme] h1{color:var(--fg);text-shadow:none;perspective:none}
+html[data-theme] h1 .ch{animation:none!important;text-shadow:none!important;will-change:auto}
+html[data-theme] h1 .ch:hover{transform:none;color:inherit;text-shadow:none}
+html[data-theme] h1 .spk,html[data-theme] h1 em::after{display:none}
+html[data-theme] h1 em{animation:none!important;filter:none;background:none;-webkit-background-clip:border-box;background-clip:border-box;
+  color:var(--blue);-webkit-text-fill-color:currentColor;text-shadow:0 0 18px rgba(70,165,255,.35)}
+html[data-theme=dark] h1 em{color:#5aa8ff;text-shadow:0 0 22px rgba(90,175,255,.55)}
+html[data-theme] h1 em .ch{color:inherit;-webkit-text-fill-color:currentColor}
+html[data-theme] .hero p{color:var(--muted)}
+html[data-theme] .hero>div:first-child>*{animation:none}
+
+/* hàng biểu tượng Việt Nam */
+.vnrow{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:6px 0 4px}
+.vnb{width:46px;height:46px;border-radius:50%;background:var(--card);display:grid;place-items:center;box-shadow:0 0 0 2px var(--ring),0 6px 14px rgba(43,110,240,.15);transition:transform .25s}
+.vnb:hover{transform:translateY(-3px)}
+.vnb svg{width:32px;height:32px}.vnb canvas{width:34px;height:34px}
+.vnt{font-size:13px;font-weight:700;color:var(--deep);margin-left:4px}
+
+/* bảng Cloud Blue thay trống 3D (tĩnh, vẽ 1 lần) */
+.cb-stage{position:relative;width:100%;max-width:560px;justify-self:center}
+.cb-board{position:relative;border-radius:28px;padding:36px 28px 30px;text-align:center;
+  background:radial-gradient(circle at 50% 50%,#fff 0 34%,rgba(12,40,100,.10) 36%,transparent 44%) 0 0/28px 28px,#edf3fb;
+  box-shadow:0 0 0 3px #fff,0 0 0 6px var(--ring2),0 0 34px rgba(70,165,255,.45),0 20px 40px rgba(10,26,58,.12)}
+html[data-theme=dark] .cb-board{background:radial-gradient(circle at 50% 50%,rgba(120,180,255,.12) 0 34%,rgba(0,0,0,.35) 36%,transparent 44%) 0 0/28px 28px,#0b1a36;
+  box-shadow:0 0 0 3px #0f2550,0 0 0 6px var(--ring2),0 0 40px rgba(70,165,255,.5),0 20px 40px rgba(0,0,0,.45)}
+.cb-board>*{position:relative}
+.cb-board .drum-bg{position:absolute;left:50%;top:46%;width:min(520px,92%);height:auto;aspect-ratio:1;transform:translate(-50%,-50%);opacity:.14;pointer-events:none}
+html[data-theme=dark] .cb-board .drum-bg{filter:brightness(2.4);opacity:.16}
+.cb-board .gloss{position:absolute;inset:0;border-radius:28px;pointer-events:none;background:linear-gradient(115deg,rgba(255,255,255,.75) 0%,transparent 38%,transparent 62%,rgba(255,255,255,.5) 100%)}
+html[data-theme=dark] .cb-board .gloss{background:linear-gradient(115deg,rgba(255,255,255,.10) 0%,transparent 38%,transparent 62%,rgba(255,255,255,.06) 100%)}
+.cb-board .corner-flag{position:absolute;right:-8px;top:-14px;width:70px;z-index:2;filter:drop-shadow(0 4px 8px rgba(0,0,0,.18));transform:rotate(8deg)}
+.cb-board .corner-flag svg{display:block;width:100%;height:auto}
+.cb-board .spark{position:absolute;color:#fff;font-size:22px;text-shadow:0 0 10px var(--ring2)}
+.cb-cloud{z-index:1;margin:0 auto;width:min(420px,100%);padding:26px 18px 10px;border-radius:40% 40% 24px 24px/48% 48% 24px 24px;background:rgba(255,255,255,.72);
+  box-shadow:0 0 0 3px #fff,0 0 0 6px var(--ring),0 0 24px rgba(70,165,255,.35)}
+html[data-theme=dark] .cb-cloud{background:rgba(14,34,72,.85);box-shadow:0 0 0 3px #16336a,0 0 0 6px var(--ring),0 0 28px rgba(70,165,255,.4)}
+.cb-cloud img{width:min(300px,80%);height:auto;aspect-ratio:1.45;object-fit:contain;filter:drop-shadow(0 10px 18px rgba(43,110,240,.35));animation:cbfloat 5s ease-in-out infinite}
+@keyframes cbfloat{50%{transform:translateY(-10px) rotate(-2deg)}}
+.cb-chunky{margin:18px 0 0;font-size:clamp(34px,5vw,54px);font-weight:900;letter-spacing:.01em;line-height:.95;
+  background:linear-gradient(180deg,#8cc4ff 0%,#2b6ef0 55%,#1b53d6 100%);-webkit-background-clip:text;background-clip:text;color:transparent;
+  filter:drop-shadow(0 2px 0 #fff) drop-shadow(0 4px 0 #cfe3ff) drop-shadow(0 8px 14px rgba(43,110,240,.3))}
+html[data-theme=dark] .cb-chunky{background:linear-gradient(180deg,#d4ebff 0%,#5aa8ff 55%,#2b6ef0 100%);-webkit-background-clip:text;background-clip:text;
+  filter:drop-shadow(0 2px 0 #0f2550) drop-shadow(0 0 16px rgba(90,175,255,.55))}
+.cb-chunky small{display:block;font-size:.42em;color:#0f3fb3;-webkit-text-fill-color:#0f3fb3;letter-spacing:.1em;margin-top:6px}
+html[data-theme=dark] .cb-chunky small{color:#bfe3ff;-webkit-text-fill-color:#bfe3ff}
+html.lite .cb-cloud img,body.past-hero .cb-cloud img{animation:none}
+@media (prefers-reduced-motion:reduce){.cb-cloud img{animation:none}}
+@media (max-width:900px){.cb-board .corner-flag{right:4px;top:-8px;width:50px}.vnt{display:none}.cb-stage{margin-top:8px}}
+
+/* thông báo đầu trang */
+html[data-theme] .notice div{color:var(--fg)}
+html[data-theme] .notice .nh{color:var(--fg)}
+html[data-theme] .notice .nc{background:var(--card);border:0;box-shadow:0 0 0 2px var(--ring)}
+html[data-theme=light] .notice .nc{background:linear-gradient(100deg,color-mix(in srgb,var(--c) 12%,#fff),#fff 60%)}
+html[data-theme=dark] .notice .nc{background:linear-gradient(100deg,color-mix(in srgb,var(--c) 14%,#0d1d3d),#0d1d3d 60%)}
+html[data-theme] .nc .nt b{color:var(--fg)}
+html[data-theme] .nc .nt small,html[data-theme] .nc .nt span{color:var(--muted)}
+
+/* ---------- khung, thẻ, bảng ---------- */
+html[data-theme] .card,html[data-theme] .side,html[data-theme] .panel,html[data-theme] .f{background:var(--card);border:0;box-shadow:0 0 0 2px var(--ring),0 10px 26px rgba(10,26,58,.08);
+  -webkit-backdrop-filter:none;backdrop-filter:none;border-radius:22px}
+html[data-theme=dark] .card,html[data-theme=dark] .side,html[data-theme=dark] .panel,html[data-theme=dark] .f{box-shadow:0 0 0 2px var(--ring),0 10px 26px rgba(0,0,0,.35)}
+html[data-theme] .card:hover{box-shadow:0 0 0 3px var(--ring2),0 16px 34px rgba(43,110,240,.22)}
+html[data-theme] .thumb{background:linear-gradient(160deg,#2b6ef0,#0f3fb3)}
+html[data-theme] .thumb::after{background:linear-gradient(transparent,rgba(10,30,80,.45))}
+html[data-theme] .thumb .tag{background:rgba(255,255,255,.92);color:#0f3fb3;border:0;font-weight:700}
+html[data-theme] .thumb .hot{background:linear-gradient(180deg,#ffe46b,#ffc400);color:#5a3a00}
+html[data-theme] .price,html[data-theme] .days-chip,html[data-theme] .sum b,html[data-theme] .kv b.hl{color:var(--money)}
+html[data-theme] .cats button.on{background:linear-gradient(180deg,#5c9dff,#2b6ef0);color:#fff}
+html[data-theme] .cats small{background:var(--sunk)}
+html[data-theme] .feats span{color:var(--muted)}
+/* ô nhập + các hộp lõm */
+html[data-theme] .search,html[data-theme] select,html[data-theme] .f input,html[data-theme] .f textarea,html[data-theme] .f select,html[data-theme] .in,
+html[data-theme] .plan-row input,html[data-theme] .dlg input,html[data-theme] .dlg textarea,html[data-theme] .dlg select{background:var(--sunk);color:var(--fg);border-color:var(--line2)}
+html[data-theme] .qty,html[data-theme] .atabs,html[data-theme] .amts button,html[data-theme] #tp-method,html[data-theme] .kv div,html[data-theme] #cr-prog,html[data-theme] .oi,
+html[data-theme] .plan-ed,html[data-theme] .tbl,html[data-theme] .vps-opts button,html[data-theme] .vmi,html[data-theme] .node,html[data-theme] .ntrules,html[data-theme] .shsec,
+html[data-theme] .cpf,html[data-theme] .cpand button,html[data-theme] .cpg,html[data-theme] .shrow,html[data-theme] .apkprog .bar,html[data-theme] .fxtoggle,html[data-theme] #fx-toggle{background:var(--sunk)}
+html[data-theme] .cpg.hot{background:linear-gradient(180deg,rgba(255,107,129,.10),var(--sunk))}
+html[data-theme] .atabs button.on,html[data-theme] #tp-method button.on,html[data-theme] #tp-coin button.on{color:#fff}
+html[data-theme] .amts button.on,html[data-theme] .vps-opts button.on{border-color:var(--blue);background:var(--soft);color:var(--money)}
+html[data-theme] .tabs button.on{background:linear-gradient(180deg,#5c9dff,#2b6ef0);color:#fff}
+
+/* ---------- hộp thoại + trang quản trị ---------- */
+html[data-theme] .modal,html[data-theme] .drawer{-webkit-backdrop-filter:none;backdrop-filter:none}
+html[data-theme=light] .modal{background:rgba(10,26,58,.45)}
+html[data-theme=light] .drawer{background:rgba(10,26,58,.35)}
+html[data-theme] .dlg{background:var(--card);border:0;box-shadow:0 0 0 3px var(--ring),0 30px 60px -20px rgba(0,0,0,.45);border-radius:24px}
+html[data-theme] .dlg::before{background:linear-gradient(90deg,transparent,var(--sky),var(--blue),transparent)}
+html[data-theme] #cporderdlg .cpfoot{background:var(--card)}
+html[data-theme] .dpanel{background:var(--bg2);border-left:2px solid var(--ring)}
+html[data-theme] body.admin-page .drawer,html[data-theme] body.admin-page .adm-gate{background:var(--bg)}
+html[data-theme] body.admin-page .adm-gate{color:var(--fg)}
+html[data-theme] .helpdlg .b kbd{background:var(--sunk);color:var(--fg)}
+html[data-theme] footer{background:var(--card);border-top:2px solid var(--ring)}
+html[data-theme] .mtcard{background:var(--card)}
+
+/* ---------- chữ sáng cứng → theo chế độ (cho bản sáng đọc được) ---------- */
+html[data-theme=light] .appbig .t b,html[data-theme=light] .helpdlg summary .n,html[data-theme=light] .restock b,html[data-theme=light] .freebar .fb-cd b,
+html[data-theme=light] .cpfree .free-cd b,html[data-theme=light] .cd-left,html[data-theme=light] .shcode .cd{color:var(--fg)}
+html[data-theme=light] .appbig .t span,html[data-theme=light] .helpdlg .b,html[data-theme=light] .ntbody,html[data-theme=light] .ntrules,html[data-theme=light] .mtcard p,
+html[data-theme=light] .apkdrop:hover,html[data-theme=light] .apkdrop.on,html[data-theme=light] .cpa-cust b,html[data-theme=light] .helpbtn .t small{color:var(--muted)}
+html[data-theme=light] .stock.wt,html[data-theme=light] .ctvchip.wait,html[data-theme=light] .cpand button small,html[data-theme=light] .cpwarn,html[data-theme=light] .cpfree b,
+html[data-theme=light] .helpbtn .t b,html[data-theme=light] .helpbtn .go,html[data-theme=light] .restock,html[data-theme=light] .cpfree .free-cd,html[data-theme=light] .cpchip.help,
+html[data-theme=light] .fxtoggle[aria-pressed="true"],html[data-theme=light] .stock.low{color:var(--warn)}
+html[data-theme=light] .admalert .r,html[data-theme=light] .apkfail{color:#c0263c}
+html[data-theme=light] .admalert .y{color:#8a5a00}
+html[data-theme=light] .freebar .fb-cd{color:#ffd666}
+html[data-theme=light] .freebar .fb-cd b{color:#fff}
+html[data-theme=light] .freebar .fb-cd{background:linear-gradient(90deg,rgba(10,20,56,0),#0a1438 18px)}
+html[data-theme=light] .pill.wt{color:var(--warn);border-color:rgba(178,107,0,.4);background:rgba(255,196,0,.1)}
+
+html[data-theme] .pdesc,html[data-theme] .note,html[data-theme] .nc .nt small{color:var(--muted)}
+html[data-theme=light] .vmi .shby,html[data-theme=light] .cpg .cfg,html[data-theme=light] .appbig .t small,html[data-theme=light] .helpdlg summary::after{color:var(--blue)}
+html[data-theme] .cats button:hover{background:var(--soft)}
+html[data-theme] .cats button.on small{background:rgba(255,255,255,.25);color:#fff}
+
+/* ---------- điện thoại ---------- */
+@media (max-width:620px){
+  .thsw button{width:30px;height:30px}.thsw button svg{width:16px;height:16px}
+  .vnb{width:42px;height:42px}.vnb svg{width:28px;height:28px}
+  .cb-stage{max-width:330px}.cb-board{padding:22px 16px 18px}.cb-cloud{padding:16px 12px 6px}.cb-cloud img{width:min(190px,70%)}
+  .cb-chunky{font-size:30px;margin-top:12px}
+}
+
+</style>
+<script>/* chế độ Sáng/Tối: nhớ lựa chọn (br_theme), lần đầu theo máy khách */(function(){var t=null;try{t=localStorage.getItem("br_theme")}catch(e){}if(t!=="light"&&t!=="dark")t=matchMedia&&matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t;})();</script>
 <script>
 /* CHẾ ĐỘ NHẸ: máy yếu / điện thoại → tắt hiệu ứng nặng (trống 3D xoay, cá koi, sao nền, ảnh 3D sản phẩm, làm mờ nền) cho mượt.
    Tự nhận: ít nhân CPU / ít RAM / tiết kiệm dữ liệu / giảm chuyển động / điện thoại. Khách tự bật/tắt ở cuối trang (lưu br_lite). */
@@ -987,6 +1190,17 @@ window.BR_CONFIG = {
 <link rel="preload" as="script" href="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js">
 </head>
 <body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
+<linearGradient id="g-fr" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#c8161c"/><stop offset=".22" stop-color="#e3262b"/><stop offset=".45" stop-color="#b9141a"/><stop offset=".7" stop-color="#e6302f"/><stop offset="1" stop-color="#bf171c"/></linearGradient>
+<linearGradient id="g-fy" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffe46b"/><stop offset="1" stop-color="#ffc400"/></linearGradient>
+<linearGradient id="g-lp" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8fd0ff"/><stop offset="1" stop-color="#2b6ef0"/></linearGradient>
+<linearGradient id="g-lp2" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5eb2ff"/><stop offset="1" stop-color="#1b53d6"/></linearGradient>
+<linearGradient id="g-nl" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8fd0ff"/><stop offset=".55" stop-color="#3b82f6"/><stop offset="1" stop-color="#1b53d6"/></linearGradient>
+<linearGradient id="g-nlh" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/></linearGradient>
+<symbol id="i-flag" viewBox="0 0 120 84"><path fill="url(#g-fr)" d="M8 14 C30 4 50 20 72 12 C88 6 102 6 112 12 L112 66 C100 60 88 60 72 66 C50 74 30 58 8 68 Z"/><path fill="#fff" opacity=".18" d="M8 14 C30 4 50 20 72 12 C88 6 102 6 112 12 L112 22 C100 16 88 16 72 22 C50 30 30 14 8 24 Z"/><path fill="url(#g-fy)" d="M60 22 L64.4 35.2 L78.3 35.3 L67.1 43.5 L71.3 56.8 L60 48.7 L48.7 56.8 L52.9 43.5 L41.7 35.3 L55.6 35.2 Z"/></symbol>
+<symbol id="i-lotus" viewBox="0 0 120 120"><path fill="url(#g-lp2)" d="M60 92 C40 92 18 82 10 62 C26 60 44 68 56 86 Z"/><path fill="url(#g-lp2)" d="M60 92 C80 92 102 82 110 62 C94 60 76 68 64 86 Z"/><path fill="url(#g-lp)" d="M60 90 C46 84 30 66 32 40 C46 46 58 62 60 90 Z"/><path fill="url(#g-lp)" d="M60 90 C74 84 90 66 88 40 C74 46 62 62 60 90 Z"/><path fill="url(#g-lp)" d="M60 90 C50 76 46 50 60 22 C74 50 70 76 60 90 Z"/><path d="M60 30 C55 48 55 70 60 86" stroke="#fff" stroke-width="2" fill="none" opacity=".6" stroke-linecap="round"/><path d="M38 50 C44 60 52 72 58 86 M82 50 C76 60 68 72 62 86" stroke="#fff" stroke-width="1.6" fill="none" opacity=".45" stroke-linecap="round"/><path d="M30 100 C48 105 72 105 90 100" stroke="#1b53d6" stroke-width="3.5" fill="none" stroke-linecap="round" opacity=".45"/></symbol>
+<symbol id="i-non" viewBox="0 0 120 120"><path fill="url(#g-nl)" d="M60 20 C62 20 64 22 66 25 L106 78 C108 82 104 86 98 87 C74 92 46 92 22 87 C16 86 12 82 14 78 L54 25 C56 22 58 20 60 20 Z"/><path fill="url(#g-nlh)" d="M60 20 C58 20 56 22 54 25 L14 78 C13 81 15 84 20 86 C30 70 44 46 60 20 Z"/><g stroke="#fff" stroke-opacity=".38" stroke-width="1.4" fill="none"><path d="M30 70 C50 74 70 74 90 70"/><path d="M40 56 C53 59 67 59 80 56"/><path d="M48 44 C56 46 64 46 72 44"/></g><path d="M14 80 C40 92 80 92 106 80" stroke="#0f3fb3" stroke-width="3" fill="none" stroke-linecap="round" opacity=".55"/><path d="M40 86 C46 100 74 100 80 86" stroke="#d9262b" stroke-width="2.6" fill="none" stroke-linecap="round"/></symbol>
+</defs></svg>
 <div class="freebar" id="freebar" hidden role="button" tabindex="0" aria-label="Ưu đãi miễn phí"><div class="fb-track" id="fb-track"></div></div>
 <header class="top">
   <div class="wrap">
@@ -997,6 +1211,7 @@ window.BR_CONFIG = {
     <div class="acct">
       <div class="langsw" id="lang-seg" role="group" aria-label="Language / Ngôn ngữ"><button id="lang-vi" class="on" type="button" title="Tiếng Việt"><span class="fl"><svg viewBox="0 0 30 20" aria-hidden="true"><rect width="30" height="20" fill="#da251d"/><path fill="#ff0" d="M15 4l1.76 5.42h5.7l-4.61 3.35 1.76 5.42L15 14.84l-4.61 3.35 1.76-5.42-4.61-3.35h5.7z"/></svg></span><span class="ln">Tiếng Việt</span><span class="ls">VI</span></button><button id="lang-en" type="button" title="English"><span class="fl"><svg viewBox="0 0 60 30" aria-hidden="true"><clipPath id="ukc"><path d="M0 0v30h60V0z"/></clipPath><clipPath id="ukt"><path d="M30 15h30v15zv15H0zH0V0zV0h30z"/></clipPath><g clip-path="url(#ukc)"><path d="M0 0v30h60V0z" fill="#012169"/><path d="M0 0l60 30m0-30L0 30" stroke="#fff" stroke-width="6"/><path d="M0 0l60 30m0-30L0 30" clip-path="url(#ukt)" stroke="#C8102E" stroke-width="4"/><path d="M30 0v30M0 15h60" stroke="#fff" stroke-width="10"/><path d="M30 0v30M0 15h60" stroke="#C8102E" stroke-width="6"/></g></svg></span><span class="ln">English</span><span class="ls">EN</span></button></div>
       <div class="cursw" hidden style="display:none" role="group" aria-label="Currency / Đơn vị tiền"><button id="cur-vnd" class="on" type="button" title="Việt Nam đồng"><span class="sy">₫</span>VND</button><button id="cur-usd" type="button" title="US dollar"><span class="sy">$</span>USD</button></div>
+      <div class="thsw" id="theme-seg" role="group" aria-label="Sáng / Tối"><button type="button" data-t="light" title="Chế độ sáng" aria-label="Chế độ sáng"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4.2" fill="currentColor"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M5.3 18.7l1.6-1.6M17.1 6.9l1.6-1.6"/></svg></button><button type="button" data-t="dark" title="Chế độ tối" aria-label="Chế độ tối"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.5 14.6A8.6 8.6 0 0 1 9.4 3.5a.6.6 0 0 0-.8-.7A9.6 9.6 0 1 0 21.2 15.4a.6.6 0 0 0-.7-.8Z"/></svg></button></div>
       <span id="guest-acts"><button class="btn ghost" id="btn-login" data-i18n="login">Đăng nhập</button> <button class="btn" id="btn-reg" data-i18n="signup">Đăng ký</button></span>
       <span id="user-acts" hidden style="display:flex;gap:8px;align-items:center">
         <span class="bal"><span data-i18n="balance">Số dư</span>: <b id="bal">0đ</b></span>
@@ -1013,6 +1228,13 @@ window.BR_CONFIG = {
   <div>
     <div class="eyebrow" id="h-eyebrow"></div>
     <h1 id="h-title"></h1>
+    <div class="vnrow" aria-label="Biểu tượng Việt Nam">
+      <span class="vnb" title="Cờ Tổ quốc"><svg viewBox="0 0 120 84"><use href="#i-flag"/></svg></span>
+      <span class="vnb" title="Trống đồng Đông Sơn"><canvas class="cb-drum" width="88" height="88"></canvas></span>
+      <span class="vnb" title="Hoa sen"><svg viewBox="0 0 120 120"><use href="#i-lotus"/></svg></span>
+      <span class="vnb" title="Nón lá"><svg viewBox="0 0 120 120"><use href="#i-non"/></svg></span>
+      <span class="vnt" data-i18n="vn_t">Thương hiệu Việt · máy chủ đặt tại Việt Nam</span>
+    </div>
     <p id="h-desc"></p>
     <div class="cta">
       <a class="btn gold lg" href="#shop"><svg class="ic" viewBox="0 0 24 24"><path d="M3 3h2l2.6 13h10L21 7H6"/><circle cx="9" cy="20" r="1.5"/><circle cx="18" cy="20" r="1.5"/></svg><span data-i18n="buy_now">Mua ngay</span></a>
@@ -1021,19 +1243,14 @@ window.BR_CONFIG = {
     <div style="display:none"><b id="st-a"></b><b id="st-b"></b></div>
     <div class="notice" id="notices"></div>
   </div>
-  <div class="stage" aria-hidden="true">
-    <div class="halo"></div>
-    <div class="drum3d" id="drum3d">
-      <div class="face"></div>
-      <canvas class="layer spin-cw"  style="--t:90s" data-part="outer"></canvas>
-      <canvas class="layer spin-ccw" style="--t:55s"  data-part="zig"></canvas>
-      <canvas class="layer spin-ccw" style="--t:30s"  data-part="birds"></canvas>
-      <canvas class="layer spin-cw"  style="--t:70s" data-part="lattice"></canvas>
-      <canvas class="layer spin-ccw" style="--t:22s"  data-part="feather"></canvas>
-      <canvas class="layer spin-cw"  style="--t:40s"  data-part="core"></canvas>
-      <div class="sheen"></div><div class="d-sweep"></div><div class="d-core"></div>
+  <div class="cb-stage" aria-hidden="true">
+    <div class="cb-board">
+      <canvas class="drum-bg cb-drum" width="520" height="520"></canvas><i class="gloss"></i>
+      <span class="corner-flag"><svg viewBox="0 0 120 84"><use href="#i-flag"/></svg></span>
+      <span class="spark" style="left:18px;top:14px">✦</span><span class="spark" style="right:22px;top:40px">✦</span><span class="spark" style="left:40px;bottom:70px;font-size:16px">✦</span>
+      <div class="cb-cloud"><img src="logo.webp" alt="" width="300" height="207"></div>
+      <div class="cb-chunky">CLOUD<br>BLUE<small data-i18n="cb_tag">ĐIỆN THOẠI ĐÁM MÂY VIỆT NAM</small></div>
     </div>
-    <canvas class="fx" id="stage-fx" width="700" height="700"></canvas>
   </div>
 </section>
 
@@ -1191,7 +1408,7 @@ window.BR_CONFIG = {
       <div class="wait" id="cr-wait"><span class="sp"></span><span id="cr-wait-t" data-i18n="cr_wait">Đang chờ xác nhận trên blockchain…</span></div>
       <div id="cr-prog" style="display:grid;gap:6px">
         <div style="display:flex;justify-content:space-between;font-size:13px;color:#cfe0ff"><span id="cr-stage">…</span><b id="cr-pct">10%</b></div>
-        <div style="height:9px;background:#152038;border-radius:99px;overflow:hidden"><div id="cr-bar" style="height:100%;width:10%;background:linear-gradient(90deg,#2f7bff,#3fe0ff);border-radius:99px;transition:width .6s ease"></div></div>
+        <div style="height:9px;background:var(--sunk);border-radius:99px;overflow:hidden"><div id="cr-bar" style="height:100%;width:10%;background:linear-gradient(90deg,#2f7bff,#3fe0ff);border-radius:99px;transition:width .6s ease"></div></div>
       </div>
       <div class="note" id="cr-note"></div>
       <div class="acts"><button class="btn ghost" id="cr-back" data-i18n="change_amount">Đổi số tiền</button></div>
@@ -1301,7 +1518,7 @@ window.BR_CONFIG = {
       <div class="hint" id="dl-profit" style="margin-top:8px"></div>
     </div>
     <label id="dl-orig-wrap" hidden style="color:#9fb0d0">📄 Dữ liệu CŨ (chỉ để xem, không sửa)
-      <textarea class="in" id="dl-orig" rows="5" readonly style="font-family:var(--mono);font-size:13px;background:rgba(6,10,28,.75);opacity:.85"></textarea></label>
+      <textarea class="in" id="dl-orig" rows="5" readonly style="font-family:var(--mono);font-size:13px;background:var(--sunk);opacity:.85"></textarea></label>
     <label id="dl-new-lb">Thông tin giao cho khách, mỗi dòng 1 sản phẩm (VD: <code>IP:port|user|pass</code>). Đơn có gói ngày sẽ tự thêm ngày hết hạn.
       <textarea class="in" id="dl-items" rows="8" style="font-family:var(--mono);font-size:13px"></textarea></label>
     <div id="dl-vpsbar" hidden style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:-6px">
@@ -1800,7 +2017,6 @@ window.BR_CONFIG = {
 </div>
 <div class="maintbar" id="maintbar" hidden></div>
 <div class="toast" id="toast" hidden></div>
-<canvas id="school" aria-hidden="true"></canvas>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
 <script>
@@ -2174,7 +2390,7 @@ if (typeof module !== "undefined") module.exports = { drawDongSon };
 (function () {
   const LITE = () => !!window.BR_LITE;
   const reduce = LITE();
-  if (reduce) return;                                           // chế độ nhẹ: không vẽ nền (sao, trống lớn, kim tuyến)
+  if (reduce || document.documentElement.dataset.theme) return; // Cloud Blue: nền chấm tĩnh, không vẽ sao/trống lớn (nhẹ máy)
   const cv = document.createElement("canvas"); cv.id = "fx-bg"; cv.setAttribute("aria-hidden", "true"); document.body.prepend(cv);
   const x = cv.getContext("2d"), TAU = Math.PI * 2;
   let dpr = .65, lowQ = false;
@@ -2316,6 +2532,25 @@ if (typeof module !== "undefined") module.exports = { drawDongSon };
   run();
 })();
 
+/* ===== Cloud Blue: nút Sáng/Tối + trống đồng tĩnh (vẽ 1 lần, không vòng lặp) ===== */
+(function () {
+  const h = document.documentElement, bs = document.querySelectorAll("#theme-seg button"), tc = document.getElementById("meta-tc");
+  function set(t, anim) {
+    if (anim) { h.classList.add("tx"); setTimeout(() => h.classList.remove("tx"), 420); }
+    h.dataset.theme = t;
+    bs.forEach(b => { const on = b.dataset.t === t; b.classList.toggle("on", on); b.setAttribute("aria-pressed", on); });
+    if (tc) tc.setAttribute("content", t === "light" ? "#f3f7fc" : "#071226");
+    try { localStorage.setItem("br_theme", t); } catch (e) {}
+  }
+  bs.forEach(b => b.addEventListener("click", () => set(b.dataset.t, true)));
+  set(h.dataset.theme === "light" ? "light" : "dark");
+  window.BRsetTheme = set;
+  if (window.drawDongSon) document.querySelectorAll("canvas.cb-drum").forEach(c => {
+    const g = c.getContext("2d"), R = c.width * .47; g.translate(c.width / 2, c.height / 2);
+    drawDongSon(g, R, { color: c.classList.contains("drum-bg") ? "#1b53d6" : "#2b6ef0", cut: true });
+  });
+})();
+
 </script>
 <script>
 /* BLUEROBLOX – giao diện khách + admin, nối Supabase */
@@ -2389,6 +2624,7 @@ const show = (id, on = true) => { $(id).hidden = !on; };
 /* ---------- song ngữ VI/EN ---------- */
 let LANG = "en"; try { const _sv = localStorage.getItem("br_lang"); if (_sv) LANG = _sv === "vi" ? "vi" : "en"; } catch (e) {}
 const EN = {
+  vn_t:"Vietnamese brand · servers in Vietnam", cb_tag:"VIETNAM CLOUD PHONE",
   nav_home:"Home", nav_shop:"Products", nav_topup:"Top up", nav_orders:"Orders", nav_policy:"Policy",
   login:"Log in", signup:"Sign up", balance:"Balance", btn_topup:"+ Top up", logout:"Log out", admin:"Admin",
   stat_sold:"Clones sold", stat_vps:"VPS running", stat_sup:"Support",

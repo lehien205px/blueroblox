@@ -586,6 +586,7 @@ def boot_extra(android=None):
     try: old = int(str(android or "11").split(".")[0]) <= 11
     except ValueError: old = True
     if gm in ("guest", "host") and (old or CONF.get("GPU_MODE_ALL") == "1"): ex.append(f"androidboot.redroid_gpu_mode={gm}")
+    if old and CONF.get("GFX", "0") == "1" and image_ok(IMAGES[android_of(android or "11")][0] + "_gfx"): ex.append("ro.hardware.egl=angle")      # bản *_gfx: đồ hoạ ANGLE của Android 12 (cloudphone-gfx.sh)
     return ex
 
 def docker_run(name, ram, cpu, port, res, fps, dpi=0, android="11"):

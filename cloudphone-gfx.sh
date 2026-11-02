@@ -47,9 +47,11 @@ build)
   cid=$(docker create "$SRC" 2>/dev/null) || { err "Không mở được $SRC"; exit 1; }
   for d in /vendor/lib64/egl /vendor/lib/egl; do docker cp "$cid:$d" "$W/$V/f/$(echo "$d" | tr / _)" >/dev/null 2>&1; done
   mkdir -p "$W/$V/f/hw64" "$W/$V/f/hw32"
-  for f in $(docker export "$cid" 2>/dev/null | tar -t 2>/dev/null | grep -E '^vendor/lib(64)?/hw/vulkan\.[^/]+\.so$'); do
-    case "$f" in vendor/lib64/*) docker cp "$cid:/$f" "$W/$V/f/hw64/" >/dev/null 2>&1;; *) docker cp "$cid:/$f" "$W/$V/f/hw32/" >/dev/null 2>&1;; esac
-  done
+  for b in 64 32; do d=/vendor/lib$([ $b = 64 ] && echo 64)/hw; docker cp "$cid:$d" "$W/$V/hwall$b" >/dev/null 2>&1
+    cp "$W/$V/hwall$b"/vulkan.*.so "$W/$V/f/hw$b/" 2>/dev/null; rm -rf "$W/$V/hwall$b"; done
+  ok "Vulkan của Android 12: $(ls "$W/$V/f/hw64" 2>/dev/null | tr '\n' ' ')"
+  # chỉ lắp bản ANGLE (đồ hoạ mới) — KHÔNG đè mesa của bản cũ
+  rm -f "$W/$V/f/_vendor_lib64_egl"/*mesa* "$W/$V/f/_vendor_lib_egl"/*mesa* 2>/dev/null
   docker rm "$cid" >/dev/null
   [ -d "$W/$V/f/_vendor_lib64_egl" ] || { err "Bản 12 không có /vendor/lib64/egl"; exit 1; }
   ok "Bộ đồ hoạ Android 12: $(ls "$W/$V/f/_vendor_lib64_egl" | tr '\n' ' ')"
@@ -71,9 +73,11 @@ test)
   docker rm -f "$T" >/dev/null 2>&1
   echo "== Bật máy THỬ $T (cổng $TP) từ ${DST}_gfx, cấu hình giống $REF =="
   # shellcheck disable=SC2086
-  docker run -itd --privileged --name "$T" --memory 6g --cpus 4 -p 127.0.0.1:$TP:5555 "${DST}_gfx" $ARGS >/dev/null || { err "Không bật được máy thử"; exit 1; }
+  EGLA=""; docker run --rm --entrypoint /system/bin/ls "${DST}_gfx" /vendor/lib64/egl/libEGL_angle.so >/dev/null 2>&1 && EGLA="ro.hardware.egl=angle"
+  ARGS=$(echo "$ARGS" | tr ' ' '\n' | grep -v '^ro.hardware.egl=' | tr '\n' ' ')
+  docker run -itd --privileged --name "$T" --memory 6g --cpus 4 -p 127.0.0.1:$TP:5555 "${DST}_gfx" $ARGS ${EGLA:-ro.hardware.egl=angle} >/dev/null || { err "Không bật được máy thử"; exit 1; }
   for i in $(seq 1 60); do [ "$(docker exec "$T" getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = 1 ] && break; sleep 3; done
-  [ "$(docker exec "$T" getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = 1 ] || { err "Máy thử không khởi động được (bộ đồ hoạ 12 không hợp Android $V) — chạy: bash $0 stop"; docker exec "$T" logcat -d -b crash 2>/dev/null | grep -m5 -E "Process:|Abort|CANNOT LINK|not found"; exit 1; }
+  [ "$(docker exec "$T" getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = 1 ] || { err "Máy thử không khởi động được (bộ đồ hoạ 12 không hợp Android $V) — chạy: bash $0 stop"; docker exec "$T" logcat -d -b crash 2>/dev/null | grep -m5 -E "Process:|Abort|CANNOT LINK|not found"; docker exec "$T" logcat -d 2>/dev/null | grep -m12 -iE "CANNOT LINK|dlopen|angle|vulkan|libEGL|egl.*(fail|error)"; exit 1; }
   sleep 15; ok "Máy thử đã khởi động"
   echo "   Đồ hoạ: $(gl_line "$T" | head -1)"
   docker exec "$T" sh -c 'settings put global device_provisioned 1; settings put secure user_setup_complete 1; pm disable com.google.android.setupwizard >/dev/null 2>&1; true'

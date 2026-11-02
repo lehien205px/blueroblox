@@ -64,8 +64,18 @@ try: CPU_OVER = max(1.0, min(10.0, float(CONF.get("CPU_OVER", "4"))))
 except ValueError: CPU_OVER = 4.0
 try: CPU_BUSY = max(30, min(100, int(CONF.get("CPU_BUSY_PCT", "85"))))
 except ValueError: CPU_BUSY = 85
-try: RAM_OVER = max(1.0, min(3.0, float(CONF.get("RAM_OVER", "1"))))   # RAM cấp vượt (mặc định 1 = không vượt, an toàn)
-except ValueError: RAM_OVER = 1.0
+# RAM DÙNG CHUNG: giới hạn RAM của mỗi máy chỉ là "trần", RAM máy không dùng tới thì máy khác dùng.
+# → cho cấp vượt RAM_OVER lần, chỉ ngừng nhận máy mới khi RAM THẬT đang dùng ≥ RAM_BUSY_PCT %.
+try: RAM_OVER = max(1.0, min(4.0, float(CONF.get("RAM_OVER", "2"))))
+except ValueError: RAM_OVER = 2.0
+try: RAM_BUSY = max(30, min(98, int(CONF.get("RAM_BUSY_PCT", "85"))))
+except ValueError: RAM_BUSY = 85
+def ram_real():
+    """% RAM thật đang dùng (theo MemAvailable)."""
+    try:
+        m = {l.split(":")[0]: int(l.split()[1]) for l in open("/proc/meminfo")}
+        return 100.0 * (1 - m["MemAvailable"] / m["MemTotal"])
+    except Exception: return None
 CPU_NOW = os.path.expanduser("~/redroid/cpu_now.json")      # cloudphoned ghi % CPU thật trung bình 5 phút
 def cpu_real():
     try:
@@ -455,7 +465,9 @@ def cmd_capacity(a):
     st = load(); ur, uc = used(st); lr, lc, tr, tc = cap()
     print(f"Máy chủ: RAM {tr:.1f} GB, CPU {tc} nhân")
     cr = cpu_real()
-    print(f"Giới hạn: RAM {lr:.1f} GB ({LIMIT_PCT}%), CPU {lc:.0f} nhân (dùng chung ×{CPU_OVER:g})")
+    rr = ram_real()
+    print(f"Giới hạn: RAM {lr:.0f} GB (dùng chung ×{RAM_OVER:g}), CPU {lc:.0f} nhân (dùng chung ×{CPU_OVER:g})")
+    print(f"RAM thật: {'?' if rr is None else f'{rr:.0f}%'} đang dùng — ngừng nhận máy mới khi ≥ {RAM_BUSY}%")
     print(f"CPU thật: {'?' if cr is None else f'{cr:.0f}%'} (trung bình 5 phút) — ngừng nhận máy mới khi ≥ {CPU_BUSY}%")
     print(f"Đã cấp:  RAM {ur:.1f} GB, CPU {uc:.1f} nhân  ({len(st['phones'])} máy)")
     print(f"Còn:     RAM {lr-ur:.1f} GB, CPU {lc-uc:.1f} nhân")
@@ -471,6 +483,9 @@ def cmd_create(a):
     cr = cpu_real()
     if cr is not None and cr >= CPU_BUSY:
         print(f"HẾT HÀNG: CPU thật đang chạy {cr:.0f}% (ngưỡng {CPU_BUSY}%)."); sys.exit(2)
+    rr = ram_real()
+    if rr is not None and rr >= RAM_BUSY:
+        print(f"HẾT HÀNG: RAM thật đang dùng {rr:.0f}% (ngưỡng {RAM_BUSY}%)."); sys.exit(2)
     if not re.match(r"^\d+x\d+$", a.res): print("LỖI: --res phải dạng 720x1280."); sys.exit(1)
     av = android_of(a.android)
     # Android 11 + card còn chỗ → máy GPU. Máy GPU CHƯA root được → khi đã có bản root, máy mới ưu tiên bản ROOT

@@ -34,7 +34,10 @@ BASE = CFG["PUBLIC_BASE"].rstrip("/")
 H = {"apikey": KEY, "Authorization": "Bearer " + KEY, "Content-Type": "application/json"}
 NODE_ID = CFG.get("NODE_ID") or socket.gethostname()           # mỗi server 1 tên riêng
 NOTIFY_URL = CFG.get("NOTIFY_URL", "https://blueroblox.shop/api/notify-admin")
-LIMIT_PCT = 85
+def _lim():
+    try: return max(50, min(100, int(CFG.get("LIMIT_PCT", "95"))))
+    except ValueError: return 95
+LIMIT_PCT = _lim()                 # ngưỡng nhận đơn (% RAM/CPU máy chủ). Đổi: LIMIT_PCT=90 trong ~/cloudphone.conf
 DATA_ROOT = os.path.join(HOME, "redroid")
 
 def sb(method, path, body=None, extra=None):
@@ -93,8 +96,8 @@ def do_create(row):
         r = phonectl(["create", name, "--ram", str(row["ram"]), "--cpu", str(row["cpu"]),
                       "--days", str(row["days"]), "--res", row.get("res") or "720x1280",
                       "--fps", str(row.get("fps") or 30), "--android", str(row.get("android") or "11"), "--nowait"])
-        if r.returncode == 2:   # HẾT HÀNG (quá 85%)
-            refund(row, "Máy chủ đã đầy, chưa tạo được máy"); notify(f"⚠️ <b>Đơn ĐT đám mây bị hoàn tiền</b> vì {NODE_ID} đã đầy 85%."); return
+        if r.returncode == 2:   # HẾT HÀNG (quá ngưỡng)
+            refund(row, "Máy chủ đã đầy, chưa tạo được máy"); notify(f"⚠️ <b>Đơn ĐT đám mây bị hoàn tiền</b> vì {NODE_ID} đã đầy {LIMIT_PCT}%."); return
         if r.returncode != 0:
             log_err = (r.stdout + r.stderr)[-300:]
             print("   ✗", log_err)
@@ -228,7 +231,7 @@ def heartbeat():
             "alloc_cpu": a_cpu, "alloc_ram": a_ram, "phones": len(st), "limit_pct": LIMIT_PCT, "metrics": metrics,
             "updated_at": now().isoformat()}
     sb("POST", "cloud_nodes", body, {"Prefer": "resolution=merge-duplicates,return=minimal"})
-    # Báo Telegram 1 lần khi chạm ngưỡng 85% (và khi có chỗ trở lại)
+    # Báo Telegram 1 lần khi chạm ngưỡng (và khi có chỗ trở lại)
     full = a_ram >= c_ram - 1 or a_cpu >= c_cpu - 1
     if _alert["full"] is not None and full != _alert["full"]:
         notify(f"🚨 <b>{NODE_ID} đã đạt {LIMIT_PCT}%</b> — RAM cấp {a_ram:.0f}/{ram_t:.0f}GB, CPU cấp {a_cpu:.0f}/{cpu_t} luồng. Khách sẽ thấy HẾT HÀNG."

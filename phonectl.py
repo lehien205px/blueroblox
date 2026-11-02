@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# phonectl.py — Quản lý máy Android (redroid) trên server: tạo/xoá/gia hạn + chặn 85% tài nguyên.
+# phonectl.py — Quản lý máy Android (redroid) trên server: tạo/xoá/gia hạn + chặn 95% tài nguyên.
 # Nền tảng của bộ điều phối (orchestrator). Chạy: python3 phonectl.py <lệnh> ...
 # Lệnh:
 #   create <ten> --ram 2 --cpu 2 --days 7 --res 720x1280   : tạo máy (tự chọn cổng, chặn nếu quá 85%)
@@ -10,7 +10,7 @@
 #   reconfig <ten> --fps 60 --res 1080x1920                 : đổi FPS / độ phân giải (giữ nguyên dữ liệu)
 #   reap                                                    : hết hạn → tạm dừng; quá 30 phút → xoá máy + dữ liệu
 #   connect-all                                             : kết nối lại mọi máy vào trình điều khiển web
-#   capacity                                                : xem tài nguyên đã dùng / ngưỡng 85%
+#   capacity                                                : xem tài nguyên đã dùng / ngưỡng 95%
 import json, os, sys, subprocess, time, argparse, datetime, re
 
 STATE = os.path.expanduser("~/redroid/phones.json")
@@ -33,7 +33,6 @@ _a12()
 WSNAME = "wsscrcpy"                 # container ws-scrcpy (để đăng ký máy cho điều khiển web)
 PORT_BASE = 5555
 PORT_MAX = 5585                    # adb emulator chỉ quét 5555..5585
-LIMIT_PCT = 85                    # ngưỡng chặn (theo % tài nguyên máy chủ)
 GRACE_MIN = 30                    # hết hạn bao nhiêu phút thì xoá hẳn dữ liệu
 BOOT_WAIT = 180                   # chờ Android khởi động tối đa (giây)
 ARM = ("ro.product.cpu.abilist=x86_64,arm64-v8a,x86,armeabi-v7a,armeabi "
@@ -57,6 +56,8 @@ def _conf():
     except OSError: pass
     return c
 CONF = _conf()
+try: LIMIT_PCT = max(50, min(100, int(CONF.get("LIMIT_PCT", "95"))))   # ngưỡng chặn (% tài nguyên máy chủ), mặc định 95
+except ValueError: LIMIT_PCT = 95
 GPU_MAX = int(CONF.get("GPU_PHONES", "0") or 0)          # số máy GPU tối đa trên card (GTX 1080 8GB: ~8)
 GPU_MIN_VRAM = 700                                        # MB bộ nhớ card phải còn trống để thêm 1 máy
 SDK = os.path.expanduser("~/android-sdk")
@@ -572,8 +573,21 @@ def su_ready(): return os.path.isfile(os.path.join(SU_DIR, "su")) and os.path.is
 def su_works(name):
     r = sh(["docker", "exec", "--user", "2000", name, "/system/xbin/su", "-c", "id -u"])
     return (r.stdout or "").strip().endswith("0") and r.returncode == 0
+MC_APK = os.path.join(SU_DIR, "multiclone-overlay.apk"); MC_DEST = "/system/overlay/BlueRobloxMultiClone.apk"
+def mc_install(name):
+    """NHIỀU CLONE (thử nghiệm, bật bằng cloudphone-multiclone.sh on): chép gói chỉnh hệ thống vào máy Android 11/12.
+    Có tác dụng từ lần khởi động lại tiếp theo của máy."""
+    if CONF.get("MULTICLONE", "0") != "1" or not os.path.isfile(MC_APK): return
+    r = sh(["docker", "exec", name, "/system/bin/sh", "-c", f"[ -f {MC_DEST} ] && echo HAVE; getprop ro.build.version.sdk"])
+    o = (r.stdout or "").split()
+    if "HAVE" in o or not o or not o[-1].isdigit() or int(o[-1]) < 30: return
+    if sh(["docker", "cp", MC_APK, f"{name}:{MC_DEST}"]).returncode == 0:
+        sh(["docker", "exec", name, "/system/bin/chmod", "644", MC_DEST])
+
 def su_install(name):
     """Cài / bật lại root daemon trong máy thường. Trả về True nếu app trong máy dùng được su."""
+    try: mc_install(name)
+    except Exception: pass
     if not su_ready() or CONF.get("ROOT", "1") == "0": return False
     import hashlib
     want = hashlib.md5(open(os.path.join(SU_DIR, "su"), "rb").read()).hexdigest() + hashlib.md5(open(os.path.join(SU_DIR, "cpsud"), "rb").read()).hexdigest()

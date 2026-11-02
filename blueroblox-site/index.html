@@ -867,7 +867,7 @@ window.BR_CONFIG = {
     </nav>
     <div class="acct">
       <div class="langsw" id="lang-seg" role="group" aria-label="Language / Ngôn ngữ"><button id="lang-vi" class="on" type="button" title="Tiếng Việt"><span class="fl"><svg viewBox="0 0 30 20" aria-hidden="true"><rect width="30" height="20" fill="#da251d"/><path fill="#ff0" d="M15 4l1.76 5.42h5.7l-4.61 3.35 1.76 5.42L15 14.84l-4.61 3.35 1.76-5.42-4.61-3.35h5.7z"/></svg></span><span class="ln">Tiếng Việt</span><span class="ls">VI</span></button><button id="lang-en" type="button" title="English"><span class="fl"><svg viewBox="0 0 60 30" aria-hidden="true"><clipPath id="ukc"><path d="M0 0v30h60V0z"/></clipPath><clipPath id="ukt"><path d="M30 15h30v15zv15H0zH0V0zV0h30z"/></clipPath><g clip-path="url(#ukc)"><path d="M0 0v30h60V0z" fill="#012169"/><path d="M0 0l60 30m0-30L0 30" stroke="#fff" stroke-width="6"/><path d="M0 0l60 30m0-30L0 30" clip-path="url(#ukt)" stroke="#C8102E" stroke-width="4"/><path d="M30 0v30M0 15h60" stroke="#fff" stroke-width="10"/><path d="M30 0v30M0 15h60" stroke="#C8102E" stroke-width="6"/></g></svg></span><span class="ln">English</span><span class="ls">EN</span></button></div>
-      <div class="cursw" role="group" aria-label="Currency / Đơn vị tiền"><button id="cur-vnd" class="on" type="button" title="Việt Nam đồng"><span class="sy">₫</span>VND</button><button id="cur-usd" type="button" title="US dollar"><span class="sy">$</span>USD</button></div>
+      <div class="cursw" hidden style="display:none" role="group" aria-label="Currency / Đơn vị tiền"><button id="cur-vnd" class="on" type="button" title="Việt Nam đồng"><span class="sy">₫</span>VND</button><button id="cur-usd" type="button" title="US dollar"><span class="sy">$</span>USD</button></div>
       <span id="guest-acts"><button class="btn ghost" id="btn-login" data-i18n="login">Đăng nhập</button> <button class="btn" id="btn-reg" data-i18n="signup">Đăng ký</button></span>
       <span id="user-acts" hidden style="display:flex;gap:8px;align-items:center">
         <span class="bal"><span data-i18n="balance">Số dư</span>: <b id="bal">0đ</b></span>
@@ -2289,14 +2289,14 @@ const pName = p => LANG === "en" ? ((p.name_en || "").trim() || trAuto(p.name)) 
 const pDesc = p => LANG === "en" ? ((p.description_en || "").trim() || trAuto(p.description || "")) : (p.description || "");
 const pFeats = p => LANG === "en" && (p.features_en || []).length ? p.features_en : (p.features || []).map(f => LANG === "en" ? trAuto(f) : f);
 /* đơn vị tiền mặc định theo ngôn ngữ (EN → USD, VI → VND), nhớ lựa chọn của khách */
-try { const _c = localStorage.getItem("br_cur"); cur = _c ? (_c === "USD" ? "USD" : "VND") : (LANG === "en" ? "USD" : "VND"); } catch (e) {}
+cur = LANG === "en" ? "USD" : "VND";           // tiền tệ đi theo ngôn ngữ: Tiếng Việt = VND, English = USD (đã bỏ nút chọn riêng)
 function applyStatic() {
   document.querySelectorAll("[data-i18n]").forEach(el => { if (!el._vi) el._vi = el.textContent; el.textContent = LANG === "en" ? (EN[el.dataset.i18n] || el._vi) : el._vi; });
   document.querySelectorAll("[data-i18n-html]").forEach(el => { if (el._vih == null) el._vih = el.innerHTML; el.innerHTML = LANG === "en" ? (EN[el.dataset.i18nHtml] || el._vih) : el._vih; });
   document.querySelectorAll("[data-ph]").forEach(el => { if (!el._viph) el._viph = el.getAttribute("placeholder") || ""; el.setAttribute("placeholder", LANG === "en" ? (EN[el.dataset.ph] || el._viph) : el._viph); });
   document.documentElement.lang = LANG;
 }
-function setLang(l) { LANG = l === "en" ? "en" : "vi"; try { localStorage.setItem("br_lang", LANG); } catch (e) {}
+function setLang(l) { LANG = l === "en" ? "en" : "vi"; try { localStorage.setItem("br_lang", LANG); } catch (e) {} cur = LANG === "en" ? "USD" : "VND";
   $("lang-vi").classList.toggle("on", LANG === "vi"); $("lang-en").classList.toggle("on", LANG === "en");
   applyStatic(); renderSite(); renderCats(); renderGrid(); renderUser(); if (sel) { renderPlans(); upd(); setVpsMethod(vpsMethod); } try { i18nCrypto(); } catch (e) {} try { renderFreeBar(); } catch (e) {} }
 $("lang-vi").onclick = () => setLang("vi"); $("lang-en").onclick = () => setLang("en");
@@ -2393,7 +2393,7 @@ function renderUser() {
   if (!isAdmin()) show("drawer", false);
   if (u) checkVpsExpiry();
 }
-function setCur(c) { cur = c; try { localStorage.setItem("br_cur", c); } catch (e) {} $("cur-vnd").classList.toggle("on", c === "VND"); $("cur-usd").classList.toggle("on", c === "USD"); renderGrid(); renderUser(); if (sel) upd(); }
+function setCur(c) { cur = c; try { $("cur-vnd").classList.toggle("on", c === "VND"); $("cur-usd").classList.toggle("on", c === "USD"); } catch (e) {} renderGrid(); renderUser(); if (sel) upd(); }
 
 /* ---------- mua hàng ---------- */
 const selP = () => P.find(p => p.id === sel);

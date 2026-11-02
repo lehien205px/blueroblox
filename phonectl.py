@@ -454,6 +454,11 @@ def pick_image(base):
     # Mặc định root bằng "cloudphone-su" (daemon, không sửa hệ thống) → xem su_install().
     return root_img(base) if CONF.get("ROOT", "1") == "magisk" and image_ok(root_img(base)) else base
 
+def boot_extra():
+    """Máy chủ có /dev/ashmem (module ashmem_linux) → Android dùng ashmem thật thay memfd.
+    Chrome / Chromium / WebView BẮT BUỘC ashmem (memfd → Chrome văng ngay lúc mở: SharedMemoryRegionGetProtectionFlags failed)."""
+    return ["androidboot.use_memfd=false"] if os.path.exists("/dev/ashmem") else []
+
 def docker_run(name, ram, cpu, port, res, fps, dpi=0, android="11"):
     w, h = res.split("x")
     img, tr = IMAGES[android_of(android)]
@@ -463,7 +468,7 @@ def docker_run(name, ram, cpu, port, res, fps, dpi=0, android="11"):
                *mem_args(ram), *cpu_args(cpu),
                "-v", f"{data}:/data", "-p", f"127.0.0.1:{port}:5555", img,   # chỉ mở trong server, không lộ ra internet
                f"androidboot.redroid_width={w}", f"androidboot.redroid_height={h}",
-               f"androidboot.redroid_dpi={int(dpi) or auto_dpi(res)}", f"androidboot.redroid_fps={fps}"] + (HOUDINI if tr == "houdini" else ARM))
+               f"androidboot.redroid_dpi={int(dpi) or auto_dpi(res)}", f"androidboot.redroid_fps={fps}"] + boot_extra() + (HOUDINI if tr == "houdini" else ARM))
 
 def cmd_boost(a):
     """Áp dụng ngay chế độ CPU tăng tốc cho mọi máy đang có (không cần khởi động lại máy)."""
@@ -569,10 +574,19 @@ def recreate_base(p):
     data = os.path.join(DATA_ROOT, p["name"])
     r = sh(["docker", "run", "-itd", "--privileged", "--restart", "unless-stopped", "--name", p["name"], *mem_args(p["ram"]), *cpu_args(p["cpu"]),
             "-v", f"{data}:/data", "-p", f"127.0.0.1:{p['port']}:5555", img, f"androidboot.redroid_width={w}", f"androidboot.redroid_height={h}",
-            f"androidboot.redroid_dpi={int(p.get('dpi', 0)) or auto_dpi(p.get('res', '720x1280'))}", f"androidboot.redroid_fps={p.get('fps', 30)}"] + (HOUDINI if tr == "houdini" else ARM))
+            f"androidboot.redroid_dpi={int(p.get('dpi', 0)) or auto_dpi(p.get('res', '720x1280'))}", f"androidboot.redroid_fps={p.get('fps', 30)}"] + boot_extra() + (HOUDINI if tr == "houdini" else ARM))
     if r.returncode != 0: raise RuntimeError((r.stderr or r.stdout).strip()[:200])
     if not was_on: sh(["docker", "stop", p["name"]])
     else: wait_boot(p["name"], p["port"], apps=False)
+
+def cmd_recreate(a):
+    """Tạo lại máy (cùng dữ liệu) để nhận cấu hình khởi động mới (VD bật ashmem cho Chrome). Mỗi máy khởi động lại ~1 phút."""
+    n = 0
+    for p in load()["phones"]:
+        if is_gpu(p) or (a.name and p["name"] != a.name): continue
+        try: recreate_base(p); n += 1; print(f"✓ {p['name']}: đã tạo lại" + (" (có ashmem — Chrome chạy được)" if boot_extra() else ""))
+        except Exception as e: print(f"! {p['name']}: LỖI {e}")
+    print(f"✅ Xong — {n} máy")
 
 def cmd_unroot(a):
     """Trả máy về bản KHÔNG root (giữ nguyên dữ liệu) — dùng khi root làm app văng."""
@@ -794,7 +808,7 @@ def main():
     for nm, fn in (("start", cmd_start), ("restart", cmd_restart), ("gpurun", cmd_gpurun)):
         x = sub.add_parser(nm); x.add_argument("name"); x.set_defaults(f=fn)
     sub.add_parser("gpuinfo").set_defaults(f=cmd_gpuinfo)
-    for nm, fn in (("unroot", cmd_unroot), ("crashes", cmd_crashes)):
+    for nm, fn in (("unroot", cmd_unroot), ("crashes", cmd_crashes), ("recreate", cmd_recreate)):
         x = sub.add_parser(nm); x.add_argument("name", nargs="?", default=""); x.set_defaults(f=fn)
     ra = sub.add_parser("rootall"); ra.add_argument("name", nargs="?", default=""); ra.set_defaults(f=cmd_rootall)
     rf = sub.add_parser("rootfix"); rf.add_argument("name", nargs="?", default=""); rf.add_argument("--all", action="store_true"); rf.add_argument("--force", action="store_true"); rf.set_defaults(f=cmd_rootfix)

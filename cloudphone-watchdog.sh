@@ -45,7 +45,7 @@ EOF
   systemctl daemon-reload
   # mọi dịch vụ đều tự bật khi khởi động máy
   for s in docker cpapi cloudphoned cloudflared-phone cloudflared; do has_unit "$s" && systemctl enable "$s" >/dev/null 2>&1; done
-  echo binder_linux > /etc/modules-load.d/redroid.conf
+  printf 'binder_linux\nashmem_linux\n' > /etc/modules-load.d/redroid.conf      # ashmem: Chrome / WebView trong máy cần
   echo tun > /etc/modules-load.d/tun.conf
   docker update --restart unless-stopped "$WS" >/dev/null 2>&1
   systemctl enable --now cloudphone-watchdog.timer >/dev/null 2>&1
@@ -67,6 +67,7 @@ if ! lsmod | grep -qE '^binder(_linux)?\b'; then
   log "binder chưa nạp → nạp lại"; modprobe binder_linux devices=binder,hwbinder,vndbinder 2>>"$LOG"; fixed=1
 fi
 lsmod | grep -qw '^tun' || modprobe tun 2>/dev/null
+[ -e /dev/ashmem ] || modprobe ashmem_linux 2>/dev/null
 
 # 3) ws-scrcpy (phát hình cho trang điều khiển)
 s=$(docker inspect -f '{{.State.Status}}' "$WS" 2>/dev/null)

@@ -573,6 +573,7 @@ def root_img(base):
 def pick_image(base):
     # Bản Magisk làm HỎNG bộ dịch ARM (Roblox/app ARM văng) → chỉ dùng khi admin cố ý đặt ROOT=magisk.
     # Mặc định root bằng "cloudphone-su" (daemon, không sửa hệ thống) → xem su_install().
+    if CONF.get("GFX", "0") == "1" and image_ok(base + "_gfx"): return base + "_gfx"   # đồ hoạ đời mới (cloudphone-gfx.sh)
     return root_img(base) if CONF.get("ROOT", "1") == "magisk" and image_ok(root_img(base)) else base
 
 def boot_extra(android=None):
@@ -712,6 +713,7 @@ def recreate_base(p):
     was_on = is_running(p["name"], p)
     sh(["docker", "exec", WSNAME, "adb", "disconnect", f"127.0.0.1:{p['port']}"]); rm_container(p["name"])
     w, h = p.get("res", "720x1280").split("x"); img, tr = IMAGES[android_of(p.get("android", "11"))]
+    if CONF.get("GFX", "0") == "1" and image_ok(img + "_gfx"): img = img + "_gfx"
     data = os.path.join(DATA_ROOT, p["name"])
     r = sh(["docker", "run", "-itd", "--privileged", "--restart", "unless-stopped", "--name", p["name"], *mem_args(p["ram"]), *cpu_args(p["cpu"]),
             "-v", f"{data}:/data", "-p", f"127.0.0.1:{p['port']}:5555", img, f"androidboot.redroid_width={w}", f"androidboot.redroid_height={h}",

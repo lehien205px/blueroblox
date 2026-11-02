@@ -33,11 +33,77 @@ KEY = CFG["SUPABASE_SERVICE_KEY"]
 BASE = CFG["PUBLIC_BASE"].rstrip("/")
 H = {"apikey": KEY, "Authorization": "Bearer " + KEY, "Content-Type": "application/json"}
 NODE_ID = CFG.get("NODE_ID") or socket.gethostname()           # mỗi server 1 tên riêng
+PRIMARY = CFG.get("PRIMARY", "1") == "1"     # server CHÍNH (máy đầu tiên). Server thêm sau: PRIMARY=0 (cloudphone-addnode.sh tự ghi)
+
+# ---------- NHIỀU SERVER: mỗi đơn chỉ 1 server nhận, mỗi server chỉ lo máy của mình ----------
+def mine(row):
+    """Máy này thuộc server này? (máy cũ chưa ghi server → thuộc server chính)"""
+    n = row.get("node")
+    return n == NODE_ID or (not n and PRIMARY)
+
+def local_load():
+    """(phần trăm đã cấp, còn RAM, còn CPU) của server này theo ngưỡng LIMIT_PCT."""
+    try: st = json.load(open(PHONES_JSON)).get("phones", [])
+    except Exception: st = []
+    ram_t = meminfo()[0]; cpu_t = os.cpu_count() or 1
+    a_r = sum(float(p.get("ram", 0)) for p in st); a_c = sum(float(p.get("cpu", 0)) for p in st)
+    c_r, c_c = ram_t * LIMIT_PCT / 100 * RAM_OVER, cpu_t * CPU_OVER
+    busy = (cpu_avg5() or 0) >= CPU_BUSY
+    if busy: c_c = a_c                                  # CPU thật đã nóng → coi như hết chỗ CPU
+    return max(a_r / max(c_r, 1), (cpu_avg5() or 0) / 100), c_r - a_r, c_c - a_c
+
+def age_s(row):
+    try: return (now() - parse_dt(row.get("created_at"))).total_seconds()
+    except Exception: return 999
+
+def claim(row):
+    """Giành đơn mới cho server này. Server còn trống nhiều nhận trước; không đủ chỗ thì nhường server khác.
+    Trả về True nếu server này được làm đơn đó."""
+    n = row.get("node")
+    if n: return n == NODE_ID                       # đã có server nhận rồi
+    load, fr, fc = local_load(); age = age_s(row)
+    if float(row["ram"]) > fr + 0.01 or float(row["cpu"]) > fc + 0.01:
+        if age > 90 and PRIMARY:                    # không server nào nhận nổi sau 90 giây → hoàn tiền
+            refund(row, "Máy chủ đã đầy, chưa tạo được máy"); notify("⚠️ <b>Đơn ĐT đám mây bị hoàn tiền</b> vì mọi máy chủ đều đã đầy.")
+        return False
+    if age < load * 5: return False                 # server đang bận hơn chờ thêm vài giây để server trống hơn nhận trước
+    try:
+        got = sb("PATCH", f"cloud_phones?id=eq.{row['id']}&node=is.null&status=eq.pending",
+                 {"node": NODE_ID}, {"Prefer": "return=representation"})
+    except Exception as e:
+        print("lỗi nhận đơn:", e); return False
+    return bool(got)
+
+def adopt_old():
+    """Server chính: ghi tên server cho các máy cũ chưa có (để chia đơn đúng khi có nhiều server)."""
+    if not PRIMARY: return
+    try:
+        for row in sb("GET", "cloud_phones?node=is.null&status=in.(active,expired,creating)&select=id,container") or []:
+            if row.get("container") and phone_state(row["container"]): patch(row["id"], {"node": NODE_ID})
+    except Exception as e: print("lỗi ghi server cho máy cũ:", e)
 NOTIFY_URL = CFG.get("NOTIFY_URL", "https://blueroblox.shop/api/notify-admin")
 def _lim():
     try: return max(50, min(100, int(CFG.get("LIMIT_PCT", "95"))))
     except ValueError: return 95
 LIMIT_PCT = _lim()                 # ngưỡng nhận đơn (% RAM/CPU máy chủ). Đổi: LIMIT_PCT=90 trong ~/cloudphone.conf
+try: CPU_OVER = max(1.0, min(10.0, float(CFG.get("CPU_OVER", "4"))))     # CPU dùng chung: cấp vượt số nhân thật tối đa ×4
+except ValueError: CPU_OVER = 4.0
+try: CPU_BUSY = max(30, min(100, int(CFG.get("CPU_BUSY_PCT", "85"))))   # CPU thật ≥ 85% (TB 5 phút) → ngừng nhận máy mới
+except ValueError: CPU_BUSY = 85
+try: RAM_OVER = max(1.0, min(3.0, float(CFG.get("RAM_OVER", "1"))))
+except ValueError: RAM_OVER = 1.0
+_cpu_hist = []
+def cpu_avg5(sample=None):
+    """% CPU thật trung bình ~5 phút (ghi ra file cho phonectl đọc)."""
+    if sample is not None:
+        _cpu_hist.append((time.time(), sample))
+        while _cpu_hist and time.time() - _cpu_hist[0][0] > 300: _cpu_hist.pop(0)
+    if not _cpu_hist: return None
+    v = round(sum(x for _, x in _cpu_hist) / len(_cpu_hist), 1)
+    try:
+        with open(os.path.join(HOME, "redroid", "cpu_now.json"), "w") as f: json.dump({"avg5": v, "ts": time.time()}, f)
+    except Exception: pass
+    return v
 DATA_ROOT = os.path.join(HOME, "redroid")
 
 def sb(method, path, body=None, extra=None):
@@ -215,7 +281,7 @@ def heartbeat():
         st = []
     ram_t, ram_avail = meminfo(); cpu_t = os.cpu_count() or 1
     a_ram = sum(float(p.get("ram", 0)) for p in st); a_cpu = sum(float(p.get("cpu", 0)) for p in st)
-    c_ram, c_cpu = ram_t * LIMIT_PCT / 100, cpu_t * LIMIT_PCT / 100
+    c_ram, c_cpu = ram_t * LIMIT_PCT / 100 * RAM_OVER, cpu_t * CPU_OVER
     try:
         running = len([l for l in subprocess.run(["docker", "ps", "--format", "{{.Names}}"], capture_output=True, text=True, timeout=15).stdout.split() if l.startswith("cp_")])
         running += len([p for p in st if p.get("kind") == "gpu" and
@@ -224,9 +290,12 @@ def heartbeat():
         running = None
     try: up_h = round(float(open("/proc/uptime").read().split()[0]) / 3600, 1)
     except Exception: up_h = None
-    metrics = {"cpu_pct": cpu_pct(), "load": [round(x, 2) for x in os.getloadavg()], "cpu_temp": cpu_temp(),
+    cp_now = cpu_pct(); avg5 = cpu_avg5(cp_now)
+    busy = avg5 is not None and avg5 >= CPU_BUSY
+    if busy: c_cpu = a_cpu                              # CPU thật ≥ 85% → báo hết chỗ, web ngừng cho thuê thêm
+    metrics = {"cpu_pct": cp_now, "cpu_avg5": avg5, "cpu_over": CPU_OVER, "cpu_busy_pct": CPU_BUSY, "cpu_busy": busy, "load": [round(x, 2) for x in os.getloadavg()], "cpu_temp": cpu_temp(),
                "ram_used": round(ram_t - ram_avail, 1), "gpus": gpus(), "disk_data": disk(DATA_ROOT), "disk_root": disk("/"),
-               "running": running, "uptime_h": up_h}
+               "running": running, "uptime_h": up_h, "base": BASE, "primary": PRIMARY}
     body = {"id": NODE_ID, "cpu_total": cpu_t, "ram_total": round(ram_t, 1), "cap_cpu": round(c_cpu, 1), "cap_ram": round(c_ram, 1),
             "alloc_cpu": a_cpu, "alloc_ram": a_ram, "phones": len(st), "limit_pct": LIMIT_PCT, "metrics": metrics,
             "updated_at": now().isoformat()}
@@ -234,7 +303,8 @@ def heartbeat():
     # Báo Telegram 1 lần khi chạm ngưỡng (và khi có chỗ trở lại)
     full = a_ram >= c_ram - 1 or a_cpu >= c_cpu - 1
     if _alert["full"] is not None and full != _alert["full"]:
-        notify(f"🚨 <b>{NODE_ID} đã đạt {LIMIT_PCT}%</b> — RAM cấp {a_ram:.0f}/{ram_t:.0f}GB, CPU cấp {a_cpu:.0f}/{cpu_t} luồng. Khách sẽ thấy HẾT HÀNG."
+        notify((f"🚨 <b>{NODE_ID}: CPU thật đang {avg5:.0f}%</b> (ngưỡng {CPU_BUSY}%) — tạm ngừng nhận máy mới." if busy else
+                f"🚨 <b>{NODE_ID} đã đầy</b> — RAM cấp {a_ram:.0f}/{c_ram:.0f}GB, CPU cấp {a_cpu:.0f}/{c_cpu:.0f}.") + " Khách sẽ thấy HẾT HÀNG."
                if full else f"✅ <b>{NODE_ID}</b> đã có chỗ trống trở lại (RAM cấp {a_ram:.0f}/{ram_t:.0f}GB).")
     _alert["full"] = full
 
@@ -304,18 +374,23 @@ def do_expiry(row):
 def tick_orders():
     """Việc cần làm ngay (mỗi 3 giây): tạo máy mới, huỷ máy."""
     for row in get_pending("pending"):
-        try: do_create(row)
+        try:
+            if not claim(row): continue
+            do_create(row)
         except Exception as e: print("lỗi tạo:", e)
     for row in get_pending("cancelling"):
+        if not mine(row): continue
         try: do_cancel(row)
         except Exception as e: print("lỗi huỷ:", e)
 
 def tick():
     """Việc định kỳ (mỗi 15 giây): gia hạn, hết hạn."""
     for row in get_renew():
+        if not mine(row): continue
         try: do_renew(row)
         except Exception as e: print("lỗi gia hạn:", e)
     for row in get_live():
+        if not mine(row): continue
         try: do_expiry(row)
         except Exception as e: print("lỗi hết hạn:", e)
 
@@ -326,6 +401,8 @@ if __name__ == "__main__":
     try:                                    # nới RAM cho máy đang chạy (chống văng app khi hết RAM)
         r = phonectl(["memfix"]); print(r.stdout.strip())
     except Exception as e: print("lỗi memfix:", e)
+    print(f"Server: {NODE_ID} ({'CHÍNH' if PRIMARY else 'phụ'}) · {BASE}")
+    adopt_old()
     n = 0; last = 0.0; _rootjob = [None]
     while True:
         try: tick_orders()                  # đơn mới: kiểm tra mỗi 3 giây → nhận đơn gần như tức thì

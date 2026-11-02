@@ -47,6 +47,11 @@ PUBLIC_HOST = urllib.parse.urlparse(CFG["PUBLIC_BASE"]).netloc or "phone.bluerob
 SELF_ORIGIN = "https://" + PUBLIC_HOST
 # Đường thẳng (không qua Cloudflare): FAST_BASE=https://fast.blueroblox.shop:8443 trong ~/cloudphone.conf (do fast-route.sh ghi)
 FAST_ORIGIN = (CFG.get("FAST_BASE") or "").strip().rstrip("/")
+NODE_ID = CFG.get("NODE_ID") or socket.gethostname()      # nhiều server: mỗi server chỉ phục vụ máy của mình
+PRIMARY = CFG.get("PRIMARY", "1") == "1"
+def on_node(p):
+    n = (p or {}).get("node")
+    return n == NODE_ID or (not n and PRIMARY)
 SELF_ORIGINS = {SELF_ORIGIN} | ({FAST_ORIGIN} if FAST_ORIGIN else set())
 ORIGINS = {"https://blueroblox.shop", "https://www.blueroblox.shop"} | \
           {o.strip().rstrip("/") for o in CFG.get("CPAPI_ORIGINS", "").split(",") if o.strip()}
@@ -187,13 +192,14 @@ def phone_of(me, pid):
     if not rows: return None
     p = rows[0]
     if not me["admin"] and p.get("user_id") != me["uid"] and me["uid"] not in share_users(pid): return None
+    if not on_node(p): return None                  # máy nằm ở server khác (cổng trùng số) → không được đụng vào máy ở đây
     return p
 
 
 def port_owners(port):
     now = time.time(); c = _pcache.get(port)
     if c and c[1] > now: return c[0]
-    rows = sb_get(f"/rest/v1/cloud_phones?port=eq.{int(port)}&status=eq.active&locked=is.false&select=id,user_id") or []
+    rows = [r for r in (sb_get(f"/rest/v1/cloud_phones?port=eq.{int(port)}&status=eq.active&locked=is.false&select=id,user_id,node") or []) if on_node(r)]
     owners = {r["user_id"] for r in rows}
     for r in rows: owners |= share_users(r["id"])          # người được chia sẻ cũng xem/điều khiển được
     _pcache[port] = (owners, now + 20)
@@ -377,6 +383,7 @@ def push_obb(port, path, jid=None):
 # ---------------- Admin: cài 1 APK vào nhiều máy cùng lúc ----------------
 APK_EXT = (".apk", ".apks", ".apkm", ".xapk")
 ADMIN_FILES = {}          # mã file → (đường dẫn, tên)
+CLONE_MAX = 4             # tối đa số bản clone / app / máy (cần gói chỉnh cloudphone-multiclone.sh; không có thì Android chỉ cho 1)
 
 
 def apk_min_sdk(path):
@@ -477,9 +484,11 @@ def stage_pkg(path, name):
 def bulk_install(jid, fid, ids, every, keep):
     path, name = ADMIN_FILES.get(fid, (None, None))
     if not path or not os.path.exists(path): raise RuntimeError("File đã hết hạn, tải lên lại.")
-    q = "cloud_phones?status=eq.active&select=id,name,port,container" + ("" if every else "&id=in.(" + ",".join(ids) + ")")
-    rows = [r for r in (sb_get("/rest/v1/" + q) or []) if r.get("port")]
-    if not rows: raise RuntimeError("Không có máy đang chạy nào trong danh sách.")
+    q = "cloud_phones?status=eq.active&select=id,name,port,container,node" + ("" if every else "&id=in.(" + ",".join(ids) + ")")
+    rows = [r for r in (sb_get("/rest/v1/" + q) or []) if r.get("port") and on_node(r)]
+    if not rows:
+        if keep: shutil.copy(path, os.path.join(pre_dir(), name))
+        return "Server này chưa có máy nào cần cài" + (" · đã lưu cài sẵn cho máy mới" if keep else "")
     if keep:
         shutil.copy(path, os.path.join(pre_dir(), name)); JOBS[jid]["msg"] = "Đã thêm vào app cài sẵn cho máy mới…"
     files, dst = stage_pkg(path, name)
@@ -887,33 +896,49 @@ class H(BaseHTTPRequestHandler):
             if "DONE" not in o or "Exception" in o: return self.send_json(500, {"error": "Chưa đặt được vị trí: " + o[-160:]})
             return self.send_json(200, {"ok": True, "msg": f"Đã đặt vị trí {loc}. Mở lại app cần vị trí để nhận vị trí mới."})
 
-        if act == "clone":                                     # CLONE TAB: chạy thêm 1 bản app thứ 2 (VD Roblox chính thức) trong "hồ sơ công việc" của Android
-            CU = "pm list users | sed -n 's/.*UserInfo{\\([0-9]*\\):CloneTab:.*/\\1/p' | head -1"
+        if act == "clone":                                     # CLONE TAB: chạy thêm bản thứ 2, 3… của app (VD Roblox chính thức), mỗi bản trong 1 "hồ sơ Công việc"
+            LU = "pm list users | sed -n 's/.*UserInfo{\\([0-9]*\\):\\(CloneTab[0-9]*\\):.*/\\2 \\1/p'"
             if self.command == "GET":
-                u = out(shell(port, CU, 20)).strip()
-                cl = sorted(l.split(":", 1)[1].strip() for l in out(shell(port, f"pm list packages -3 --user {u}", 30)).splitlines() if l.startswith("package:")) if u else []
-                return self.send_json(200, {"profile": u or None, "cloned": cl})
+                rows = [l.split() for l in out(shell(port, LU, 20)).splitlines() if len(l.split()) == 2]
+                cnt = {}
+                for nm, u in rows:
+                    for l in out(shell(port, f"pm list packages -3 --user {u}", 30)).splitlines():
+                        if l.startswith("package:"): k = l.split(":", 1)[1].strip(); cnt[k] = cnt.get(k, 0) + 1
+                return self.send_json(200, {"profile": rows[0][1] if rows else None, "cloned": sorted(cnt), "counts": cnt, "max": CLONE_MAX})
             b = self.jbody(); pkg = str(b.get("pkg") or "")
             if not PKG.match(pkg): return self.send_json(400, {"error": "Tên ứng dụng không hợp lệ."})
             if b.get("remove"):
-                u = out(shell(port, CU, 20)).strip()
-                if u: shell(port, f"pm uninstall --user {u} {shlex.quote(pkg)}", 60)
-                return self.send_json(200, {"ok": True, "msg": "Đã bỏ bản clone."})
-            jid = new_job(me["uid"], "Clone " + pkg)
+                for l in out(shell(port, LU, 20)).splitlines():
+                    if len(l.split()) == 2: shell(port, f"pm uninstall --user {l.split()[1]} {shlex.quote(pkg)}", 60)
+                return self.send_json(200, {"ok": True, "msg": "Đã bỏ các bản clone."})
+            try: n = max(1, min(CLONE_MAX, int(b.get("n") or 1)))
+            except (TypeError, ValueError): return self.send_json(400, {"error": "Số bản clone không hợp lệ."})
+            jid = new_job(me["uid"], f"Clone {pkg} ×{n}")
             def work(j):
-                JOBS[j]["msg"] = "Đang tạo bản clone (lần đầu ~20 giây)…"
+                JOBS[j]["msg"] = f"Đang tạo {n} bản clone (mỗi bản ~20 giây)…"
                 if cont and not str(cont).startswith("cloudgpu"):   # máy ảo mặc định chỉ cho 1 người dùng → mở thêm (cần quyền root của server)
-                    subprocess.run(["docker", "exec", cont, "/system/bin/sh", "-c", "setprop fw.max_users 8"], capture_output=True, timeout=20)
+                    subprocess.run(["docker", "exec", cont, "/system/bin/sh", "-c", "setprop fw.max_users 10"], capture_output=True, timeout=20)
                 q = shlex.quote(pkg)
-                o = out(shell(port, f"pm path {q} >/dev/null 2>&1 || echo NOPKG; U=$({CU}); "
-                                    f"[ -n \"$U\" ] || U=$(pm create-user --profileOf 0 --managed CloneTab 2>&1 | sed -n 's/.*created user id \\([0-9]*\\).*/\\1/p'); "
-                                    f"[ -n \"$U\" ] || {{ echo NOUSER; pm create-user --profileOf 0 --managed CloneTab 2>&1 | tail -1; exit 0; }}; am start-user $U >/dev/null 2>&1; "
-                                    f"pm install-existing --user $U {q} >/dev/null 2>&1; settings put global package_verifier_enable 0; "
-                                    f"pm list packages --user $U | grep -qx package:{q} && echo CLONED$U", 120))
+                o = out(shell(port, f"pm path {q} >/dev/null 2>&1 || {{ echo NOPKG; exit 0; }}; "
+                                    f"i=1; while [ $i -le {n} ]; do NM=CloneTab; [ $i -gt 1 ] && NM=CloneTab$i; "
+                                    f"U=$(pm list users | sed -n \"s/.*UserInfo{{\\([0-9]*\\):$NM:.*/\\1/p\" | head -1); "
+                                    f"[ -n \"$U\" ] || U=$(pm create-user --profileOf 0 --managed $NM 2>&1 | sed -n 's/.*created user id \\([0-9]*\\).*/\\1/p'); "
+                                    f"[ -n \"$U\" ] || {{ echo LIMIT$i; break; }}; am start-user $U >/dev/null 2>&1; "
+                                    f"pm install-existing --user $U {q} >/dev/null 2>&1; i=$((i+1)); done; "
+                                    f"settings put global package_verifier_enable 0; "
+                                    f"C=0; for U in $(pm list users | sed -n 's/.*UserInfo{{\\([0-9]*\\):CloneTab[0-9]*:.*/\\1/p'); do "
+                                    f"pm list packages --user $U | grep -qx package:{q} && C=$((C+1)); done; echo DONE$C", 60 + 60 * n))
                 if "NOPKG" in o: raise RuntimeError("Máy chưa cài app này — cài bản chính trước rồi mới clone.")
-                if "NOUSER" in o: raise RuntimeError("Android trong máy không cho tạo hồ sơ clone: " + o[-150:])
-                if "CLONED" not in o: raise RuntimeError("Chưa clone được: " + o[-150:])
-                return "✅ Đã clone! Mở danh sách ứng dụng → tab Công việc (Work) → app có biểu tượng cặp tài liệu nhỏ là bản thứ 2."
+                m = re.search(r"DONE(\d+)", o); done = int(m.group(1)) if m else 0
+                lim = re.search(r"LIMIT(\d+)", o)
+                if lim and done < n:
+                    if done == 0: raise RuntimeError("Android trong máy không cho tạo hồ sơ clone.")
+                    mc = cont and subprocess.run(["docker", "exec", cont, "/system/bin/sh", "-c", "[ -f /system/overlay/BlueRobloxMultiClone.apk ] && echo Y"],
+                                                 capture_output=True, text=True, timeout=20).stdout.strip() == "Y"
+                    if mc: raise RuntimeError(f"Đã có {done} bản clone. Máy cần KHỞI ĐỘNG LẠI 1 lần để mở thêm bản clone — bấm \"Khởi động lại\" rồi clone lại.")
+                    raise RuntimeError(f"Đã có {done} bản clone — máy này chỉ cho tối đa {done} bản. Cần thêm acc thì thuê thêm máy và dùng Nhiều máy + Đồng bộ.")
+                if done < 1: raise RuntimeError("Chưa clone được: " + o[-150:])
+                return f"✅ Đã có {done} bản clone! Mở danh sách ứng dụng → tab Công việc (Work) → các app có biểu tượng cặp tài liệu nhỏ là bản clone."
             run_job(jid, work)
             return self.send_json(200, {"job": jid})
 

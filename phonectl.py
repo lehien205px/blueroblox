@@ -58,6 +58,20 @@ def _conf():
 CONF = _conf()
 try: LIMIT_PCT = max(50, min(100, int(CONF.get("LIMIT_PCT", "95"))))   # ngưỡng chặn (% tài nguyên máy chủ), mặc định 95
 except ValueError: LIMIT_PCT = 95
+# CPU DÙNG CHUNG: máy ảo không giữ chết nhân (chia theo cpu-shares) → cho cấp vượt số nhân thật CPU_OVER lần,
+# chỉ ngừng nhận máy mới khi CPU THẬT trung bình 5 phút ≥ CPU_BUSY_PCT %. RAM vẫn giới hạn theo cấu hình (RAM không chia chung được).
+try: CPU_OVER = max(1.0, min(10.0, float(CONF.get("CPU_OVER", "4"))))
+except ValueError: CPU_OVER = 4.0
+try: CPU_BUSY = max(30, min(100, int(CONF.get("CPU_BUSY_PCT", "85"))))
+except ValueError: CPU_BUSY = 85
+try: RAM_OVER = max(1.0, min(3.0, float(CONF.get("RAM_OVER", "1"))))   # RAM cấp vượt (mặc định 1 = không vượt, an toàn)
+except ValueError: RAM_OVER = 1.0
+CPU_NOW = os.path.expanduser("~/redroid/cpu_now.json")      # cloudphoned ghi % CPU thật trung bình 5 phút
+def cpu_real():
+    try:
+        d = json.load(open(CPU_NOW))
+        return float(d["avg5"]) if time.time() - float(d.get("ts", 0)) < 600 else None
+    except Exception: return None
 GPU_MAX = int(CONF.get("GPU_PHONES", "0") or 0)          # số máy GPU tối đa trên card (GTX 1080 8GB: ~8)
 GPU_MIN_VRAM = 700                                        # MB bộ nhớ card phải còn trống để thêm 1 máy
 SDK = os.path.expanduser("~/android-sdk")
@@ -99,7 +113,7 @@ def used(st):
 
 def cap():
     tr, tc = host_total()
-    return tr * LIMIT_PCT / 100.0, tc * LIMIT_PCT / 100.0, tr, tc
+    return tr * LIMIT_PCT / 100.0 * RAM_OVER, tc * CPU_OVER, tr, tc
 
 def docker_busy_ports():
     # Cổng host đang bị bất kỳ container nào chiếm (kể cả phone1 tạo tay)
@@ -440,7 +454,9 @@ def fmt(dt): return dt.strftime("%d/%m/%Y %H:%M")
 def cmd_capacity(a):
     st = load(); ur, uc = used(st); lr, lc, tr, tc = cap()
     print(f"Máy chủ: RAM {tr:.1f} GB, CPU {tc} nhân")
-    print(f"Ngưỡng {LIMIT_PCT}%: RAM {lr:.1f} GB, CPU {lc:.1f} nhân")
+    cr = cpu_real()
+    print(f"Giới hạn: RAM {lr:.1f} GB ({LIMIT_PCT}%), CPU {lc:.0f} nhân (dùng chung ×{CPU_OVER:g})")
+    print(f"CPU thật: {'?' if cr is None else f'{cr:.0f}%'} (trung bình 5 phút) — ngừng nhận máy mới khi ≥ {CPU_BUSY}%")
     print(f"Đã cấp:  RAM {ur:.1f} GB, CPU {uc:.1f} nhân  ({len(st['phones'])} máy)")
     print(f"Còn:     RAM {lr-ur:.1f} GB, CPU {lc-uc:.1f} nhân")
 
@@ -450,8 +466,11 @@ def cmd_create(a):
         print("LỖI: đã có máy tên này."); sys.exit(1)
     ur, uc = used(st); lr, lc, tr, tc = cap()
     if ur + a.ram > lr or uc + a.cpu > lc:
-        print(f"HẾT HÀNG: thêm máy này (RAM {a.ram}GB, CPU {a.cpu}) sẽ vượt {LIMIT_PCT}%.")
+        print(f"HẾT HÀNG: thêm máy này (RAM {a.ram}GB, CPU {a.cpu}) sẽ vượt giới hạn (RAM {LIMIT_PCT}%, CPU ×{CPU_OVER:g}).")
         print(f"  Còn: RAM {lr-ur:.1f}GB, CPU {lc-uc:.1f} nhân."); sys.exit(2)
+    cr = cpu_real()
+    if cr is not None and cr >= CPU_BUSY:
+        print(f"HẾT HÀNG: CPU thật đang chạy {cr:.0f}% (ngưỡng {CPU_BUSY}%)."); sys.exit(2)
     if not re.match(r"^\d+x\d+$", a.res): print("LỖI: --res phải dạng 720x1280."); sys.exit(1)
     av = android_of(a.android)
     # Android 11 + card còn chỗ → máy GPU. Máy GPU CHƯA root được → khi đã có bản root, máy mới ưu tiên bản ROOT

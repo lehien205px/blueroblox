@@ -1131,7 +1131,7 @@ const ACT = {
   },
   upload() { $("file").click(); },
   fromurl() {
-    ask({ title: L("Cài từ link", "Install from link"), desc: L("Dán link tải file hoặc APK (Google Drive công khai, APKPure, MediaFire…). Server sẽ tự tải về rồi đưa vào máy, APK thì tự cài.", "Paste a download link for a file or APK (public Google Drive, APKPure, MediaFire…). The server downloads it and puts it on the phone; APKs install automatically."),
+    ask({ title: L("Cài từ link", "Install from link"), desc: L("Dán link tải file / APK / XAPK (link tải thẳng, Google Drive để chế độ công khai, MediaFire, Dropbox). Server tự tải về rồi đưa vào máy, APK/XAPK thì tự cài.", "Paste a download link for a file / APK / XAPK (direct link, public Google Drive, MediaFire, Dropbox). The server downloads it and puts it on the phone; APKs/XAPKs install automatically."),
       body: '<input class="in" id="f-url" type="url" inputmode="url" placeholder="https://…">', ok: L("Tải & cài", "Download & install"),
       onOk: async () => { const u = $("f-url").value.trim(); if (!/^https?:\/\//.test(u)) { toast(L("Link phải bắt đầu bằng http:// hoặc https://", "The link must start with http:// or https://"), 1); return false; }
         const item = trayItem(u.split("/").pop().slice(0, 60) || L("Tải từ link", "From link"), 0); item.msg(L("Đang gửi yêu cầu…", "Sending request…"));
@@ -1232,7 +1232,7 @@ const ACT = {
         try { await api(cur.id + "/url", { method: "POST", json: { url: u } }); toast(L("Đã mở trên máy.", "Opened on the phone.")); } catch (e) { toast(e.message, 1); return false; } } });
   },
   root() {
-    ask({ title: L("Root máy?", "Root this phone?"), desc: L("Bật quyền root (Magisk) để chạy các tool cần root. Máy chưa root sẽ khởi động lại khoảng 1–2 phút — app và tài khoản vẫn giữ nguyên. Máy đã root thì chỉ kiểm tra lại và cấp sẵn quyền root cho các app.", "Enable root (Magisk) so root tools work. If the phone isn't rooted yet it restarts for about 1–2 minutes — apps and accounts are kept. Already rooted phones are just re-checked and apps get root access."), ok: L("Root máy", "Root phone"),
+    ask({ title: L("Root máy?", "Root this phone?"), desc: L("Bật quyền root (lệnh su) để chạy các tool cần root. Mất vài giây, KHÔNG khởi động lại máy — app và tài khoản giữ nguyên. Máy đã root thì chỉ kiểm tra lại.", "Enable root (the su command) so root tools work. Takes a few seconds, the phone does NOT restart — apps and accounts are kept. Already rooted phones are just re-checked."), ok: L("Root máy", "Root phone"),
       onOk: async () => {
         try {
           const j = await api(cur.id + "/root", { method: "POST", json: {} });
@@ -1260,7 +1260,7 @@ document.addEventListener("click", async e => {
   if (ucl) { if (!confirm(L("Bỏ bản clone? Dữ liệu của bản clone (acc đăng nhập trong đó) sẽ bị xoá.", "Remove the clone? Its data (the account signed in there) will be deleted."))) return; try { await api(cur.id + "/clone", { method: "POST", json: { pkg: ucl.dataset.unclone, remove: true } }); toast(L("Đã bỏ bản clone.", "Clone removed.")); ACT.clone(); } catch (er) { toast(er.message, 1); } return; }
   const st = e.target.closest("[data-store]"), pl = e.target.closest("[data-play]");
   if (pl) { try { await api(cur.id + "/play", { method: "POST", json: { pkg: pl.dataset.play } }); toast(L("Đã mở CH Play trong máy — bấm Cài đặt trên màn hình máy.", "Opened Play Store on the phone — tap Install there.")); } catch (er) { toast(er.message, 1); } return; }
-  if (st) { st.disabled = true; try { const j = await api(cur.id + "/store", { method: "POST", json: { name: st.dataset.store } }); const item = trayItem(L("Cài ", "Install ") + st.dataset.store, 0); await pollJob(j.job, item); st.textContent = "✓"; } catch (er) { toast(er.message, 1); st.disabled = false; } return; }
+  if (st) { st.disabled = true; try { const j = await api(cur.id + "/store", { method: "POST", json: { name: st.dataset.store } }); const item = trayItem(L("Cài ", "Install ") + st.dataset.store, 0); if (await pollJob(j.job, item)) st.textContent = "✓"; else st.disabled = false; } catch (er) { toast(er.message, 1); st.disabled = false; } return; }
 }, true);
 document.addEventListener("click", async e => {
   const b = e.target.closest("[data-app]"); if (!b) return;
@@ -1314,7 +1314,7 @@ function addFiles(list) {
   for (const f of list) {
     if (!f.size) { toast(f.name + L(": file rỗng.", ": empty file."), 1); continue; }
     if (f.size > 4 * 1073741824) { toast(f.name + L(": lớn hơn 4GB.", ": larger than 4GB."), 1); continue; }
-    const it = trayItem(f.name, f.size); it.msg(/\.apk$/i.test(f.name) ? L("Chờ tải lên — sẽ tự cài", "Waiting to upload — will install automatically") : L("Chờ tải lên", "Waiting to upload"));
+    const it = trayItem(f.name, f.size); it.msg(/\.(apk|apks|xapk|apkm)$/i.test(f.name) ? L("Chờ tải lên — sẽ tự cài", "Waiting to upload — will install automatically") : L("Chờ tải lên", "Waiting to upload"));
     queue.push({ f, it, pid: cur.id });
   }
   runQueue();
@@ -1343,7 +1343,7 @@ async function upOne(f, it, pid) {
     }
     off = j.size; it.pct(off / f.size * .96);
     it.msg(`${L("Đang tải lên", "Uploading")} ${Math.round(off / f.size * 100)}% · ${mb(off / Math.max(1, (Date.now() - t0) / 1000))}/s`);
-    if (j.job) { it.msg(/\.apk$/i.test(f.name) ? L("Đang cài ứng dụng…", "Installing app…") : L("Đang chép vào máy…", "Copying to the phone…")); await pollJob(j.job, it); return; }
+    if (j.job) { it.msg(/\.(apk|apks|xapk|apkm)$/i.test(f.name) ? L("Đang cài ứng dụng…", "Installing app…") : L("Đang chép vào máy…", "Copying to the phone…")); await pollJob(j.job, it); return; }
   }
 }
 $("file").onchange = () => { addFiles([...$("file").files]); $("file").value = ""; };

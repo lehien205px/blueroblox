@@ -112,7 +112,10 @@ try)
   i=0; WIN=""
   for CFG in "host vgem:androidboot.redroid_gpu_mode=host androidboot.redroid_gpu_node=$VG $SW" \
              "host + phần mềm:androidboot.redroid_gpu_mode=host $SW" \
-             "mesa phần mềm (giữ guest):ro.hardware.egl=mesa $SW"; do
+             "mesa phần mềm (giữ guest):ro.hardware.egl=mesa $SW" \
+             "zink trên Vulkan CPU + vgem:androidboot.redroid_gpu_mode=host androidboot.redroid_gpu_node=$VG debug.mesa.mesa_loader_driver_override=zink debug.mesa.gallium_driver=zink" \
+             "zink trên Vulkan CPU:ro.hardware.egl=mesa debug.mesa.mesa_loader_driver_override=zink debug.mesa.gallium_driver=zink"; do
+    [ -n "${ONLY:-}" ] && [ "$((i+1))" -lt "$ONLY" ] && { i=$((i+1)); continue; }
     i=$((i+1)); NAME="${CFG%%:*}"; EX="${CFG#*:}"
     case "$EX" in *gpu_node=\ *|*gpu_node=$) continue;; esac
     [ -e "$VG" ] || case "$EX" in *gpu_node=*) continue;; esac
@@ -122,7 +125,8 @@ try)
     docker run -itd --privileged --name "$T" --memory 6g --cpus 4 -p 127.0.0.1:$TP:5555 "$DST" $BASE $EX >/dev/null || { err "Không bật được"; continue; }
     for k in $(seq 1 50); do [ "$(docker exec "$T" getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = 1 ] && break; sleep 3; done
     if [ "$(docker exec "$T" getprop sys.boot_completed 2>/dev/null | tr -d '\r')" != 1 ]; then
-      err "Không khởi động được"; docker exec "$T" logcat -d -b crash 2>/dev/null | grep -m2 "Abort message" | sed 's/^/   /'; continue; fi
+      err "Không khởi động được"; docker exec "$T" logcat -d -b crash 2>/dev/null | grep -m1 "Abort message" | sed 's/^/   /'
+      docker exec "$T" logcat -d 2>/dev/null | grep -iE "MESA|EGL-DRI|dri2|gbm|zink|vulkan|loader|gralloc|swrast|llvmpipe|libEGL" | grep -viE "SystemConfig" | sort -u -k6 | head -14 | sed 's/^/   │ /'; continue; fi
     sleep 12; echo "   Đồ hoạ: $(docker exec "$T" sh -c 'dumpsys SurfaceFlinger | grep -m1 "^GLES"' 2>/dev/null)"
     docker exec "$T" sh -c 'settings put global device_provisioned 1; settings put secure user_setup_complete 1; pm disable com.google.android.setupwizard >/dev/null 2>&1; true'
     if [ -n "$APK" ]; then docker exec wsscrcpy adb connect 127.0.0.1:$TP >/dev/null 2>&1; sleep 2

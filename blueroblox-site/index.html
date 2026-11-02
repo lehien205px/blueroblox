@@ -843,6 +843,38 @@ body.admin-page .tabs button{font-size:16px}
 .adm-gate{display:none}
 body.admin-page .adm-gate{display:flex;position:fixed;inset:0;z-index:55;background:#070b22;align-items:center;justify-content:center;flex-direction:column;gap:14px;text-align:center;padding:24px;color:var(--text,#fff)}
 
+/* ---- Tải app + Hướng dẫn A→Z (trong bảng Thuê máy / Máy của tôi) ---- */
+.cpapphelp{display:grid;gap:10px;margin:6px 0 14px}
+.cpapphelp:empty{display:none}
+.appbig{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:16px 18px;border-radius:16px;
+  border:2px solid #4f8cff;background:linear-gradient(135deg,rgba(61,123,255,.22),rgba(0,200,255,.10));box-shadow:0 0 0 4px rgba(61,123,255,.08)}
+.appbig img{width:58px;height:58px;border-radius:14px;flex:none;box-shadow:0 4px 14px rgba(0,0,0,.35)}
+.appbig .t{flex:1;min-width:210px}
+.appbig .t b{display:block;font-size:19px;line-height:1.25;color:#fff}
+.appbig .t span{display:block;margin-top:4px;font-size:14px;color:#c9d6f5;line-height:1.45}
+.appbig .t small{color:#8fb2ff;font-size:12px}
+.appbig .btn{font-size:16px;font-weight:800;padding:13px 22px;border-radius:12px;white-space:nowrap}
+.helpbtn{display:flex;align-items:center;gap:14px;width:100%;text-align:left;cursor:pointer;padding:14px 18px;border-radius:16px;
+  border:2px dashed rgba(255,200,60,.65);background:rgba(255,184,0,.08);color:inherit;font:inherit}
+.helpbtn:hover{background:rgba(255,184,0,.14)}
+.helpbtn:focus-visible{outline:3px solid #ffc83c;outline-offset:2px}
+.helpbtn .i{font-size:30px;line-height:1}
+.helpbtn .t{flex:1}.helpbtn .t b{display:block;font-size:17px;color:#ffd666}.helpbtn .t small{color:#d8cfae;font-size:13px}
+.helpbtn .go{font-size:26px;color:#ffd666}
+@media (max-width:560px){.appbig{padding:14px}.appbig .btn{width:100%;text-align:center}.appbig .t b{font-size:17px}}
+.helpdlg{max-width:760px;max-height:88vh;overflow:auto}
+.helpdlg h3{margin:0 0 4px}
+.helpdlg details{border:1px solid rgba(110,160,255,.25);border-radius:12px;margin:8px 0;background:rgba(61,123,255,.05)}
+.helpdlg summary{cursor:pointer;padding:12px 14px;font-weight:700;font-size:15.5px;list-style:none;display:flex;gap:10px;align-items:center}
+.helpdlg summary::-webkit-details-marker{display:none}
+.helpdlg summary::after{content:"＋";margin-left:auto;color:#8fb2ff}
+.helpdlg details[open] summary::after{content:"－"}
+.helpdlg summary .n{flex:none;width:28px;height:28px;border-radius:50%;background:#3d7bff;color:#fff;display:grid;place-items:center;font-size:14px}
+.helpdlg .b{padding:0 16px 12px 52px;font-size:14.5px;line-height:1.65;color:#d5def5}
+.helpdlg .b ul{margin:4px 0;padding-left:18px}.helpdlg .b li{margin:3px 0}
+.helpdlg .b kbd{background:#1c2a4d;border:1px solid #34497e;border-radius:6px;padding:1px 6px;font-size:13px}
+@media (max-width:560px){.helpdlg .b{padding-left:16px}}
+
 </style>
 <script>
 // Đã điền sẵn cho blueroblox.shop
@@ -1506,7 +1538,7 @@ window.BR_CONFIG = {
       <button class="btn ghost sm" id="cp-close">Đóng</button>
     </div>
     <div class="note">Máy Android chạy trên cloud 24/7. Bấm <b>Điều khiển</b> để mở máy trong trình duyệt. Hết hạn máy sẽ tạm dừng — gia hạn trong <b>30 phút</b>, quá thời gian đó máy và toàn bộ dữ liệu bị xoá.</div>
-    <div class="appbox" hidden><span>📱 <b>App Android</b> — thuê, gia hạn và điều khiển máy ngay trên điện thoại, có thông báo khi sắp hết hạn. <small class="appv"></small></span><a class="btn sm" href="/download/blueroblox-cloud.apk" download>Tải app</a></div>
+    <div class="cpapphelp"></div>
     <div class="cpcode"><span>🔑</span><input id="cp-code" maxlength="12" autocomplete="off" placeholder="Có mã chia sẻ / chuyển nhượng? Nhập vào đây"><button class="btn sm" type="button" id="cp-claim">Nhập mã</button></div>
     <div class="olist" id="cp-list"></div>
   </div>
@@ -1535,6 +1567,7 @@ window.BR_CONFIG = {
 <div class="modal" id="cporderdlg" hidden>
   <div class="dlg cpwide" role="dialog" aria-modal="true" aria-labelledby="cpo-title">
     <div class="cphead"><h3 id="cpo-title">Thuê điện thoại đám mây</h3><div class="hint" id="cp-rate"></div></div>
+    <div class="cpapphelp"></div>
     <div class="cpfree" id="cp-free" hidden></div>
     <div class="cpf cpandf"><span class="cpl">Phiên bản Android</span><div class="cpand" id="cp-and"></div></div>
     <div class="cpguide" id="cp-guide"></div>
@@ -2298,7 +2331,7 @@ function applyStatic() {
 }
 function setLang(l) { LANG = l === "en" ? "en" : "vi"; try { localStorage.setItem("br_lang", LANG); } catch (e) {} cur = LANG === "en" ? "USD" : "VND";
   $("lang-vi").classList.toggle("on", LANG === "vi"); $("lang-en").classList.toggle("on", LANG === "en");
-  applyStatic(); renderSite(); renderCats(); renderGrid(); renderUser(); if (sel) { renderPlans(); upd(); setVpsMethod(vpsMethod); } try { i18nCrypto(); } catch (e) {} try { renderFreeBar(); } catch (e) {} }
+  applyStatic(); renderSite(); renderCats(); renderGrid(); renderUser(); if (sel) { renderPlans(); upd(); setVpsMethod(vpsMethod); } try { i18nCrypto(); } catch (e) {} try { renderFreeBar(); } catch (e) {} try { renderAppHelp(); } catch (e) {} }
 $("lang-vi").onclick = () => setLang("vi"); $("lang-en").onclick = () => setLang("en");
 const plansOf = p => (Array.isArray(p.plans) ? p.plans : []).filter(x => +x.days > 0 && +x.price >= 0).sort((a, b) => a.days - b.days);
 const minPrice = p => { const pl = plansOf(p); return pl.length ? Math.min(...pl.map(x => +x.price)) : +p.price; };
@@ -4691,7 +4724,7 @@ function openIosGuide() { show("iosguide"); }
   let info = null;
   try { const r = await fetch("/download/app.json", { cache: "no-store" }); if (r.ok) info = await r.json(); } catch (e) {}
   if (!info || !info.version) return;
-  APP_INFO = info;
+  APP_INFO = info; try { renderAppHelp(); } catch (e) {}
   const mb = info.size ? " · " + (info.size / 1048576).toFixed(1) + "MB" : "";
   const label = L("📱 Tải app Android", "📱 Get the Android app") + " (v" + info.version + ")";
   show("ft-app"); $("ft-app").querySelector("a").textContent = label;
@@ -4715,6 +4748,64 @@ function openIosGuide() { show("iosguide"); }
   show("appbar");
   $("appbar-x").onclick = () => { show("appbar", false); try { localStorage.setItem("br_appbar", String(info.version)); } catch (e) {} };
 })();
+/* ---------- TẢI APP (to, dễ thấy) + HƯỚNG DẪN SỬ DỤNG A → Z ---------- */
+const HELP = [
+  ["Đăng nhập & nạp tiền", "Sign in & top up",
+   `<ul><li>Bấm <b>Đăng nhập</b> ở góc trên (đăng ký bằng email nếu chưa có tài khoản).</li><li>Bấm <b>Nạp tiền</b> → chọn chuyển khoản / thẻ cào / USDT… → làm theo hướng dẫn, tiền vào tài khoản tự động.</li><li>Khi có <b>ưu đãi miễn phí</b>, bạn nhận máy 0đ không cần nạp (mỗi tài khoản 1 máy).</li></ul>`,
+   `<ul><li>Tap <b>Sign in</b> at the top (register with email if you're new).</li><li>Tap <b>Top up</b> → pick a method → follow the steps; your balance updates automatically.</li><li>During a <b>free trial</b> promo you can get a phone for free (one per account).</li></ul>`],
+  ["Thuê máy", "Rent a phone",
+   `<ul><li>Bấm <b>Thuê điện thoại đám mây</b> (hoặc tab <b>Thuê máy</b> trong app).</li><li>Chọn <b>phiên bản Android</b> — khuyên dùng <b>Android 12</b>.</li><li>Bấm 1 <b>gợi ý cấu hình</b> cho nhanh: treo app 2GB · Roblox tối thiểu 4GB · 4 nhân · treo 2–4 tab Roblox nên 8GB · 6–8 nhân.</li><li>Chọn số ngày, số máy → bấm <b>Thuê</b>. Máy được tạo trong <b>2–3 phút</b>, trang tự cập nhật.</li></ul>`,
+   `<ul><li>Tap <b>Rent a cloud phone</b> (or the <b>Rent</b> tab in the app).</li><li>Pick an <b>Android version</b> — <b>Android 12</b> is recommended.</li><li>Tap a <b>preset</b>: apps 2GB · Roblox at least 4GB · 4 cores · 2–4 Roblox tabs 8GB · 6–8 cores.</li><li>Choose days and quantity → <b>Rent</b>. The phone is ready in <b>2–3 minutes</b>.</li></ul>`],
+  ["Mở & điều khiển máy", "Open & control your phone",
+   `<ul><li>Vào <b>Máy của tôi</b> → bấm <b>Điều khiển</b>. Dùng được trên web (máy tính, điện thoại) và <b>app Android</b>.</li><li>Bấm / kéo trên màn hình như điện thoại thật. Trên máy tính gõ phím trực tiếp, <kbd>Ctrl</kbd>+<kbd>V</kbd> để dán chữ (có dấu).</li><li>Nút bên cạnh: Quay lại · Màn chính · Đa nhiệm · Âm lượng · Xoay · Chụp màn · Toàn màn.</li><li>Máy chạy <b>24/7</b> — bạn tắt trình duyệt / tắt máy vẫn chạy.</li></ul>`,
+   `<ul><li>Go to <b>My phones</b> → <b>Control</b>. Works on the web (PC, phone) and the <b>Android app</b>.</li><li>Tap / swipe like a real phone. On PC you can type directly and paste with <kbd>Ctrl</kbd>+<kbd>V</kbd>.</li><li>Side buttons: Back · Home · Recents · Volume · Rotate · Screenshot · Full screen.</li><li>The phone runs <b>24/7</b> — it keeps going when you close the browser.</li></ul>`],
+  ["Đăng nhập Google / CH Play", "Google sign-in / Play Store",
+   `<ul><li>Mở <b>Play Store</b> trong máy và đăng nhập Google như bình thường.</li><li>Báo "thiết bị chưa được chứng nhận"? Bấm nút <b>Lỗi Google</b> → copy mã → đăng ký ở trang Google theo hướng dẫn → đợi 5–10 phút → bấm <b>Làm mới Google Play</b>.</li></ul>`,
+   `<ul><li>Open <b>Play Store</b> on the phone and sign in to Google.</li><li>"Device not certified"? Tap <b>Google sign-in</b> → copy the ID → register it on Google's page → wait 5–10 min → tap <b>Refresh Google Play</b>.</li></ul>`],
+  ["Cài ứng dụng & game", "Install apps & games",
+   `<ul><li><b>Play Store</b>: cài như điện thoại thật.</li><li><b>Kho ứng dụng</b>: Chrome, Firefox… cài 1 chạm.</li><li><b>Tải file / APK</b>: chọn file .apk / .xapk / .apks từ máy bạn (hoặc kéo thả) → tự cài. File khác (ảnh, zip…) vào thư mục <b>Download</b>.</li><li><b>Cài từ link</b>: dán link tải (Google Drive công khai, MediaFire, Dropbox, link .apk) → server tải và cài giúp.</li></ul>`,
+   `<ul><li><b>Play Store</b>: install like a real phone.</li><li><b>App store</b>: Chrome, Firefox… in one tap.</li><li><b>Upload file / APK</b>: pick an .apk / .xapk / .apks (or drag &amp; drop) → installs automatically. Other files go to <b>Download</b>.</li><li><b>Install from link</b>: paste a download link (public Google Drive, MediaFire, Dropbox, .apk link).</li></ul>`],
+  ["Chơi / treo Roblox", "Play / AFK Roblox",
+   `<ul><li>Cài <b>Roblox</b> từ Play Store, đăng nhập rồi vào game.</li><li>Máy tối thiểu <b>4GB · 4 nhân</b>, đồ hoạ Roblox để thấp nhất cho mượt.</li><li>Giật / trễ: bấm <b>FPS &amp; độ nét</b> → giảm còn 30 FPS, hoặc bấm <b>Ít trễ</b>.</li></ul>`,
+   `<ul><li>Install <b>Roblox</b> from Play Store, sign in and join a game.</li><li>Use at least <b>4GB · 4 cores</b>, set Roblox graphics to the lowest.</li><li>Laggy? Tap <b>FPS &amp; resolution</b> → 30 FPS, or tap <b>Low latency</b>.</li></ul>`],
+  ["Clone tab — 2 acc cùng lúc", "Clone tab — 2 accounts at once",
+   `<ul><li>Cài app trước (VD Roblox) → bấm <b>Clone tab</b> → bấm <b>Clone</b> cạnh app.</li><li>Mở danh sách ứng dụng → tab <b>Công việc (Work)</b> → app có biểu tượng cặp tài liệu là bản thứ 2, đăng nhập acc khác.</li><li>Treo 2 tab Roblox nên thuê từ <b>8GB · 6 nhân</b>.</li></ul>`,
+   `<ul><li>Install the app first (e.g. Roblox) → <b>Clone tab</b> → <b>Clone</b>.</li><li>Open the app drawer → <b>Work</b> tab → the copy with a briefcase badge; sign in with another account.</li><li>For 2 Roblox tabs rent <b>8GB · 6 cores</b> or more.</li></ul>`],
+  ["Macro · Gán phím · Đồng bộ · GPS", "Macro · Key mapping · Sync · GPS",
+   `<ul><li><b>Macro</b>: bấm Ghi → thao tác trên máy → Dừng → đặt tên; phát lại 1 lần hoặc lặp vô hạn.</li><li><b>Gán phím</b> (máy tính): gán phím bàn phím vào vị trí trên màn hình, WASD làm cần di chuyển.</li><li><b>Đồng bộ</b>: bấm <b>Nhiều máy</b> ở trên cùng → bật <b>Đồng bộ</b> → bấm 1 máy, mọi máy làm theo.</li><li><b>Vị trí GPS</b> (Android 12): dán toạ độ hoặc chọn thành phố có sẵn.</li></ul>`,
+   `<ul><li><b>Macro</b>: Record → do your actions → Stop → name it; replay once or loop.</li><li><b>Key mapping</b> (PC): bind keys to screen spots, WASD as a joystick.</li><li><b>Sync</b>: tap <b>Multi</b> at the top → turn on <b>Sync</b> → tap one phone, all phones follow.</li><li><b>GPS location</b> (Android 12): paste coordinates or pick a city.</li></ul>`],
+  ["Root & tool", "Root & tools",
+   `<ul><li>Máy có <b>root sẵn</b>: tool cần root (gọi lệnh su) chạy được ngay.</li><li>Tool báo chưa có root → bấm <b>Root máy</b> để kiểm tra lại (vài giây, không khởi động lại).</li></ul>`,
+   `<ul><li>Phones are <b>pre-rooted</b>: tools that call su work right away.</li><li>A tool says no root? Tap <b>Root phone</b> to re-check (a few seconds, no restart).</li></ul>`],
+  ["Gia hạn · Hết hạn · Chia sẻ", "Renew · Expiry · Sharing",
+   `<ul><li>Bấm <b>Gia hạn</b> trong <b>Máy của tôi</b> trước khi hết hạn (app Android báo trước 1 ngày và 1 giờ).</li><li>Hết hạn máy <b>tạm dừng</b> — gia hạn trong <b>30 phút</b> để giữ máy; quá 30 phút máy và dữ liệu bị xoá.</li><li>Nút <b>…</b> → <b>Chia sẻ</b> để cho bạn bè dùng chung, hoặc <b>chuyển nhượng</b> máy.</li></ul>`,
+   `<ul><li>Tap <b>Renew</b> in <b>My phones</b> before it expires (the Android app reminds you 1 day and 1 hour before).</li><li>When it expires the phone <b>pauses</b> — renew within <b>30 minutes</b> to keep it; after that it's deleted.</li><li><b>…</b> → <b>Share</b> to let a friend use it, or <b>transfer</b> it.</li></ul>`],
+  ["Gặp sự cố?", "Something wrong?",
+   `<ul><li><b>Màn đen / đứng hình</b>: bấm <b>Tải lại hình</b>; vẫn vậy thì bấm <b>Khởi động lại</b> (1–3 phút, dữ liệu giữ nguyên).</li><li><b>Lag</b>: giảm FPS &amp; độ nét, bấm <b>Ít trễ</b>, dùng mạng ổn định.</li><li><b>App văng</b>: thử Android 12, hoặc cài lại app.</li><li>Vẫn lỗi: nhắn admin trên <b>Discord</b> / Zalo kèm ảnh chụp màn hình.</li></ul>`,
+   `<ul><li><b>Black / frozen screen</b>: tap <b>Reload video</b>; if it persists tap <b>Restart</b> (1–3 min, data kept).</li><li><b>Lag</b>: lower FPS &amp; resolution, tap <b>Low latency</b>, use a stable connection.</li><li><b>App crashes</b>: try Android 12 or reinstall the app.</li><li>Still stuck: message an admin on <b>Discord</b> with a screenshot.</li></ul>`],
+];
+function openHelp() {
+  let m = $("helpdlg");
+  if (!m) { m = document.createElement("div"); m.className = "modal"; m.id = "helpdlg"; m.hidden = true; document.body.appendChild(m);
+    m.onclick = e => { if (e.target === m || e.target.closest("[data-helpx]")) m.hidden = true; }; }
+  m.innerHTML = `<div class="dlg helpdlg" role="dialog" aria-modal="true" aria-labelledby="help-t">
+    <div style="display:flex;align-items:center;gap:10px"><h3 id="help-t">📖 ${L("Hướng dẫn sử dụng điện thoại đám mây", "Cloud phone user guide")}</h3><button class="btn ghost sm" type="button" data-helpx="1" style="margin-left:auto">${L("Đóng", "Close")}</button></div>
+    <p class="hint" style="margin:2px 0 8px">${L("Bấm từng mục để xem chi tiết.", "Tap a section to expand it.")}</p>
+    ${HELP.map((h, i) => `<details${i < 3 ? " open" : ""}><summary><span class="n">${i + 1}</span>${LANG === "en" ? h[1] : h[0]}</summary><div class="b">${LANG === "en" ? h[3] : h[2]}</div></details>`).join("")}
+    <div class="acts" style="margin-top:12px"><button class="btn" type="button" data-helpx="1">${L("Đã hiểu", "Got it")}</button></div></div>`;
+  m.hidden = false;
+}
+function renderAppHelp() {
+  const inApp = /BlueRobloxApp\//.test(navigator.userAgent) || IS_STANDALONE;
+  const v = APP_INFO && APP_INFO.version ? "v" + APP_INFO.version + (APP_INFO.size ? " · " + (APP_INFO.size / 1048576).toFixed(1) + "MB" : "") : "";
+  const app = inApp ? "" : IS_IOS
+    ? `<div class="appbig"><img src="/apple-touch-icon.png" alt=""><div class="t"><b>📱 ${L("Dùng như app trên iPhone", "Use it like an app on iPhone")}</b><span>${L("Thêm BlueRoblox vào màn hình chính — mở toàn màn hình, thuê và điều khiển máy ngay trên iPhone.", "Add BlueRoblox to your Home Screen — full screen, rent and control phones on iPhone.")}</span></div><a class="btn" href="#" data-iosguide="1">${L("Xem cách cài", "How to install")}</a></div>`
+    : `<div class="appbig"><img src="/apple-touch-icon.png" alt=""><div class="t"><b>📲 ${L("Tải app BlueRoblox Cloud cho Android", "Get the BlueRoblox Cloud Android app")}</b><span>${L("Thuê, gia hạn và điều khiển máy ngay trên điện thoại — mượt hơn web, báo trước khi hết hạn. Miễn phí.", "Rent, renew and control your phones on the go — smoother than the web, with expiry reminders. Free.")}</span>${v ? `<small>${v}</small>` : ""}</div><a class="btn" href="/download/blueroblox-cloud.apk" download>⬇️ ${L("Tải app miễn phí", "Download free")}</a></div>`;
+  const help = `<button class="helpbtn" type="button" data-help="1"><span class="i">📖</span><span class="t"><b>${L("Hướng dẫn sử dụng từ A đến Z", "Step-by-step guide (A to Z)")}</b><small>${L("Thuê máy · điều khiển · cài app · Roblox · clone · macro · gia hạn… bấm để xem", "Renting · controlling · apps · Roblox · clone · macro · renewing… tap to read")}</small></span><span class="go">›</span></button>`;
+  document.querySelectorAll(".cpapphelp").forEach(b => { b.innerHTML = app + help; });
+}
+document.addEventListener("click", e => { if (e.target.closest("[data-help]")) { e.preventDefault(); openHelp(); } });
+try { renderAppHelp(); } catch (e) {}
 $("ig-ok").onclick = () => show("iosguide", false);
 $("iosguide").onclick = e => { if (e.target.id === "iosguide") show("iosguide", false); };
 document.addEventListener("click", e => { const g = e.target.closest("[data-iosguide]"); if (g) { e.preventDefault(); openIosGuide(); } });

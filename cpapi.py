@@ -709,6 +709,34 @@ class H(BaseHTTPRequestHandler):
             r = shell(port, "am start -a android.intent.action.VIEW -d " + shlex.quote("market://details?id=" + pkg), 20)
             return self.send_json(200, {"ok": True})
 
+        if act == "clone":                                     # CLONE TAB: chạy thêm 1 bản app thứ 2 (VD Roblox chính thức) trong "hồ sơ công việc" của Android
+            CU = "pm list users | sed -n 's/.*UserInfo{\\([0-9]*\\):CloneTab:.*/\\1/p' | head -1"
+            if self.command == "GET":
+                u = out(shell(port, CU, 20)).strip()
+                cl = sorted(l.split(":", 1)[1].strip() for l in out(shell(port, f"pm list packages -3 --user {u}", 30)).splitlines() if l.startswith("package:")) if u else []
+                return self.send_json(200, {"profile": u or None, "cloned": cl})
+            b = self.jbody(); pkg = str(b.get("pkg") or "")
+            if not PKG.match(pkg): return self.send_json(400, {"error": "Tên ứng dụng không hợp lệ."})
+            if b.get("remove"):
+                u = out(shell(port, CU, 20)).strip()
+                if u: shell(port, f"pm uninstall --user {u} {shlex.quote(pkg)}", 60)
+                return self.send_json(200, {"ok": True, "msg": "Đã bỏ bản clone."})
+            jid = new_job(me["uid"], "Clone " + pkg)
+            def work(j):
+                JOBS[j]["msg"] = "Đang tạo bản clone (lần đầu ~20 giây)…"
+                q = shlex.quote(pkg)
+                o = out(shell(port, f"pm path {q} >/dev/null 2>&1 || echo NOPKG; U=$({CU}); "
+                                    f"[ -n \"$U\" ] || U=$(pm create-user --profileOf 0 --managed CloneTab 2>&1 | sed -n 's/.*created user id \\([0-9]*\\).*/\\1/p'); "
+                                    f"[ -n \"$U\" ] || {{ echo NOUSER; exit 0; }}; am start-user $U >/dev/null 2>&1; "
+                                    f"pm install-existing --user $U {q} >/dev/null 2>&1; settings put global package_verifier_enable 0; "
+                                    f"pm list packages --user $U | grep -qx package:{q} && echo CLONED$U", 120))
+                if "NOPKG" in o: raise RuntimeError("Máy chưa cài app này — cài bản chính trước rồi mới clone.")
+                if "NOUSER" in o: raise RuntimeError("Android trong máy không cho tạo hồ sơ clone.")
+                if "CLONED" not in o: raise RuntimeError("Chưa clone được: " + o[-150:])
+                return "✅ Đã clone! Mở danh sách ứng dụng → tab Công việc (Work) → app có biểu tượng cặp tài liệu nhỏ là bản thứ 2."
+            run_job(jid, work)
+            return self.send_json(200, {"job": jid})
+
         if act == "apps":
             r = shell(port, "pm list packages -3", 30)
             pk = sorted(l.split(":", 1)[1].strip() for l in out(r).splitlines() if l.startswith("package:"))

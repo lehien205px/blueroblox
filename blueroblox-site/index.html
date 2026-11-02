@@ -3734,7 +3734,7 @@ function cpCard() {
 function cpNormRes(v) { return String(v || "").toLowerCase().replace(/\s+/g, "").replace(/[*×:]/g, "x"); }
 function cpCheck() {
   const p = CPpricing || CP_DEF;
-  if (cpSel.free) {
+  if (cpSel.free && !isAdmin()) {                       // admin: không giới hạn khi nhận máy miễn phí (để thử máy)
     if (cpSel.ram > +p.free_max_ram) return L(`Máy miễn phí tối đa ${p.free_max_ram}GB RAM.`, `Free phones: max ${p.free_max_ram}GB RAM.`);
     if (cpSel.cpu > +p.free_max_cpu) return L(`Máy miễn phí tối đa ${p.free_max_cpu} nhân.`, `Free phones: max ${p.free_max_cpu} cores.`);
     if (cpSel.qty > 1) return L("Mỗi tài khoản chỉ được dùng thử 1 máy miễn phí.", "Only 1 free trial phone per account.");
@@ -4831,17 +4831,18 @@ function cpFreeBox(on) {
   box.hidden = false;
   box.innerHTML = `<label class="fsw"><span class="sw"><input type="checkbox" id="cp-free-sw"${on ? " checked" : ""}><i></i></span>
     <span>🎁 <b>${L(`Nhận máy MIỄN PHÍ ${p.free_days} ngày`, `Get a FREE phone for ${p.free_days} day(s)`)}</b>
-    <small>${L(`Tối đa ${p.free_max_ram}GB RAM · ${p.free_max_cpu} nhân · mỗi tài khoản chỉ dùng thử 1 máy. Tắt công tắc nếu muốn thuê trả phí lâu dài.`, `Up to ${p.free_max_ram}GB RAM · ${p.free_max_cpu} cores · 1 trial phone per account. Switch off to rent a paid phone instead.`)}</small></span></label>`;
+    <small>${L(`Tối đa ${p.free_max_ram}GB RAM · ${p.free_max_cpu} nhân · mỗi tài khoản chỉ dùng thử 1 máy. Tắt công tắc nếu muốn thuê trả phí lâu dài.${isAdmin() ? " <b style=\"color:#8fd0ff\">(Admin: không giới hạn số máy & cấu hình)</b>" : ""}`, `Up to ${p.free_max_ram}GB RAM · ${p.free_max_cpu} cores · 1 trial phone per account. Switch off to rent a paid phone instead.`)}</small></span></label>`;
   cpSetFree(on);
 }
 function cpSetFree(on) {
   const p = CPpricing || {};
   cpSel.free = !!on;
-  if (on) {
+  if (on && !isAdmin()) {
     cpSel.ram = Math.min(cpSel.ram, +p.free_max_ram || cpSel.ram); cpSel.cpu = Math.min(cpSel.cpu, +p.free_max_cpu || cpSel.cpu);
     cpSel.qty = 1; cpSel.days = +p.free_days || 1;
     [["cp-ram", "ram"], ["cp-cpu", "cpu"], ["cp-qty", "qty"]].forEach(([id, k]) => $(id).querySelectorAll("button").forEach(z => z.classList.toggle("on", +z.dataset.v === cpSel[k])));
   }
+  if (on) cpSel.days = +p.free_days || 1;
   const df = $("cp-days") && $("cp-days").closest(".cpf"); if (df) df.hidden = !!on;
   cpOrderUpd();
 }

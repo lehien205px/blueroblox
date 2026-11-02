@@ -46,7 +46,36 @@ public class MainActivity extends Activity {
 
     // lựa chọn khi thuê máy
     int sRam = 2, sCpu = 2, sDays = 7, sFps = 30, sQty = 1;
-    String sRes = "720x1280";
+    String sRes = "720x1280", sAnd = "";
+    boolean sFree = false;
+
+    /** Phiên bản Android admin đang bán (Android 12 lên đầu — chạy ổn nhất). */
+    java.util.List<String> andList() {
+        java.util.List<String> l = new java.util.ArrayList<>();
+        for (String v : price.optString("android_versions", "11").split(",")) { v = v.trim(); if (v.matches("\\d{1,2}") && !l.contains(v)) l.add(v); }
+        if (l.isEmpty()) l.add("11");
+        if (l.remove("12")) l.add(0, "12");
+        return l;
+    }
+    boolean isAdmin() { return "admin".equals(prof.optString("role")); }
+    /** Ưu đãi miễn phí đang mở (admin bật + chưa hết giờ). */
+    boolean freeLive() {
+        if (!price.optBoolean("free_on", false)) return false;
+        String u = price.optString("free_until", "");
+        if (u.isEmpty() || "null".equals(u)) return true;
+        if (android.os.Build.VERSION.SDK_INT < 26) return true;
+        try { return java.time.OffsetDateTime.parse(u).toInstant().toEpochMilli() > System.currentTimeMillis(); } catch (Exception e) { return true; }
+    }
+    /** Số máy của chính tài khoản đang có (đang tạo / chạy / tạm dừng). */
+    int myLive() {
+        int n = 0;
+        for (int i = 0; i < phones.length(); i++) {
+            JSONObject p = phones.optJSONObject(i); if (p == null || p.optBoolean("shared", false)) continue;
+            if (java.util.Arrays.asList("pending", "creating", "active", "expired", "cancelling").contains(p.optString("status"))) n++;
+        }
+        return n;
+    }
+    int maxPerUser() { return isAdmin() ? 0 : price.optInt("max_per_user", 0); }
 
     @Override
     protected void onCreate(Bundle b) {
@@ -500,6 +529,23 @@ public class MainActivity extends Activity {
                 "Android 24/7 · games & idle farming · control in the app. Fresh device with Play Store, Firefox, Brave.")), Ui.fill());
 
         int minR = price.optInt("min_ram", 1), maxR = price.optInt("max_ram", 16), minC = price.optInt("min_cpu", 1), maxC = price.optInt("max_cpu", 8);
+        final int mpu = maxPerUser(), left = mpu > 0 ? mpu - myLive() : 20;
+        if (mpu > 0 && left <= 0) {            // đã đủ số máy cho phép → không cho thuê thêm
+            LinearLayout full = Ui.card(this);
+            full.addView(Ui.text(this, Ui.L("Bạn đã có đủ " + mpu + " máy", "You already have " + mpu + " phone(s)"), 17, Ui.FG, true));
+            full.addView(Ui.muted(this, Ui.L("Mỗi tài khoản chỉ được thuê tối đa " + mpu + " máy. Gia hạn máy đang có, hoặc xoá máy cũ để thuê máy khác.",
+                    "Each account can rent up to " + mpu + " phone(s). Renew your phone, or delete it to rent another.")));
+            Button go = Ui.button(this, Ui.L("Xem máy của tôi", "My phones"), Ui.PRIMARY);
+            go.setOnClickListener(v -> show(0));
+            full.addView(go, Ui.fill());
+            body.addView(full, Ui.fill());
+            page(body);
+            return;
+        }
+        if (left <= 1) sQty = 1;
+        java.util.List<String> avs = andList();
+        if (!avs.contains(sAnd)) sAnd = avs.get(0);
+        if (!freeLive()) sFree = false;
         int minD = price.optInt("min_days", 1), maxD = price.optInt("max_days", 90), minF = price.optInt("min_fps", 10), maxF = price.optInt("max_fps", 120);
         sRam = clamp(sRam, minR, maxR); sCpu = clamp(sCpu, minC, maxC); sDays = clamp(sDays, minD, maxD); sFps = clamp(sFps, minF, maxF);
 
@@ -509,7 +555,7 @@ public class MainActivity extends Activity {
         Button buy = Ui.button(this, "", Ui.PRIMARY);
 
         Runnable upd = () -> {
-            double t = ctv(perDay(sRam, sCpu) * sDays) * sQty, bal = prof.optDouble("balance", 0);
+            double t = sFree ? 0 : ctv(perDay(sRam, sCpu) * sDays) * sQty, bal = prof.optDouble("balance", 0);
             total.setText(Ui.vnd(t));
             calc.setText("(" + sRam + "GB × " + Ui.vnd(price.optDouble("price_ram_gb_day", 2500)) + " + " + sCpu + Ui.L(" nhân × ", " cores × ")
                     + Ui.vnd(price.optDouble("price_cpu_day", 2000)) + ") × " + sDays + Ui.L(" ngày", " days")
@@ -517,15 +563,43 @@ public class MainActivity extends Activity {
                     + "\n" + Ui.L("Số dư: ", "Balance: ") + Ui.vnd(bal));
             String bad = check();
             err.setText(bad.isEmpty() && bal < t ? Ui.L("Số dư không đủ — cần nạp thêm ", "Not enough balance — top up ") + Ui.vnd(t - bal) : bad);
-            buy.setText(bad.isEmpty() && bal < t ? Ui.L("Nạp tiền", "Top up") : Ui.L("Thuê ngay", "Rent now") + (sQty > 1 ? " " + sQty + Ui.L(" máy", " phones") : ""));
+            if (sFree) calc.setText(Ui.L("🎁 Miễn phí " + price.optInt("free_days", 1) + " ngày", "🎁 Free for " + price.optInt("free_days", 1) + " day(s)") + "\n" + Ui.L("Số dư: ", "Balance: ") + Ui.vnd(bal));
+            buy.setText(sFree ? Ui.L("🎁 Nhận máy miễn phí", "🎁 Get free phone") : bad.isEmpty() && bal < t ? Ui.L("Nạp tiền", "Top up") : Ui.L("Thuê ngay", "Rent now") + (sQty > 1 ? " " + sQty + Ui.L(" máy", " phones") : ""));
             buy.setEnabled(bad.isEmpty());
             buy.setAlpha(bad.isEmpty() ? 1f : .5f);
         };
 
+        // 🎁 Miễn phí ưu đãi (khi admin bật)
+        if (freeLive()) {
+            LinearLayout fc = Ui.card(this);
+            TextView fch = Ui.chip(this, Ui.L("🎁 Nhận máy MIỄN PHÍ " + price.optInt("free_days", 1) + " ngày", "🎁 Get a FREE phone for " + price.optInt("free_days", 1) + " day(s)"), sFree);
+            fc.addView(fch, Ui.fill());
+            fc.addView(Ui.muted(this, Ui.L("Tối đa " + price.optInt("free_max_ram", 4) + "GB RAM · " + price.optInt("free_max_cpu", 4) + " nhân · mỗi tài khoản dùng thử 1 máy. Bấm lần nữa để tắt nếu muốn thuê trả phí.",
+                    "Up to " + price.optInt("free_max_ram", 4) + "GB RAM · " + price.optInt("free_max_cpu", 4) + " cores · one free trial per account. Tap again to rent a paid phone instead.")));
+            fch.setOnClickListener(v -> { sFree = !sFree; if (sFree) { sQty = 1; sRam = Math.min(sRam, price.optInt("free_max_ram", 4)); sCpu = Math.min(sCpu, price.optInt("free_max_cpu", 4)); } renderRent(); });
+            body.addView(fc, Ui.fill());
+        }
+        // Phiên bản Android
+        LinearLayout ac = Ui.col(this, 8);
+        ac.addView(Ui.text(this, Ui.L("Phiên bản Android", "Android version"), 14, Ui.MUTED, true));
+        Ui.Wrap aw = new Ui.Wrap(this, 8);
+        for (String v : avs) {
+            TextView ch = Ui.chip(this, "Android " + v + ("12".equals(v) ? Ui.L("  ⭐ Khuyên dùng", "  ⭐ Best") : ""), v.equals(sAnd));
+            ch.setTag(v);
+            ch.setOnClickListener(x -> {
+                sAnd = (String) x.getTag();
+                for (int i = 0; i < aw.getChildCount(); i++) Ui.setChip((TextView) aw.getChildAt(i), aw.getChildAt(i).getTag().equals(sAnd));
+                upd.run();
+            });
+            aw.addView(ch);
+        }
+        ac.addView(aw, Ui.fill());
+        body.addView(ac, Ui.fill());
+
         body.addView(group(Ui.L("RAM", "RAM"), RAM, minR, maxR, "GB", v -> { sRam = v; upd.run(); }, () -> sRam), Ui.fill());
         body.addView(group(Ui.L("CPU (nhân)", "CPU cores"), CPU, minC, maxC, "", v -> { sCpu = v; upd.run(); }, () -> sCpu), Ui.fill());
-        body.addView(group(Ui.L("Số ngày", "Days"), DAYS, minD, maxD, Ui.L(" ngày", "d"), v -> { sDays = v; upd.run(); }, () -> sDays), Ui.fill());
-        body.addView(group(Ui.L("Số lượng máy", "Quantity"), QTY, 1, 20, Ui.L(" máy", ""), v -> { sQty = v; upd.run(); }, () -> sQty), Ui.fill());
+        if (!sFree) body.addView(group(Ui.L("Số ngày", "Days"), DAYS, minD, maxD, Ui.L(" ngày", "d"), v -> { sDays = v; upd.run(); }, () -> sDays), Ui.fill());
+        if (!sFree && left > 1) body.addView(group(Ui.L("Số lượng máy", "Quantity"), QTY, 1, Math.min(20, left), Ui.L(" máy", ""), v -> { sQty = v; upd.run(); }, () -> sQty), Ui.fill());
         body.addView(group("FPS", FPS, minF, maxF, "", v -> { sFps = v; upd.run(); }, () -> sFps), Ui.fill());
 
         // Độ phân giải
@@ -555,10 +629,10 @@ public class MainActivity extends Activity {
         body.addView(sum, Ui.fill());
 
         buy.setOnClickListener(v -> {
-            double t = ctv(perDay(sRam, sCpu) * sDays) * sQty;
+            double t = sFree ? 0 : ctv(perDay(sRam, sCpu) * sDays) * sQty;
             if (prof.optDouble("balance", 0) < t) { openTopup(); return; }
             Ui.confirm(this, Ui.L("Xác nhận thuê máy", "Confirm"),
-                    sQty + Ui.L(" máy · ", " phone(s) · ") + sRam + "GB · " + sCpu + Ui.L(" nhân · ", " cores · ") + sDays + Ui.L(" ngày · ", " days · ") + sRes + " · " + sFps + " FPS\n"
+                    "Android " + sAnd + " · " + sQty + Ui.L(" máy · ", " phone(s) · ") + sRam + "GB · " + sCpu + Ui.L(" nhân · ", " cores · ") + sDays + Ui.L(" ngày · ", " days · ") + sRes + " · " + sFps + " FPS\n"
                             + Ui.L("Trừ ", "Charge ") + Ui.vnd(t) + Ui.L(" từ số dư.", " from balance."),
                     Ui.L("Thanh toán", "Pay"), () -> order(buy));
         });
@@ -569,7 +643,8 @@ public class MainActivity extends Activity {
     private void order(Button buy) {
         buy.setEnabled(false);
         Api.bg(() -> Api.rpc("cloudphone_order_custom", new JSONObject().put("p_ram", sRam).put("p_cpu", sCpu).put("p_days", sDays)
-                .put("p_res", sRes).put("p_name", JSONObject.NULL).put("p_fps", sFps).put("p_qty", sQty)), r -> {
+                .put("p_res", sRes).put("p_name", JSONObject.NULL).put("p_fps", sFps).put("p_qty", sFree ? 1 : sQty)
+                .put("p_android", sAnd.isEmpty() ? "12" : sAnd).put("p_free", sFree)), r -> {
             Ui.toast(this, Ui.L("Đã đặt máy! Máy đang khởi tạo, khoảng 2–3 phút.", "Ordered! Your phone is being created (2–3 min)."));
             show(0);
             refresh();
@@ -579,6 +654,9 @@ public class MainActivity extends Activity {
     String check() {
         if (status.optBoolean("maint", false)) return Ui.L("Hệ thống đang bảo trì, vui lòng quay lại sau.", "Under maintenance, please come back later.");
         if (status.has("online") && !status.optBoolean("online", true)) return Ui.L("Máy chủ đang tạm ngưng.", "Server is offline.");
+        if (sFree && !isAdmin() && (sRam > price.optInt("free_max_ram", 4) || sCpu > price.optInt("free_max_cpu", 4)))
+            return Ui.L("Máy miễn phí tối đa " + price.optInt("free_max_ram", 4) + "GB RAM · " + price.optInt("free_max_cpu", 4) + " nhân — chọn nhỏ hơn.",
+                    "Free phones are limited to " + price.optInt("free_max_ram", 4) + "GB RAM · " + price.optInt("free_max_cpu", 4) + " cores.");
         if (status.has("free_ram") && (sRam * sQty > status.optDouble("free_ram") || sCpu * sQty > status.optDouble("free_cpu")))
             return Ui.L("Máy chủ chỉ còn trống " + (int) status.optDouble("free_ram") + "GB RAM, " + (int) status.optDouble("free_cpu") + " nhân — chọn ít hơn.",
                     "Server only has " + (int) status.optDouble("free_ram") + "GB RAM, " + (int) status.optDouble("free_cpu") + " cores free.");

@@ -17,8 +17,8 @@ G='\033[1;32m'; Y='\033[1;33m'; R='\033[1;31m'; N='\033[0m'
 ok() { echo -e "${G}✓${N} $*"; }; warn() { echo -e "${Y}!${N} $*"; }; err() { echo -e "${R}✗${N} $*"; }
 [ "$(id -u)" = "0" ] && { err "Chạy bằng user thường (không sudo):  bash $0 ${1:-}"; exit 1; }
 # tên | phiên bản | image | cổng thử
-LIST="atest9|9.0.0|redroid/redroid:9.0.0_litegapps_houdini|5594
-atest10|10.0.0|redroid/redroid:10.0.0_litegapps_houdini|5595"
+LIST="atest9|9.0.0|redroid/redroid:9.0.0_gapps_houdini|5594
+atest10|10.0.0|redroid/redroid:10.0.0_gapps_houdini|5595"
 PROPS="ro.product.cpu.abilist=x86_64,arm64-v8a,x86,armeabi-v7a,armeabi ro.product.cpu.abilist64=x86_64,arm64-v8a ro.product.cpu.abilist32=x86,armeabi-v7a,armeabi ro.dalvik.vm.isa.arm=x86 ro.dalvik.vm.isa.arm64=x86_64 ro.enable.native.bridge.exec=1 ro.enable.native.bridge.exec64=1 ro.vendor.enable.native.bridge.exec=1 ro.vendor.enable.native.bridge.exec64=1 ro.dalvik.vm.native.bridge=libhoudini.so"
 
 case "${1:-}" in
@@ -42,15 +42,38 @@ s = s.replace('self.version), os.path.join(self.copy_dir, "system"), dirs_exist_
               '("9.0.0" if self.version == "10.0.0" else self.version)), os.path.join(self.copy_dir, "system"), dirs_exist_ok=True)')
 s = s.replace('if not self.version == "9.0.0":', 'if self.version not in ("9.0.0", "10.0.0"):')
 open(p, "w").write(s)
+# Google Play: link LiteGapps cho Android 9/10 đã chết (tải về chỉ 51KB → lặp vô hạn) → dùng OpenGapps pico chính thức cho 9 / 10
+p = os.path.join(d, "stuff", "gapps.py"); s = open(p).read()
+if "CP_GAPPS_VER" not in s:
+    s = s.replace('    copy_dir = "./gapps"', '''    _v = os.environ.get("CP_GAPPS_VER", "")
+    if _v:
+        dl_link = "https://sourceforge.net/projects/opengapps/files/%s/20220503/open_gapps-%s-%s-pico-20220503.zip" % (arch[0], arch[0], _v)
+        dl_file_name = os.path.join(download_loc, "open_gapps-%s.zip" % _v)
+        act_md5 = "ANY"
+    copy_dir = "./gapps"''', 1)
+open(p, "w").write(s)
+p = os.path.join(d, "stuff", "general.py"); s = open(p).read()
+if '"ANY"' not in s:
+    s = s.replace("    def download(self):\n", '''    def download(self):
+        if getattr(self, "act_md5", "") == "ANY":          # không có md5 → chỉ cần là file zip hợp lệ, tải lỗi thì DỪNG (không lặp vô hạn)
+            if not (os.path.isfile(self.dl_file_name) and zipfile.is_zipfile(self.dl_file_name)):
+                download_file(self.dl_link, self.dl_file_name)
+            if not zipfile.is_zipfile(self.dl_file_name):
+                raise SystemExit("Tai Google Play loi (file khong hop le): " + self.dl_link)
+            return
+''', 1)
+open(p, "w").write(s)
 p = os.path.join(d, "redroid.py"); s = open(p).read()
+s = s.replace('if args.android in ["11.0.0"]:\n            Gapps().install()', 'if args.android in ["9.0.0", "10.0.0", "11.0.0"]:\n            Gapps().install()')
 s = s.replace('["8.1.0", "9.0.0", "11.0.0", "12.0.0", "13.0.0", "14.0.0"]', '["8.1.0", "9.0.0", "10.0.0", "11.0.0", "12.0.0", "13.0.0", "14.0.0"]')
 open(p, "w").write(s)
 print("patched")
 PY
   while IFS='|' read -r name ver img port; do
     if docker image inspect "$img" >/dev/null 2>&1; then ok "Đã có $img"; continue; fi
-    echo "== Dựng Android ${ver%%.*} (Google Play LiteGapps + bộ dịch ARM) — vài phút =="
-    (cd "$RX" && sudo "$RS/.venv/bin/python" redroid.py -a "$ver" -lg -i) > "$HOME/aver-build-$ver.log" 2>&1
+    echo "== Dựng Android ${ver%%.*} (Google Play OpenGapps + bộ dịch ARM Houdini) — 10–20 phút =="
+    sudo pkill -f "redroid.py -a $ver" 2>/dev/null
+    (cd "$RX" && sudo env "CP_GAPPS_VER=${ver%.0}" "$RS/.venv/bin/python" redroid.py -a "$ver" -g -i) > "$HOME/aver-build-$ver.log" 2>&1
     docker image inspect "$img" >/dev/null 2>&1 && ok "Dựng xong $img" || err "Dựng Android $ver lỗi — xem: tail -30 ~/aver-build-$ver.log"
   done <<< "$LIST"
   echo; ok "Xong. Tiếp theo:"

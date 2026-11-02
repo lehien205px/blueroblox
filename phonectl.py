@@ -17,8 +17,8 @@ STATE = os.path.expanduser("~/redroid/phones.json")
 DATA_ROOT = os.path.expanduser("~/redroid")
 IMAGE = "redroid/redroid:11.0.0_gapps_ndk"
 # Phiên bản Android khách chọn → image + bộ dịch ARM (image 12–14 dựng bằng android-test.sh build)
-IMAGES = {"9": ("redroid/redroid:9.0.0_litegapps_houdini", "houdini"),        # dựng bằng: bash ~/android-versions.sh build
-          "10": ("redroid/redroid:10.0.0_litegapps_houdini", "houdini"),
+IMAGES = {"9": ("redroid/redroid:9.0.0_gapps_houdini", "houdini"),        # dựng bằng: bash ~/android-versions.sh build
+          "10": ("redroid/redroid:10.0.0_gapps_houdini", "houdini"),
           "11": (IMAGE, "ndk"),
           "12": ("redroid/redroid:12.0.0_mindthegapps_ndk", "ndk"),
           "13": ("redroid/redroid:13.0.0_mindthegapps_houdini", "houdini"),

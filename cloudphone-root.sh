@@ -21,7 +21,7 @@ ok() { echo -e "${G}✓${N} $*"; }; warn() { echo -e "${Y}!${N} $*"; }; err() { 
 RS="$HOME/redroid-script"; CONF="$HOME/cloudphone.conf"; PC="python3 $HOME/phonectl.py"
 conf_set() { touch "$CONF"; grep -v "^$1=" "$CONF" > "$CONF.tmp"; echo "$1=$2" >> "$CONF.tmp"; cat "$CONF.tmp" > "$CONF"; rm -f "$CONF.tmp"; chmod 600 "$CONF"; }
 # các bản Android đang bán (giống phonectl.py)
-BASES="redroid/redroid:12.0.0_mindthegapps_ndk redroid/redroid:10.0.0_litegapps_houdini redroid/redroid:9.0.0_litegapps_houdini redroid/redroid:11.0.0_gapps_ndk redroid/redroid:13.0.0_mindthegapps_houdini redroid/redroid:14.0.0_mindthegapps_houdini"
+BASES="redroid/redroid:12.0.0_mindthegapps_ndk redroid/redroid:10.0.0_gapps_houdini redroid/redroid:9.0.0_gapps_houdini redroid/redroid:11.0.0_gapps_ndk redroid/redroid:13.0.0_mindthegapps_houdini redroid/redroid:14.0.0_mindthegapps_houdini"
 
 case "${1:-}" in
 su)

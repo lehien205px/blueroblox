@@ -108,13 +108,13 @@ try)
   [ -e "$VG" ] && ok "Card ảo vgem: $VG" || warn "Không tạo được card ảo vgem (bỏ qua cấu hình dùng vgem)"
   echo "   Bộ đồ hoạ có trong Android $V: $(docker exec "$REF" sh -c 'ls /vendor/lib64/dri/ 2>/dev/null | tr "\n" " "; ls /vendor/lib64/egl | tr "\n" " "')"
   APK=$(ls "$HOME"/apk-cai-san/Chrome-1*.apks "$HOME"/apk-cai-san/Chrome-1*.apk 2>/dev/null | grep -v sdk | head -1)
-  SW="debug.mesa.libgl_always_software=true debug.mesa.gallium_driver=llvmpipe"
+  # Mesa trên Android đọc tuỳ chọn từ property: LIBGL_ALWAYS_SOFTWARE → mesa.libgl_always_software, MESA_LOADER_DRIVER_OVERRIDE → mesa_loader_driver_override
+  SW="mesa.libgl_always_software=true mesa.gallium_driver=llvmpipe debug.mesa.libgl_always_software=true"
   i=0; WIN=""
-  for CFG in "host vgem:androidboot.redroid_gpu_mode=host androidboot.redroid_gpu_node=$VG $SW" \
-             "host + phần mềm:androidboot.redroid_gpu_mode=host $SW" \
-             "mesa phần mềm (giữ guest):ro.hardware.egl=mesa $SW" \
-             "zink trên Vulkan CPU + vgem:androidboot.redroid_gpu_mode=host androidboot.redroid_gpu_node=$VG debug.mesa.mesa_loader_driver_override=zink debug.mesa.gallium_driver=zink" \
-             "zink trên Vulkan CPU:ro.hardware.egl=mesa debug.mesa.mesa_loader_driver_override=zink debug.mesa.gallium_driver=zink"; do
+  for CFG in "vgem + llvmpipe:androidboot.redroid_gpu_mode=host androidboot.redroid_gpu_node=$VG $SW" \
+             "vgem + kms_swrast:androidboot.redroid_gpu_mode=host androidboot.redroid_gpu_node=$VG mesa_loader_driver_override=kms_swrast $SW" \
+             "card NVIDIA + llvmpipe:androidboot.redroid_gpu_mode=host $SW" \
+             "vgem + zink:androidboot.redroid_gpu_mode=host androidboot.redroid_gpu_node=$VG mesa_loader_driver_override=zink mesa.gallium_driver=zink"; do
     [ -n "${ONLY:-}" ] && [ "$((i+1))" -lt "$ONLY" ] && { i=$((i+1)); continue; }
     i=$((i+1)); NAME="${CFG%%:*}"; EX="${CFG#*:}"
     case "$EX" in *gpu_node=\ *|*gpu_node=$) continue;; esac

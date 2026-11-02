@@ -322,6 +322,7 @@ body.focus .exitfocus{display:block}
       <button class="tb" data-act="upload"><svg class="ic" viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v4h16v-4"/></svg>Tải file / APK</button>
       <button class="tb" data-act="fromurl"><svg class="ic" viewBox="0 0 24 24"><path d="M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 00-5.7 0l-3 3a4 4 0 005.7 5.7l1-1"/></svg>Cài từ link</button>
       <button class="tb" data-act="store"><svg class="ic" viewBox="0 0 24 24"><path d="M4 7h16l-1.5 12a2 2 0 01-2 1.8h-9a2 2 0 01-2-1.8L4 7z"/><path d="M9 10V6a3 3 0 016 0v4"/></svg>Kho ứng dụng</button>
+      <button class="tb" data-act="clone"><svg class="ic" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M4 16V6a2 2 0 012-2h10"/><path d="M14 11v6M11 14h6"/></svg>Clone tab</button>
       <button class="tb" data-act="apps"><svg class="ic" viewBox="0 0 24 24"><rect x="4" y="4" width="6" height="6" rx="1.5"/><rect x="14" y="4" width="6" height="6" rx="1.5"/><rect x="4" y="14" width="6" height="6" rx="1.5"/><rect x="14" y="14" width="6" height="6" rx="1.5"/></svg>Ứng dụng</button>
       <button class="tb" data-act="text"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 10h.01M11 10h.01M15 10h.01M7 14h10"/></svg>Dán chữ</button>
       <button class="tb" data-act="copyout"><svg class="ic" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 00-1-1H5a1 1 0 00-1 1v10a1 1 0 001 1h3"/></svg>Copy từ máy</button>
@@ -383,7 +384,7 @@ const EN = {
   "Âm thanh": "Sound", "Tăng âm": "Volume up", "Giảm âm": "Volume down", "Màn hình": "Display", "Chất lượng": "Quality", "FPS & độ nét": "FPS & resolution",
   "Xoay": "Rotate", "Chụp màn": "Screenshot", "Toàn màn": "Full screen", "Tải lại hình": "Reload video", "Tệp & ứng dụng": "Files & apps",
   "Tải file / APK": "Upload file / APK", "Cài từ link": "Install from link", "Ứng dụng": "Apps", "Dán chữ": "Paste text", "Copy từ máy": "Copy from phone",
-  "Mở web": "Open website", "Lỗi Google": "Google sign-in", "Máy": "Phone", "Khởi động lại": "Restart", "Root máy": "Root phone", "Kho ứng dụng": "App store", "Điều hướng nhanh": "Quick navigation", "Thoát toàn màn": "Exit full screen",
+  "Mở web": "Open website", "Lỗi Google": "Google sign-in", "Máy": "Phone", "Khởi động lại": "Restart", "Root máy": "Root phone", "Kho ứng dụng": "App store", "Clone tab": "Clone tab", "Điều hướng nhanh": "Quick navigation", "Thoát toàn màn": "Exit full screen",
   "Thả file vào đây": "Drop files here", "File APK sẽ tự cài · file khác lưu vào thư mục Download": "APK files install automatically · other files go to the Download folder",
   "Đóng": "Close", "Gửi": "Send", "📋 Máy ảo vừa copy": "📋 The cloud phone just copied", "Copy về máy tôi": "Copy to my device", "Ẩn": "Hide",
 };
@@ -1138,6 +1139,17 @@ const ACT = {
         `<div class="app"><span title="${esc(f.name)}">📦 ${esc(f.name.replace(/\.(apk|apks|apkm|xapk)$/i, ""))} <small>${(f.size / 1048576).toFixed(0)}MB</small></span><button class="btn sm" data-store="${esc(f.name)}">${L("Cài", "Install")}</button></div>`).join("") : "") + play(inst);
     } catch (e) { $("storelist").innerHTML = `<p style="color:var(--bad)">${esc(e.message)}</p>` + play(new Set()); }
   },
+  async clone() {
+    ask({ title: L("🧬 Clone tab — chạy 2 bản cùng lúc", "🧬 Clone tab — run 2 copies at once"),
+      desc: L("Tạo bản thứ 2 của app (VD Roblox chính thức) trong <b>hồ sơ Công việc</b> của Android — đăng nhập acc khác, chạy song song với bản chính. Mỗi máy 1 bản clone cho mỗi app. Treo 2 tab Roblox nên thuê từ 8GB · 6 nhân.", "Make a 2nd copy of an app (e.g. official Roblox) in Android's <b>Work profile</b> — sign in with another account and run it side by side. One clone per app per phone. For 2 Roblox tabs, 8GB · 6 cores is recommended."),
+      body: '<div class="apps" id="clonelist"><div class="spin" style="margin:16px auto"></div></div>', noOk: true });
+    try {
+      const [{ apps }, c] = await Promise.all([api(cur.id + "/apps"), api(cur.id + "/clone")]); const has = new Set(c.cloned || []);
+      $("clonelist").innerHTML = apps.length ? apps.map(p => `<div class="app"><span title="${esc(p)}">${has.has(p) ? "🧬 " : ""}${esc(p)}${has.has(p) ? ` <small style="color:var(--ok)">✓ ${L("đã clone", "cloned")}</small>` : ""}</span>${has.has(p)
+          ? `<button class="btn sm red" data-unclone="${esc(p)}">${L("Bỏ bản clone", "Remove clone")}</button>` : `<button class="btn sm" data-clone="${esc(p)}">${L("Clone", "Clone")}</button>`}</div>`).join("")
+        : L("<p>Chưa có app nào. Cài app (VD Roblox từ CH Play) trước, rồi quay lại đây để clone.</p>", "<p>No apps yet. Install an app first (e.g. Roblox from Play Store), then come back to clone it.</p>");
+    } catch (e) { $("clonelist").innerHTML = `<p style="color:var(--bad)">${esc(e.message)}</p>`; }
+  },
   async apps() {
     ask({ title: L("Ứng dụng đã cài", "Installed apps"), desc: L("Ứng dụng bạn tự cài thêm trên máy.", "Apps you installed on the phone."), body: '<div class="apps" id="applist"><div class="spin" style="margin:16px auto"></div></div>', noOk: true });
     try {
@@ -1217,6 +1229,9 @@ const ACT = {
   },
 };
 document.addEventListener("click", async e => {
+  const cl = e.target.closest("[data-clone]"), ucl = e.target.closest("[data-unclone]");
+  if (cl) { cl.disabled = true; try { const j = await api(cur.id + "/clone", { method: "POST", json: { pkg: cl.dataset.clone } }); const item = trayItem("Clone " + cl.dataset.clone, 0); const ok = await pollJob(j.job, item); if (ok) { cl.textContent = "✓"; try { const r = await api("job?id=" + j.job); toast(srv(r.msg)); } catch (er) {} } else cl.disabled = false; } catch (er) { toast(er.message, 1); cl.disabled = false; } return; }
+  if (ucl) { if (!confirm(L("Bỏ bản clone? Dữ liệu của bản clone (acc đăng nhập trong đó) sẽ bị xoá.", "Remove the clone? Its data (the account signed in there) will be deleted."))) return; try { await api(cur.id + "/clone", { method: "POST", json: { pkg: ucl.dataset.unclone, remove: true } }); toast(L("Đã bỏ bản clone.", "Clone removed.")); ACT.clone(); } catch (er) { toast(er.message, 1); } return; }
   const st = e.target.closest("[data-store]"), pl = e.target.closest("[data-play]");
   if (pl) { try { await api(cur.id + "/play", { method: "POST", json: { pkg: pl.dataset.play } }); toast(L("Đã mở CH Play trong máy — bấm Cài đặt trên màn hình máy.", "Opened Play Store on the phone — tap Install there.")); } catch (er) { toast(er.message, 1); } return; }
   if (st) { st.disabled = true; try { const j = await api(cur.id + "/store", { method: "POST", json: { name: st.dataset.store } }); const item = trayItem(L("Cài ", "Install ") + st.dataset.store, 0); await pollJob(j.job, item); st.textContent = "✓"; } catch (er) { toast(er.message, 1); st.disabled = false; } return; }

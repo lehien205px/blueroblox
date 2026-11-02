@@ -1482,7 +1482,7 @@ window.BR_CONFIG = {
         <label class="full">Dòng chữ chạy — tiếng Việt (để trống = tự viết)<input id="fr-msg" maxlength="200" placeholder="VD: 🎁 Miễn phí thuê điện thoại đám mây 3 ngày — nhận ngay!"></label>
         <label class="full">Dòng chữ chạy — tiếng Anh, khách chọn English sẽ thấy (để trống = tự viết)<input id="fr-msg-en" maxlength="200" placeholder="VD: 🎁 FREE Cloud Phone for 1 day — claim yours now!"></label>
         <div class="hint full">Bật: khách nhận máy <b>0đ</b> (đúng số ngày trên), web hiện dòng chữ chạy. Hết số ngày → máy tự tắt, 30 phút sau tự xoá. Máy miễn phí không gia hạn được.<br><b>Tắt: quay lại tính phí và XOÁ SẠCH mọi máy miễn phí đã phát.</b></div>
-        <div class="acts full"><button class="btn" type="button" id="fr-on">Bật / Lưu ưu đãi</button><button class="btn ghost" type="button" id="fr-off" style="border-color:var(--bad);color:var(--bad)">Tắt ưu đãi & xoá máy miễn phí</button><span class="hint" id="fr-msgout"></span></div>
+        <div class="acts full"><button class="btn" type="button" id="fr-on">Bật / Lưu ưu đãi</button><button class="btn ghost" type="button" id="fr-reset" style="border-color:#ffb800;color:#ffcf4a">🔄 Làm mới lượt miễn phí (mọi tài khoản)</button><button class="btn ghost" type="button" id="fr-off" style="border-color:var(--bad);color:var(--bad)">Tắt ưu đãi & xoá máy miễn phí</button><span class="hint" id="fr-msgout"></span></div>
       </div>
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><h3 style="margin:0">🖥️ Máy chủ</h3><span class="hint" id="cpa-nodesum"></span><button class="btn ghost sm" type="button" id="cpa-nodes-reload" style="margin-left:auto">Làm mới</button></div>
       <div class="nodes" id="cpa-nodes"><div class="empty">Đang tải…</div></div>
@@ -5062,6 +5062,13 @@ $("fr-on") && ($("fr-on").onclick = () => busy($("fr-on"), async () => {
     const { error: e3 } = await sb.from("cloudphone_pricing").update({ free_until: d > 0 ? new Date(Date.now() + d * 86400000).toISOString() : null }).eq("id", 1);
     if (e3) toast("Chưa lưu được thời gian ưu đãi — chạy file SQL cloud-phones-v14.sql trên Supabase.", 1); }
   toast("🎁 Đã BẬT ưu đãi miễn phí — web đang hiện dòng chữ chạy."); notifyTg && notifyTg(`🎁 Bật ưu đãi miễn phí ${n("fr-days")} ngày`);
+  await loadCloudAdm();
+}));
+$("fr-reset") && ($("fr-reset").onclick = () => busy($("fr-reset"), async () => {
+  if (!confirm("Làm mới lượt miễn phí cho TẤT CẢ tài khoản?\nMọi khách (kể cả đã nhận rồi) được nhận thêm 1 máy miễn phí.\nMáy miễn phí đang chạy vẫn giữ nguyên, không bị xoá.")) return;
+  const { data, error } = await sb.rpc("cloudphone_free_reset");
+  if (error) return toast(/cloudphone_free_reset|function/.test(error.message || "") ? "Chưa chạy file SQL cloud-phones-v15.sql trên Supabase." : errMsg(error), 1);
+  toast(`🔄 Đã làm mới — ${(data && data.reset) || 0} tài khoản đã nhận trước đó giờ nhận thêm được 1 máy miễn phí.`); notifyTg && notifyTg("🔄 Làm mới lượt miễn phí cho mọi tài khoản");
   await loadCloudAdm();
 }));
 $("fr-off") && ($("fr-off").onclick = () => busy($("fr-off"), async () => {

@@ -8,6 +8,7 @@
 #   bash cloudphone-gfx.sh check          # xem bộ đồ hoạ của từng bản Android đang có
 #   bash cloudphone-gfx.sh build 11       # dựng bản Android 11 đồ hoạ mới (11 / 10 / 9)
 #   bash cloudphone-gfx.sh test 11        # bật 1 máy THỬ (cổng 5597) từ bản đó → tự mở Chrome vào google.com → báo chạy được hay không
+#   bash cloudphone-gfx.sh try 11         # CÁCH 2: thử bộ đồ hoạ Mesa có sẵn (llvmpipe, OpenGL ES 3) — tự thử nhiều cấu hình
 #   bash cloudphone-gfx.sh stop           # tắt + xoá máy thử
 #   bash cloudphone-gfx.sh on             # thử ổn → máy 9/10/11 MỚI dùng bản đồ hoạ mới + chuyển máy 9/10/11 ĐANG CÓ (giữ dữ liệu, ~1 phút/máy)
 #   bash cloudphone-gfx.sh off            # trả mọi máy về bản cũ
@@ -92,6 +93,47 @@ test)
   if grep -q RESULT_OK "$W/test.txt"; then ok "✅ CHROME CHẠY ĐƯỢC trên Android $V đồ hoạ mới"; echo "   Xem tận mắt: admin → https://phone.blueroblox.shop/ → thiết bị 127.0.0.1:$TP (thử thêm game)"
     echo "   Ổn rồi thì:  bash $0 on   (rồi  bash $0 stop  để xoá máy thử)"
   else err "❌ Vẫn văng trên Android $V"; grep -v RESULT "$W/test.txt" | sed 's/^/   /'; echo "   Gửi kết quả này cho người hỗ trợ. Xoá máy thử: bash $0 stop"; fi ;;
+
+try)
+  # CÁCH 2: không lắp gì thêm — bật bộ đồ hoạ MESA có sẵn trong Android 9/10/11 ở chế độ phần mềm (llvmpipe, chạy được OpenGL ES 3)
+  #         trên 1 "card ảo" vgem của Linux (không đụng card NVIDIA). Thử lần lượt nhiều cấu hình, báo cấu hình nào Chrome chạy được.
+  V="${2:-11}"; DST=$(img_of "$V"); S=$(sdk_of "$V")
+  REF=""; for c in $(docker ps --format '{{.Names}}' | grep '^cp_'); do [ "$(docker exec "$c" getprop ro.build.version.sdk 2>/dev/null | tr -dc 0-9)" = "$S" ] && { REF=$c; break; }; done
+  [ -n "$REF" ] || { err "Cần ít nhất 1 máy Android $V đang chạy để lấy cấu hình mẫu"; exit 1; }
+  BASE=$(docker inspect -f '{{join .Args " "}}' "$REF" | tr ' ' '\n' | grep -vE '^(ro\.hardware\.egl|androidboot\.redroid_gpu_mode|androidboot\.redroid_gpu_node)=' | tr '\n' ' ')
+  before=$(ls /dev/dri/ 2>/dev/null | grep renderD | sort)
+  sudo modprobe vgem 2>/dev/null; sleep 1
+  VG=""; for n in /sys/class/drm/renderD*; do d=$(readlink -f "$n/device/driver" 2>/dev/null); case "$d" in *vgem*) VG=/dev/dri/$(basename "$n");; esac; done
+  [ -n "$VG" ] || { after=$(ls /dev/dri/ | grep renderD | sort); VG=/dev/dri/$(comm -13 <(echo "$before") <(echo "$after") | head -1); }
+  [ -e "$VG" ] && ok "Card ảo vgem: $VG" || warn "Không tạo được card ảo vgem (bỏ qua cấu hình dùng vgem)"
+  echo "   Bộ đồ hoạ có trong Android $V: $(docker exec "$REF" sh -c 'ls /vendor/lib64/dri/ 2>/dev/null | tr "\n" " "; ls /vendor/lib64/egl | tr "\n" " "')"
+  APK=$(ls "$HOME"/apk-cai-san/Chrome-1*.apks "$HOME"/apk-cai-san/Chrome-1*.apk 2>/dev/null | grep -v sdk | head -1)
+  SW="debug.mesa.libgl_always_software=true debug.mesa.gallium_driver=llvmpipe"
+  i=0; WIN=""
+  for CFG in "host vgem:androidboot.redroid_gpu_mode=host androidboot.redroid_gpu_node=$VG $SW" \
+             "host + phần mềm:androidboot.redroid_gpu_mode=host $SW" \
+             "mesa phần mềm (giữ guest):ro.hardware.egl=mesa $SW"; do
+    i=$((i+1)); NAME="${CFG%%:*}"; EX="${CFG#*:}"
+    case "$EX" in *gpu_node=\ *|*gpu_node=$) continue;; esac
+    [ -e "$VG" ] || case "$EX" in *gpu_node=*) continue;; esac
+    echo; echo "== Thử cấu hình $i: $NAME =="
+    docker rm -f "$T" >/dev/null 2>&1
+    # shellcheck disable=SC2086
+    docker run -itd --privileged --name "$T" --memory 6g --cpus 4 -p 127.0.0.1:$TP:5555 "$DST" $BASE $EX >/dev/null || { err "Không bật được"; continue; }
+    for k in $(seq 1 50); do [ "$(docker exec "$T" getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = 1 ] && break; sleep 3; done
+    if [ "$(docker exec "$T" getprop sys.boot_completed 2>/dev/null | tr -d '\r')" != 1 ]; then
+      err "Không khởi động được"; docker exec "$T" logcat -d -b crash 2>/dev/null | grep -m2 "Abort message" | sed 's/^/   /'; continue; fi
+    sleep 12; echo "   Đồ hoạ: $(docker exec "$T" sh -c 'dumpsys SurfaceFlinger | grep -m1 "^GLES"' 2>/dev/null)"
+    docker exec "$T" sh -c 'settings put global device_provisioned 1; settings put secure user_setup_complete 1; pm disable com.google.android.setupwizard >/dev/null 2>&1; true'
+    if [ -n "$APK" ]; then docker exec wsscrcpy adb connect 127.0.0.1:$TP >/dev/null 2>&1; sleep 2
+      python3 -c "import sys,os; import importlib.util as u; s=u.spec_from_file_location('pc',os.path.expanduser('~/phonectl.py')); m=u.module_from_spec(s); sys.argv=['x']; s.loader.exec_module(m); m.install_file($TP, '$APK')" >/dev/null 2>&1; fi
+    R=$(docker exec "$T" sh -c 'logcat -c; logcat -b crash -c; am start -a android.intent.action.VIEW -d https://www.google.com -p com.android.chrome >/dev/null 2>&1; sleep 15; pidof com.android.chrome >/dev/null && echo OK || echo BAD; logcat -d | grep -m2 -E "eglCreateContext|GPU process isn.t usable"')
+    if [ "${R%%$'\n'*}" = OK ]; then ok "✅ CHROME CHẠY ĐƯỢC với cấu hình: $NAME"; WIN="$EX"; echo "$EX" > "$W/win-$V.txt"; break
+    else err "❌ Chrome vẫn văng"; echo "$R" | tail -n +2 | sed 's/^/   /'; fi
+  done
+  if [ -n "$WIN" ]; then echo; ok "TÌM ĐƯỢC CÁCH cho Android $V. Máy thử vẫn bật ở cổng $TP — vào xem / thử game: admin → https://phone.blueroblox.shop/ → 127.0.0.1:$TP"
+    echo "   Gửi kết quả này cho người hỗ trợ để bật cho máy khách."
+  else echo; err "Chưa cấu hình nào chạy được trên Android $V — gửi toàn bộ kết quả cho người hỗ trợ."; docker rm -f "$T" >/dev/null 2>&1; fi ;;
 
 stop) docker rm -f "$T" >/dev/null 2>&1; ok "Đã xoá máy thử" ;;
 

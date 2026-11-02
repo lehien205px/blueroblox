@@ -875,6 +875,13 @@ body.admin-page .adm-gate{display:flex;position:fixed;inset:0;z-index:55;backgro
 .helpdlg .b kbd{background:#1c2a4d;border:1px solid #34497e;border-radius:6px;padding:1px 6px;font-size:13px}
 @media (max-width:560px){.helpdlg .b{padding-left:16px}}
 
+/* Đếm ngược hàng mới trên thẻ sản phẩm */
+.restock{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:8px 0 2px;padding:8px 12px;border-radius:10px;
+  border:1px solid rgba(255,184,0,.55);background:rgba(255,184,0,.1);color:#ffd666;font-size:13.5px}
+.restock b{white-space:nowrap;font-family:var(--mono,monospace);font-size:15px;color:#fff;letter-spacing:.02em;font-variant-numeric:tabular-nums}
+.restock.done{border-color:rgba(60,220,140,.6);background:rgba(60,220,140,.1);color:#6ff0b0}
+@media (max-width:560px){.restock{font-size:12.5px;padding:7px 9px}.restock b{font-size:13.5px}}
+
 </style>
 <script>
 // Đã điền sẵn cho blueroblox.shop
@@ -1271,6 +1278,7 @@ window.BR_CONFIG = {
         <label><span id="pf-vnd-l">Giá (VND)</span><input id="pf-vnd" type="number" min="0" step="100" required></label>
         <label>Thứ tự hiển thị<input id="pf-o" type="number" step="1" value="100"></label>
         <label class="chk"><input id="pf-h" type="checkbox"> Gắn nhãn HOT</label>
+        <label>⏳ Đếm ngược hàng mới (số ngày)<input id="pf-rs" type="number" min="0" step="0.25" placeholder="VD 2 = 2 ngày · 0.5 = 12 giờ · để trống = không hiện"><small id="pf-rs-now" class="hint" style="display:block;margin-top:4px"></small></label>
         <label>Kiểu giao hàng<select id="pf-mode" style="width:100%"><option value="auto">Tự động — kho tài khoản (.txt)</option><option value="manual">Thủ công — chỉ số lượng (VPS)</option></select></label>
         <label id="pf-ms-wrap">Số lượng còn bán<input id="pf-ms" type="number" min="0" step="1" value="10"></label>
         <label class="full">Tính năng (cách nhau bằng dấu phẩy — hiện dạng nhãn ngắn)<input id="pf-f" placeholder="8 vCPU, 16GB RAM, Windows"></label>
@@ -2410,6 +2418,7 @@ function renderGrid() {
     return `<article class="card"><div class="thumb">${p.image ? `<img class="thumb-img" src="${esc(p.image)}" alt="" loading="lazy">` : `<canvas data-id="${esc(p.id)}" data-c="${esc(p.thumb || p.cat)}"></canvas>`}<span class="tag">${esc(catName(p.cat).toUpperCase())}</span>${p.hot ? '<span class="hot">HOT</span>' : ""}</div>
     <div class="body"><h4>${esc(pName(p))}</h4><div class="feats">${pFeats(p).map(f => `<span>${esc(f)}</span>`).join("")}</div>
     ${p.description ? `<p class="pdesc">${esc(pDesc(p))}</p>` : ""}
+    ${restockOn(p) ? `<div class="restock" data-restock="${esc(p.restock_at)}"><span>⏳ ${L("Hàng mới về sau", "Restock in")}</span> <b>${cdText(p.restock_at)}</b></div>` : ""}
     ${plansOf(p).length ? `<div class="days-chip">${t("Gói","plan")}: ${plansOf(p).map(x => x.days).join(" · ")} ${t("ngày","days")}</div>` : ""}
     <div class="row"><span class="price">${plansOf(p).length ? `<small style="font-size:12px;color:var(--muted);font-family:var(--body)">${t("từ","from")} </small>` : ""}${priceHtml(minPrice(p))}</span><span class="stock ${st[0]}">${st[1]}</span></div>
     <button class="btn" data-buy="${esc(p.id)}" ${s === 0 ? "disabled" : ""}>${s === 0 ? t("Hết hàng","sold_out") : t("Mua ngay","buy_now")}</button></div></article>`;
@@ -3066,12 +3075,13 @@ $("pf-img-file").onchange = () => {
   pfFile = f; try { $("pf-img-prev").src = URL.createObjectURL(f); show("pf-img-row"); } catch (e) {}
 };
 $("pf-img-clear").onclick = () => { pfImage = ""; pfFile = null; $("pf-img-file").value = ""; show("pf-img-row", false); };
-function resetForm() { editId = null; $("pf").reset(); $("pf-plans").innerHTML = ""; $("pf-ms").value = 10; $("pf-mode").value = "auto"; $("pf-thumb").value = ""; syncMode(); pfImage = ""; pfFile = null; $("pf-img-file").value = ""; show("pf-img-row", false); syncPlanUI(); $("pf-o").value = P.length ? Math.max(...P.map(p => +p.sort || 0)) + 1 : 1; $("pf-title").textContent = "Thêm sản phẩm"; $("pf-save").textContent = "Thêm sản phẩm"; if ($("pf-summary")) $("pf-summary").firstChild.textContent = "➕ Thêm sản phẩm mới "; }
-function fillForm(p) { editId = p.id; $("pf-n").value = p.name; $("pf-c").value = p.cat; $("pf-vnd").value = p.price; $("pf-o").value = p.sort; $("pf-f").value = (p.features || []).join(", "); $("pf-desc").value = p.description || ""; $("pf-n-en").value = p.name_en || ""; $("pf-f-en").value = (p.features_en || []).join(", "); $("pf-desc-en").value = p.description_en || ""; $("pf-h").checked = !!p.hot; $("pf-ms").value = +p.stock || 0; $("pf-mode").value = p.manual ? "manual" : "auto"; $("pf-thumb").value = p.thumb || ""; syncMode(); pfImage = p.image || ""; pfFile = null; $("pf-img-file").value = ""; if (pfImage) { $("pf-img-prev").src = pfImage; show("pf-img-row"); } else show("pf-img-row", false); $("pf-plans").innerHTML = ""; plansOf(p).forEach(x => planRow(x.days, x.price)); syncPlanUI(); $("pf-title").textContent = "Sửa sản phẩm"; $("pf-save").textContent = "Lưu thay đổi"; if ($("pf-summary")) $("pf-summary").firstChild.textContent = "✏️ Đang sửa sản phẩm "; if ($("pf-details")) $("pf-details").open = true; $("pf-details") ? $("pf-details").scrollIntoView({ behavior: "smooth", block: "start" }) : ($("pane-prod").scrollTop = 0); setTimeout(() => $("pf-n").focus(), 150); }
+function resetForm() { editId = null; $("pf").reset(); pfRestock = null; pfRsUI(); $("pf-plans").innerHTML = ""; $("pf-ms").value = 10; $("pf-mode").value = "auto"; $("pf-thumb").value = ""; syncMode(); pfImage = ""; pfFile = null; $("pf-img-file").value = ""; show("pf-img-row", false); syncPlanUI(); $("pf-o").value = P.length ? Math.max(...P.map(p => +p.sort || 0)) + 1 : 1; $("pf-title").textContent = "Thêm sản phẩm"; $("pf-save").textContent = "Thêm sản phẩm"; if ($("pf-summary")) $("pf-summary").firstChild.textContent = "➕ Thêm sản phẩm mới "; }
+function fillForm(p) { editId = p.id; $("pf-n").value = p.name; $("pf-c").value = p.cat; $("pf-vnd").value = p.price; $("pf-o").value = p.sort; $("pf-f").value = (p.features || []).join(", "); $("pf-desc").value = p.description || ""; $("pf-n-en").value = p.name_en || ""; $("pf-f-en").value = (p.features_en || []).join(", "); $("pf-desc-en").value = p.description_en || ""; $("pf-h").checked = !!p.hot; $("pf-ms").value = +p.stock || 0; pfRestock = p.restock_at || null; pfRsUI(); $("pf-mode").value = p.manual ? "manual" : "auto"; $("pf-thumb").value = p.thumb || ""; syncMode(); pfImage = p.image || ""; pfFile = null; $("pf-img-file").value = ""; if (pfImage) { $("pf-img-prev").src = pfImage; show("pf-img-row"); } else show("pf-img-row", false); $("pf-plans").innerHTML = ""; plansOf(p).forEach(x => planRow(x.days, x.price)); syncPlanUI(); $("pf-title").textContent = "Sửa sản phẩm"; $("pf-save").textContent = "Lưu thay đổi"; if ($("pf-summary")) $("pf-summary").firstChild.textContent = "✏️ Đang sửa sản phẩm "; if ($("pf-details")) $("pf-details").open = true; $("pf-details") ? $("pf-details").scrollIntoView({ behavior: "smooth", block: "start" }) : ($("pane-prod").scrollTop = 0); setTimeout(() => $("pf-n").focus(), 150); }
 $("pf").onsubmit = e => { e.preventDefault(); busy($("pf-save"), async () => {
   const body = { cat: $("pf-c").value, name: $("pf-n").value.trim(), price: Math.max(0, Math.round(+$("pf-vnd").value || 0)), sort: Math.round(+$("pf-o").value || 100),
     features: $("pf-f").value.split(",").map(s => s.trim()).filter(Boolean).slice(0, 6), description: $("pf-desc").value.trim() || null, name_en: $("pf-n-en").value.trim() || null, features_en: $("pf-f-en").value.split(",").map(s => s.trim()).filter(Boolean).slice(0, 6), description_en: $("pf-desc-en").value.trim() || null, hot: $("pf-h").checked,
     manual: $("pf-mode").value === "manual", manual_stock: Math.max(0, Math.round(+$("pf-ms").value || 0)), thumb: $("pf-thumb").value || null };
+  if ($("pf-rs").dataset.dirty) { const d = parseFloat($("pf-rs").value); body.restock_at = d > 0 ? new Date(Date.now() + d * 86400000).toISOString() : null; }
   if (!body.name) return toast("Hãy nhập tên sản phẩm.", 1);
   try { body.plans = readPlans(); } catch (err) { return toast(err.message, 1); }
   if (body.plans.length) body.price = Math.min(...body.plans.map(x => x.price));
@@ -3087,6 +3097,25 @@ $("pf").onsubmit = e => { e.preventDefault(); busy($("pf-save"), async () => {
   toast(editId ? "Đã lưu thay đổi." : "Đã thêm sản phẩm."); resetForm(); await loadProducts();
 }); };
 $("pf-reset").onclick = resetForm;
+/* ---------- ĐẾM NGƯỢC HÀNG MỚI (admin nhập số ngày → thẻ sản phẩm hiện "Hàng mới về sau …") ---------- */
+let pfRestock = null;
+function restockOn(p) { const t = p && p.restock_at ? Date.parse(p.restock_at) : 0; return t > Date.now(); }
+function cdText(iso) {
+  let s = Math.max(0, Math.floor((Date.parse(iso) - Date.now()) / 1000)); const d = Math.floor(s / 86400); s %= 86400;
+  const hh = String(Math.floor(s / 3600)).padStart(2, "0"), mm = String(Math.floor(s % 3600 / 60)).padStart(2, "0"), ss = String(s % 60).padStart(2, "0");
+  return (d ? d + L(" ngày ", "d ") : "") + hh + ":" + mm + ":" + ss;
+}
+function pfRsUI() {
+  const i = $("pf-rs"); if (!i) return; i.value = ""; delete i.dataset.dirty;
+  $("pf-rs-now").textContent = restockOn({ restock_at: pfRestock }) ? "Đang đếm: còn " + cdText(pfRestock) + " — nhập số mới để đổi, nhập 0 để tắt." : "";
+}
+if ($("pf-rs")) $("pf-rs").oninput = () => { $("pf-rs").dataset.dirty = "1"; };
+setInterval(() => {
+  document.querySelectorAll("[data-restock]").forEach(el => {
+    if (Date.parse(el.dataset.restock) <= Date.now()) { el.classList.add("done"); el.innerHTML = "🔥 " + L("Hàng mới đã về!", "Restocked!"); el.removeAttribute("data-restock"); setTimeout(() => { try { loadProducts(); } catch (e) {} }, 5000); return; }
+    const b = el.querySelector("b"); if (b) b.textContent = cdText(el.dataset.restock);
+  });
+}, 1000);
 let delArm = null;
 $("ptbl").onclick = async e => {
   const ed = e.target.closest("[data-edit]"), dl = e.target.closest("[data-del]"), sk = e.target.closest("[data-stock]");

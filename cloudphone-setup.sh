@@ -18,7 +18,7 @@ err()  { echo -e "${R}✗${N} $*"; }
 step() { echo; echo -e "${B}━━ $* ━━${N}"; }
 
 if [ "$(id -u)" != "0" ]; then err "Hãy chạy bằng sudo:  sudo bash $0"; exit 1; fi
-U="${SUDO_USER:-}"
+U="${CP_USER:-${SUDO_USER:-}}"
 if [ -z "$U" ] || [ "$U" = "root" ]; then read -rp "Tên user Linux sẽ chạy dịch vụ (VD lehien): " U; fi
 id "$U" >/dev/null 2>&1 || { err "Không có user $U"; exit 1; }
 H=$(getent passwd "$U" | cut -d: -f6)
@@ -88,6 +88,7 @@ step "6/9 File cấu hình bí mật (~/cloudphone.conf — KHÔNG đưa lên Gi
 CONF="$H/cloudphone.conf"
 if [ -s "$CONF" ] && grep -q "^SUPABASE_SERVICE_KEY=." "$CONF"; then
   ok "Đã có $CONF — giữ nguyên"
+elif [ ! -t 0 ]; then err "Thiếu $CONF (chạy cài bằng tay để nhập khoá)"; exit 1
 else
   read -rp "SUPABASE_URL [https://nprftgodswlpzomcttal.supabase.co]: " SU; SU=${SU:-https://nprftgodswlpzomcttal.supabase.co}
   read -rsp "Dán SUPABASE_SERVICE_KEY (service_role, sẽ không hiện chữ): " SK; echo
@@ -138,7 +139,8 @@ else
   fi
   echo "   Vào https://one.dash.cloudflare.com → Networks → Tunnels → Create tunnel (Cloudflared) → copy TOKEN"
   echo "   (trong tunnel thêm Public hostname: phone.blueroblox.shop → Service HTTP → localhost:8010)"
-  read -rp "Dán TOKEN tunnel (Enter để bỏ qua, làm sau): " TK
+  TK="${CF_TUNNEL_TOKEN:-}"
+  [ -n "$TK" ] || [ ! -t 0 ] || read -rp "Dán TOKEN tunnel (Enter để bỏ qua, làm sau): " TK
   if [ -n "$TK" ]; then cloudflared service install "$TK" >/dev/null 2>&1 && ok "Đã cài tunnel (dịch vụ cloudflared)" || err "Cài tunnel lỗi — kiểm tra token"; fi
 fi
 
@@ -176,6 +178,9 @@ if curl -fsSL -o /tmp/cloudphone-watchdog.sh "$REPO_RAW/cloudphone-watchdog.sh?t
 else warn "Chưa tải được cloudphone-watchdog.sh — up file đó lên GitHub rồi chạy lại lệnh cài"; fi
 
 # ---------------------------------------------------------------------
+# Bộ root (su) cho máy mới: nếu đã có ~/cloudphone-su thì bật luôn
+if [ -x "$H/cloudphone-su/su" ] && [ -x "$H/cloudphone-su/cpsud" ]; then ok "Bộ root đã có — máy tạo trên server này tự có root"; fi
+
 # Lệnh tắt "cloudphone"
 cat > /usr/local/bin/cloudphone <<EOF
 #!/usr/bin/env bash

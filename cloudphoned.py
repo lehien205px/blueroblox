@@ -59,11 +59,23 @@ def age_s(row):
     try: return (now() - parse_dt(row.get("created_at"))).total_seconds()
     except Exception: return 999
 
+_en = {"t": 0, "v": True}
+def node_enabled():
+    """Admin bấm "Ngừng nhận máy" cho server này → không nhận đơn mới (máy đang chạy vẫn chạy)."""
+    if time.time() - _en["t"] > 30:
+        try:
+            r = sb("GET", f"cloud_nodes?id=eq.{urllib.parse.quote(NODE_ID)}&select=enabled") or []
+            _en["v"] = bool(r[0].get("enabled", True)) if r else True
+        except Exception: pass
+        _en["t"] = time.time()
+    return _en["v"]
+
 def claim(row):
     """Giành đơn mới cho server này. Server còn trống nhiều nhận trước; không đủ chỗ thì nhường server khác.
     Trả về True nếu server này được làm đơn đó."""
     n = row.get("node")
     if n: return n == NODE_ID                       # đã có server nhận rồi
+    if not node_enabled(): return False
     load, fr, fc = local_load(); age = age_s(row)
     if float(row["ram"]) > fr + 0.01 or float(row["cpu"]) > fc + 0.01:
         if age > 90 and PRIMARY:                    # không server nào nhận nổi sau 90 giây → hoàn tiền

@@ -104,7 +104,8 @@ for CUR in $LIST; do
   else bad "Clone tab chưa dùng được (max_users=$MU, managed_users=$FE)"; fi
   # GPS
   if [ "$SDK" -ge 31 ]; then
-    O=$(S 'appops set com.android.shell android:mock_location allow; cmd location providers add-test-provider gps 2>&1; cmd location providers set-test-provider-enabled gps true 2>&1; cmd location providers set-test-provider-location gps --location 21.0285,105.8542 2>&1; cmd location providers remove-test-provider gps 2>&1')
+    # chạy như nút GPS trên web: qua adb (người dùng "shell"), không phải root
+    O=$(A shell 'appops set com.android.shell android:mock_location allow; cmd location providers add-test-provider gps 2>&1; cmd location providers set-test-provider-enabled gps true 2>&1; cmd location providers set-test-provider-location gps --location 21.0285,105.8542 2>&1; cmd location providers remove-test-provider gps 2>&1')
     echo "$O" | grep -qi "exception\|unknown\|error" && bad "GPS giả lỗi: $(echo "$O" | grep -iv '^\s*at ' | grep -v '^\s*$' | head -4 | tr '\n' ' ')" || ok "Đổi vị trí GPS OK"
   else warn "GPS giả cần Android 12+ (máy này Android $VER — nút báo khách rõ ràng)"; fi
   # mạng

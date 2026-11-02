@@ -934,7 +934,45 @@ body.admin-page .adm-gate{display:flex;position:fixed;inset:0;z-index:55;backgro
 }
 @media (max-width:640px){ #cporderdlg .cpsum .sum:has(#cp-calc), #cporderdlg #cp-lim{display:none} #cporderdlg .cpfoot{padding:10px 12px;gap:6px} #cporderdlg .cpfoot #cp-total{font-size:22px} }
 
+/* ===== CHẾ ĐỘ NHẸ (html.lite) — máy yếu / điện thoại: tắt mọi thứ tốn GPU/CPU, giữ nguyên bố cục ===== */
+html.lite #fx-bg,html.lite .fx-drums,html.lite #school,html.lite #stage-fx,html.lite .halo,html.lite .sheen,html.lite .d-sweep,html.lite .d-core,html.lite .rim,html.lite h1 .spk{display:none!important}
+html.lite .drum3d{animation:none!important;transform:none!important;transform-style:flat!important;width:62%!important}
+html.lite .drum3d .layer{animation:none!important;transform:none!important}
+html.lite .drum3d .face{display:none!important}
+html.lite .stage{perspective:none!important;animation:none!important}
+html.lite .top,html.lite .modal,html.lite .drawer,html.lite .side,html.lite .thumb .tag,html.lite .toast,html.lite .hint-pill{-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
+html.lite .top{background:rgba(6,10,28,.96)!important}
+html.lite .modal{background:rgba(3,6,18,.86)!important}
+html.lite .card,html.lite .hero>div:first-child>*,html.lite .modal:not([hidden]),html.lite .modal:not([hidden]) .dlg,html.lite .drawer:not([hidden]) .dpanel,html.lite h1 .ch{animation:none!important}
+html.lite .card{transition:none!important;transform:none!important;box-shadow:none!important}
+html.lite .card:hover{transform:none!important}
+html.lite .btn::after,html.lite .btn:hover::after{animation:none!important;display:none!important}
+html.lite .eyebrow::before{animation:none!important;box-shadow:none!important}
+html.lite .thumb .hot,html.lite .top::after{animation:none!important}
+html.lite .thumb canvas{image-rendering:auto}
+html.lite *{text-shadow:none!important}
+html.lite .freebar{box-shadow:none!important;text-shadow:none!important}
+html.lite .appbig{box-shadow:none!important}
+html.lite body{background-attachment:scroll!important}
+.fxbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 0 4px;border-top:1px solid var(--line);margin-top:12px}
+.fxtoggle{padding:8px 14px;border-radius:999px;border:1px solid var(--line2);background:rgba(6,10,28,.6);color:var(--fg);font:600 13px var(--body);cursor:pointer}
+.fxtoggle[aria-pressed="true"]{border-color:#ffb800;color:#ffd666}
+.fxbar small{color:var(--muted);font-size:12px}
+
 </style>
+<script>
+/* CHẾ ĐỘ NHẸ: máy yếu / điện thoại → tắt hiệu ứng nặng (trống 3D xoay, cá koi, sao nền, ảnh 3D sản phẩm, làm mờ nền) cho mượt.
+   Tự nhận: ít nhân CPU / ít RAM / tiết kiệm dữ liệu / giảm chuyển động / điện thoại. Khách tự bật/tắt ở cuối trang (lưu br_lite). */
+(function () {
+  var m = null; try { m = localStorage.getItem("br_lite"); } catch (e) {}
+  var n = navigator, c = n.connection || {}, touch = matchMedia("(hover: none) and (pointer: coarse)").matches;
+  var weak = (n.hardwareConcurrency || 8) <= 4 || (n.deviceMemory || 8) <= 4 || !!c.saveData || matchMedia("(prefers-reduced-motion: reduce)").matches
+             || (touch && Math.min(screen.width, screen.height) < 760);
+  window.BR_LITE = m === "1" ? true : m === "0" ? false : weak;
+  window.BR_LITE_AUTO = m == null;
+  if (window.BR_LITE) document.documentElement.classList.add("lite");
+})();
+</script>
 <script>
 // Đã điền sẵn cho blueroblox.shop
 // (publishable key là khoá công khai, để ở đây an toàn. KHÔNG dán secret key vào file này.)
@@ -1037,6 +1075,7 @@ window.BR_CONFIG = {
     <div><h5 data-i18n="f_contact">Liên hệ</h5><ul><li id="ct-zalo"></li><li id="ct-email"></li><li id="ct-discord"></li><li id="ft-app" hidden><a href="/download/blueroblox-cloud.apk" download>📱 Tải app Android</a></li></ul></div>
   </div>
   <div class="copy">© <span id="year"></span> BLUEROBLOX. <span data-i18n="disclaimer">Không liên kết với Roblox Corporation.</span></div>
+  <div class="wrap fxbar"><button type="button" class="fxtoggle" id="fx-toggle" aria-pressed="false">✨ Hiệu ứng: Bật</button><small id="fx-hint">Máy yếu / mạng chậm → tắt hiệu ứng cho mượt</small></div>
 </footer>
 
 <!-- MUA -->
@@ -1964,7 +2003,8 @@ if (typeof module !== "undefined") module.exports = { drawDongSon };
   "use strict";
   const TAU = Math.PI * 2;
   try { localStorage.removeItem("br_fx"); } catch (e) {}
-  const reduce = false; // luôn chuyển động
+  const LITE = () => !!window.BR_LITE;           // chế độ nhẹ (máy yếu) — tắt ở bất kỳ lúc nào cũng dừng vòng lặp
+  const reduce = LITE();
   const touch = !!(window.matchMedia && matchMedia("(hover: none) and (pointer: coarse)").matches);
   const weak = (navigator.hardwareConcurrency || 8) <= 4 || (navigator.deviceMemory || 8) <= 4;   // máy yếu → dùng bản nhẹ
   const mobile = Math.min(innerWidth, innerHeight) < 720 || touch || weak; // điện thoại (kể cả chế độ "trang web máy tính") dùng bản nhẹ
@@ -1982,10 +2022,10 @@ if (typeof module !== "undefined") module.exports = { drawDongSon };
   /* ---- trống đồng 3D ---- */
   const d3 = document.getElementById("drum3d");
   if (d3) {
-    const face = d3.querySelector(".face"), RIMS = mobile ? 5 : 18, step = mobile ? 8 : 2.6;
+    const face = d3.querySelector(".face"), RIMS = reduce ? 0 : mobile ? 5 : 18, step = mobile ? 8 : 2.6;
     for (let i = 1; i <= RIMS; i++) { const r = document.createElement("div"); r.className = "rim"; r.style.transform = `translateZ(${-i * step}px)`; r.style.filter = `brightness(${1 - i * (.5 / RIMS)})`; d3.insertBefore(r, face); }
     const paint = () => {
-      const w = d3.getBoundingClientRect().width || 500, S = Math.min(mobile ? 520 : 1000, Math.round(w * Math.min(mobile ? 1.25 : 2, devicePixelRatio || 1))), R = S * .47;
+      const w = d3.getBoundingClientRect().width || 500, S = Math.min(reduce ? 420 : mobile ? 520 : 1000, Math.round(w * Math.min(mobile ? 1.25 : 2, devicePixelRatio || 1))), R = S * .47;
       d3.querySelectorAll("canvas.layer").forEach(cv => {
         if (cv.width === S) return; cv.width = cv.height = S; const g = cv.getContext("2d"); g.translate(S / 2, S / 2);
         if (window.drawDongSon) drawDongSon(g, R, { color: goldOf(g, R), cut: true, parts: [cv.dataset.part] });
@@ -2008,6 +2048,7 @@ if (typeof module !== "undefined") module.exports = { drawDongSon };
     let shoots = [], next = 800, last = 0;
     const FR = mobile ? 50 : 33;                  // sao quanh trống: 20–30 khung/giây là đủ mượt, đỡ tốn CPU
     const frame = t => {
+      if (LITE()) { x.clearRect(0, 0, W, H); return; }          // chế độ nhẹ: dừng hẳn
       if (last && t - last < FR) { requestAnimationFrame(frame); return; }
       const dt = last ? Math.min(60, t - last) : 16; last = t;
       if (heroVisible && !document.hidden) {
@@ -2025,7 +2066,7 @@ if (typeof module !== "undefined") module.exports = { drawDongSon };
       }
       requestAnimationFrame(frame);
     };
-    if (!reduce) requestAnimationFrame(frame); else { last = 1; frame(16); }
+    if (!reduce) requestAnimationFrame(frame);
   }
 
   /* ---- huy hiệu trên hộp "Mua thành công" ---- */
@@ -2100,6 +2141,7 @@ if (typeof module !== "undefined") module.exports = { drawDongSon };
   let last = performance.now();
   const FRK = mobile ? 50 : 33;                   // cá: 20–30 khung/giây
   function step(now) {
+    if (LITE()) { g.clearRect(0, 0, W, H); return; }           // chế độ nhẹ: dừng cá
     requestAnimationFrame(step);
     if (document.hidden) { last = now; return; }
     if (now - last < FRK) return;
@@ -2130,7 +2172,9 @@ if (typeof module !== "undefined") module.exports = { drawDongSon };
 /* ===== Nền toàn trang như bản cũ: trống đồng lớn xoay từng vành + ánh quét + lõi sáng, trống nhỏ góc dưới,
    sao lấp lánh, sao rơi, sao băng, kim tuyến theo chuột — vẽ bằng mặt trống Đông Sơn mới ===== */
 (function () {
-  const reduce = false;
+  const LITE = () => !!window.BR_LITE;
+  const reduce = LITE();
+  if (reduce) return;                                           // chế độ nhẹ: không vẽ nền (sao, trống lớn, kim tuyến)
   const cv = document.createElement("canvas"); cv.id = "fx-bg"; cv.setAttribute("aria-hidden", "true"); document.body.prepend(cv);
   const x = cv.getContext("2d"), TAU = Math.PI * 2;
   let dpr = .65, lowQ = false;
@@ -2220,6 +2264,7 @@ if (typeof module !== "undefined") module.exports = { drawDongSon };
   }
   let slow = 0, cnt = 0;
   function frame(t) {
+    if (LITE()) { x.clearRect(0, 0, W, H); host.innerHTML = ""; return; }
     if (document.hidden) { last = 0; setTimeout(() => requestAnimationFrame(frame), 500); return; }
     const gap = t - (last || t);
     if (last && gap < 33) { requestAnimationFrame(frame); return; }
@@ -2397,7 +2442,7 @@ function applyStatic() {
 }
 function setLang(l) { LANG = l === "en" ? "en" : "vi"; try { localStorage.setItem("br_lang", LANG); } catch (e) {} cur = LANG === "en" ? "USD" : "VND";
   $("lang-vi").classList.toggle("on", LANG === "vi"); $("lang-en").classList.toggle("on", LANG === "en");
-  applyStatic(); renderSite(); renderCats(); renderGrid(); renderUser(); if (sel) { renderPlans(); upd(); setVpsMethod(vpsMethod); } try { i18nCrypto(); } catch (e) {} try { renderFreeBar(); } catch (e) {} try { renderAppHelp(); } catch (e) {} }
+  applyStatic(); renderSite(); renderCats(); renderGrid(); renderUser(); if (sel) { renderPlans(); upd(); setVpsMethod(vpsMethod); } try { i18nCrypto(); } catch (e) {} try { renderFreeBar(); } catch (e) {} try { renderAppHelp(); } catch (e) {} try { document.dispatchEvent(new Event("br-lang")); } catch (e) {} }
 $("lang-vi").onclick = () => setLang("vi"); $("lang-en").onclick = () => setLang("en");
 const plansOf = p => (Array.isArray(p.plans) ? p.plans : []).filter(x => +x.days > 0 && +x.price >= 0).sort((a, b) => a.days - b.days);
 const minPrice = p => { const pl = plansOf(p); return pl.length ? Math.min(...pl.map(x => +x.price)) : +p.price; };
@@ -3285,7 +3330,33 @@ loadSettings(); loadProducts();
 setInterval(() => { if (!document.hidden) loadProducts(); }, 60000);
 
 /* ===== công tắc hiệu ứng ===== */
-window.BRfxOn = true; // luôn bật chuyển động, không còn nút tắt
+window.BRfxOn = !window.BR_LITE;   // chế độ nhẹ (máy yếu) → ảnh sản phẩm vẽ 1 lần, không chạy số
+/* ===== CHẾ ĐỘ NHẸ: nút bật/tắt + tự chuyển khi máy giật (đo khung hình) ===== */
+(function () {
+  const b = document.getElementById("fx-toggle"), hint = document.getElementById("fx-hint");
+  function paint() { if (!b) return; const lite = !!window.BR_LITE;
+    b.textContent = lite ? L("✨ Hiệu ứng: Tắt (chế độ nhẹ)", "✨ Effects: Off (lite mode)") : L("✨ Hiệu ứng: Bật", "✨ Effects: On");
+    b.setAttribute("aria-pressed", lite ? "true" : "false");
+    if (hint) hint.textContent = lite ? L("Đang ở chế độ nhẹ cho máy mượt — bấm để bật lại hiệu ứng.", "Lite mode keeps weak devices smooth — tap to turn effects back on.")
+                                      : L("Máy yếu / giật → bấm để tắt hiệu ứng cho mượt.", "Laggy device? Tap to turn effects off."); }
+  window.BRsetLite = function (on, remember) {
+    try { if (remember) localStorage.setItem("br_lite", on ? "1" : "0"); } catch (e) {}
+    window.BR_LITE = !!on; window.BRfxOn = !on; document.documentElement.classList.toggle("lite", !!on); paint();
+    if (!on) location.reload();                     // bật lại hiệu ứng: nạp lại trang để khởi động các vòng vẽ
+  };
+  if (b) b.onclick = () => window.BRsetLite(!window.BR_LITE, true);
+  paint(); document.addEventListener("br-lang", paint);
+  // tự chuyển sang chế độ nhẹ nếu trang giật (khung hình trung bình > 30ms trong 3 giây đầu) — chỉ khi khách chưa tự chọn
+  if (window.BR_LITE || !window.BR_LITE_AUTO || !("requestAnimationFrame" in window)) return;
+  let n = 0, slow = 0, last = 0, t0 = 0;
+  const start = () => setTimeout(() => requestAnimationFrame(tick), 1500);   // đo sau khi trang tải xong 1,5 giây (tránh tính lúc đang tải)
+  if (document.readyState === "complete") start(); else addEventListener("load", start);
+  function tick(t) {
+    if (!t0) t0 = t; if (last) { n++; if (t - last > 30) slow++; } last = t;
+    if (t - t0 < 3500 && n < 240) return requestAnimationFrame(tick);
+    if (n > 20 && slow / n > 0.45) { window.BRsetLite(true, false); try { toast(L("Máy có vẻ giật → đã chuyển sang chế độ nhẹ (bật lại ở cuối trang).", "Looks laggy → switched to lite mode (turn effects back on at the bottom)."), 0); } catch (e) {} }
+  }
+})();
 
 /* ===== hiệu ứng ===== */
 (function () {
@@ -3447,6 +3518,7 @@ window.BRfxOn = true; // luôn bật chuyển động, không còn nút tắt
   let last = 0;
   const CARD_MS = (innerWidth < 760 || (navigator.hardwareConcurrency || 8) <= 4) ? 160 : 80;   // điện thoại / máy yếu: ảnh sản phẩm vẽ thưa hơn
   (function loop(t) {
+    if (window.BR_LITE) return;                      // chế độ nhẹ bật giữa chừng → dừng vẽ
     if (!document.hidden && t - last > 32) { last = t;
       for (const c of vis) { const hot = c._card && c._card.matches(":hover"); if (hot || t >= (c._next || 0)) { draw(c, t); c._next = t + (hot ? 0 : CARD_MS); } } }
     requestAnimationFrame(loop);

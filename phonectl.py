@@ -231,7 +231,11 @@ def cmd_gpurun(a):
             "-netdelay", "none", "-netspeed", "full"]
     os.execve(emu, args, GPU_ENV)
 
-TUNE = (# tắt hẳn hiệu ứng chuyển cảnh → CPU không phải vẽ thêm
+TUNE = (# Trình cài đặt ban đầu của Google bị lỗi trên máy ảo (Android 9/10 kẹt ở MÀN ĐEN) → tắt nó + đánh dấu "đã cài đặt xong"
+        "if pm path com.google.android.setupwizard >/dev/null 2>&1 && [ \"$(settings get secure user_setup_complete)\" != 1 ]; then "
+        "settings put global device_provisioned 1; settings put secure user_setup_complete 1; "
+        "pm disable com.google.android.setupwizard >/dev/null 2>&1; am start -a android.intent.action.MAIN -c android.intent.category.HOME >/dev/null 2>&1; fi; "
+        # tắt hẳn hiệu ứng chuyển cảnh → CPU không phải vẽ thêm
         "settings put global window_animation_scale 0; settings put global transition_animation_scale 0; "
         "settings put global animator_duration_scale 0; settings put global package_verifier_enable 0; "
         # cửa sổ nổi: mở nhiều app/tab cùng lúc (có hiệu lực sau lần khởi động lại máy kế tiếp)

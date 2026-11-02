@@ -83,7 +83,7 @@ for CUR in $LIST; do
   fi
   # chép file vào Download (nút Tải file với file không phải APK)
   echo "blueroblox selftest" > "$T/selftest.txt"; docker cp "$T/selftest.txt" "$WS:/tmp/selftest.txt" >/dev/null 2>&1
-  A push /tmp/selftest.txt /sdcard/Download/selftest.txt >/dev/null; [ "$(A shell cat /sdcard/Download/selftest.txt)" = "blueroblox selftest" ] && ok "Chép file vào thư mục Download OK" || bad "Chép file vào Download lỗi"
+  A push /tmp/selftest.txt /data/local/tmp/selftest.txt >/dev/null; A shell 'cp /data/local/tmp/selftest.txt /sdcard/Download/selftest.txt; rm -f /data/local/tmp/selftest.txt' >/dev/null; [ "$(A shell cat /sdcard/Download/selftest.txt)" = "blueroblox selftest" ] && ok "Chép file vào thư mục Download OK" || bad "Chép file vào Download lỗi"
   A shell rm -f /sdcard/Download/selftest.txt >/dev/null
   # root
   R1=$(timeout 20 docker exec --user 2000 "$CUR" /system/xbin/su -c id 2>&1 | tr -d '\r')

@@ -328,14 +328,28 @@ def deliver(port, path, name, jid=None):
             if "Success" not in o: raise RuntimeError(install_err(o))
             return f"Đã cài xong {name}"
         dest = "/sdcard/Download/" + name
-        r = adb(port, ["push", tmp, dest], timeout=1200)
-        if r.returncode: raise RuntimeError("Không chép được file vào máy: " + out(r)[-200:])
+        r = push_sd(port, tmp, dest, timeout=1200)
+        if not pushed_ok(r):
+            if "No space" in out(r): raise RuntimeError("Máy hết bộ nhớ — xoá bớt file / gỡ bớt app rồi thử lại.")
+            raise RuntimeError("Không chép được file vào máy: " + out(r)[-200:])
         shell(port, "am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d " + shlex.quote("file://" + dest), 30)
         return f"Đã lưu vào thư mục Download: {name}"
     finally:
         subprocess.run(["docker", "exec", WSNAME, "rm", "-f", tmp], capture_output=True, timeout=60)
         try: os.remove(path)
         except OSError: pass
+
+def push_sd(port, src, dest, timeout=1800):
+    """Chép file (đang nằm trong ws-scrcpy) vào bộ nhớ máy /sdcard/…
+    adb push thẳng vào /sdcard lỗi trên Android 9/10 ("remote fchown failed") → chép vào /data/local/tmp rồi cp sang."""
+    tmp = "/data/local/tmp/.cpin_" + secrets.token_hex(5)
+    r = adb(port, ["push", src, tmp], timeout=timeout)
+    if r.returncode: return r
+    d = shlex.quote(dest)
+    return adb(port, ["shell", f"mkdir -p {shlex.quote(os.path.dirname(dest))}; cp {tmp} {d} && echo CPOK; rm -f {tmp}"], timeout=timeout)
+
+def pushed_ok(r):
+    return r.returncode == 0 and "CPOK" in out(r)
 
 def push_obb(port, path, jid=None):
     """Gói .xapk có dữ liệu game (Android/obb/…) → chép vào /sdcard/Android/obb của máy. Trả về số file đã chép."""
@@ -351,10 +365,9 @@ def push_obb(port, path, jid=None):
                     if jid: JOBS[jid]["msg"] = f"Đang chép dữ liệu game {n + 1}/{len(obbs)}…"
                     z.extract(f, d); tag = "/tmp/obb_" + secrets.token_hex(5)
                     subprocess.run(["docker", "cp", os.path.join(d, f), f"{WSNAME}:{tag}"], capture_output=True, timeout=1200)
-                    shell(port, "mkdir -p " + shlex.quote("/sdcard/" + os.path.dirname(f)), 20)
-                    r = adb(port, ["push", tag, "/sdcard/" + f], timeout=1800)
+                    r = push_sd(port, tag, "/sdcard/" + f, timeout=1800)
                     subprocess.run(["docker", "exec", WSNAME, "rm", "-f", tag], capture_output=True, timeout=60)
-                    os.remove(os.path.join(d, f)); n += 0 if r.returncode else 1
+                    os.remove(os.path.join(d, f)); n += 1 if pushed_ok(r) else 0
                 return n
             finally: shutil.rmtree(d, ignore_errors=True)
     except zipfile.BadZipFile:

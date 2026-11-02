@@ -70,6 +70,14 @@ try: RAM_OVER = max(1.0, min(4.0, float(CONF.get("RAM_OVER", "2"))))
 except ValueError: RAM_OVER = 2.0
 try: RAM_BUSY = max(30, min(98, int(CONF.get("RAM_BUSY_PCT", "85"))))
 except ValueError: RAM_BUSY = 85
+# Ổ CỨNG DÙNG CHUNG: máy chỉ chiếm đúng phần dữ liệu đã ghi → không giới hạn theo máy,
+# chỉ ngừng nhận máy mới khi ổ chứa dữ liệu máy đã dùng ≥ DISK_BUSY_PCT % (ổ đầy 100% thì MỌI máy treo).
+try: DISK_BUSY = max(50, min(98, int(CONF.get("DISK_BUSY_PCT", "90"))))
+except ValueError: DISK_BUSY = 90
+def disk_real():
+    try:
+        import shutil as _sh; d = _sh.disk_usage(DATA_ROOT); return 100.0 * d.used / d.total, d.free / 1073741824
+    except Exception: return None, None
 def ram_real():
     """% RAM thật đang dùng (theo MemAvailable)."""
     try:
@@ -468,6 +476,8 @@ def cmd_capacity(a):
     rr = ram_real()
     print(f"Giới hạn: RAM {lr:.0f} GB (dùng chung ×{RAM_OVER:g}), CPU {lc:.0f} nhân (dùng chung ×{CPU_OVER:g})")
     print(f"RAM thật: {'?' if rr is None else f'{rr:.0f}%'} đang dùng — ngừng nhận máy mới khi ≥ {RAM_BUSY}%")
+    dp, dfree = disk_real()
+    print(f"Ổ cứng: {'?' if dp is None else f'{dp:.0f}% (còn {dfree:.0f} GB)'} — ngừng nhận máy mới khi ≥ {DISK_BUSY}%")
     print(f"CPU thật: {'?' if cr is None else f'{cr:.0f}%'} (trung bình 5 phút) — ngừng nhận máy mới khi ≥ {CPU_BUSY}%")
     print(f"Đã cấp:  RAM {ur:.1f} GB, CPU {uc:.1f} nhân  ({len(st['phones'])} máy)")
     print(f"Còn:     RAM {lr-ur:.1f} GB, CPU {lc-uc:.1f} nhân")
@@ -483,6 +493,9 @@ def cmd_create(a):
     cr = cpu_real()
     if cr is not None and cr >= CPU_BUSY:
         print(f"HẾT HÀNG: CPU thật đang chạy {cr:.0f}% (ngưỡng {CPU_BUSY}%)."); sys.exit(2)
+    dp, dfree = disk_real()
+    if dp is not None and (dp >= DISK_BUSY or dfree < 15):
+        print(f"HẾT HÀNG: ổ cứng đã dùng {dp:.0f}% (còn {dfree:.0f}GB, ngưỡng {DISK_BUSY}%)."); sys.exit(2)
     rr = ram_real()
     if rr is not None and rr >= RAM_BUSY:
         print(f"HẾT HÀNG: RAM thật đang dùng {rr:.0f}% (ngưỡng {RAM_BUSY}%)."); sys.exit(2)

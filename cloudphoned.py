@@ -52,6 +52,7 @@ def local_load():
     if busy: c_c = a_c                                  # CPU thật đã nóng → coi như hết chỗ CPU
     t_r, av_r = meminfo()
     if t_r and 100 * (1 - av_r / t_r) >= RAM_BUSY: c_r = a_r          # RAM thật đã đầy → coi như hết chỗ RAM
+    if disk_full(): c_r = a_r                                           # ổ cứng sắp đầy → không nhận máy mới
     return max(a_r / max(c_r, 1), (cpu_avg5() or 0) / 100), c_r - a_r, c_c - a_c
 
 def age_s(row):
@@ -96,6 +97,12 @@ try: RAM_OVER = max(1.0, min(4.0, float(CFG.get("RAM_OVER", "2"))))     # RAM d�
 except ValueError: RAM_OVER = 2.0
 try: RAM_BUSY = max(30, min(98, int(CFG.get("RAM_BUSY_PCT", "85"))))   # RAM thật ≥ 85% → ngừng nhận máy mới
 except ValueError: RAM_BUSY = 85
+try: DISK_BUSY = max(50, min(98, int(CFG.get("DISK_BUSY_PCT", "90"))))  # ổ cứng ≥ 90% → ngừng nhận máy mới
+except ValueError: DISK_BUSY = 90
+def disk_full():
+    try:
+        d = shutil.disk_usage(os.path.join(HOME, "redroid")); return 100 * d.used / d.total >= DISK_BUSY or d.free < 15 * 1073741824
+    except Exception: return False
 _cpu_hist = []
 def cpu_avg5(sample=None):
     """% CPU thật trung bình ~5 phút (ghi ra file cho phonectl đọc)."""
@@ -300,7 +307,9 @@ def heartbeat():
     ram_pct = round(100 * (1 - ram_avail / ram_t), 1) if ram_t else None
     ram_busy = ram_pct is not None and ram_pct >= RAM_BUSY
     if ram_busy: c_ram = a_ram                          # RAM thật ≥ 85% → báo hết chỗ
-    metrics = {"cpu_pct": cp_now, "cpu_avg5": avg5, "cpu_over": CPU_OVER, "cpu_busy_pct": CPU_BUSY, "cpu_busy": busy, "ram_over": RAM_OVER, "ram_pct": ram_pct, "ram_busy_pct": RAM_BUSY, "ram_busy": ram_busy, "load": [round(x, 2) for x in os.getloadavg()], "cpu_temp": cpu_temp(),
+    disk_busy = disk_full()
+    if disk_busy: c_ram = a_ram                         # ổ cứng ≥ 90% → báo hết chỗ
+    metrics = {"cpu_pct": cp_now, "cpu_avg5": avg5, "cpu_over": CPU_OVER, "cpu_busy_pct": CPU_BUSY, "cpu_busy": busy, "ram_over": RAM_OVER, "ram_pct": ram_pct, "ram_busy_pct": RAM_BUSY, "ram_busy": ram_busy, "disk_busy": disk_busy, "disk_busy_pct": DISK_BUSY, "load": [round(x, 2) for x in os.getloadavg()], "cpu_temp": cpu_temp(),
                "ram_used": round(ram_t - ram_avail, 1), "gpus": gpus(), "disk_data": disk(DATA_ROOT), "disk_root": disk("/"),
                "running": running, "uptime_h": up_h, "base": BASE, "primary": PRIMARY}
     body = {"id": NODE_ID, "cpu_total": cpu_t, "ram_total": round(ram_t, 1), "cap_cpu": round(c_cpu, 1), "cap_ram": round(c_ram, 1),
@@ -312,6 +321,7 @@ def heartbeat():
     if _alert["full"] is not None and full != _alert["full"]:
         notify((f"🚨 <b>{NODE_ID}: CPU thật đang {avg5:.0f}%</b> (ngưỡng {CPU_BUSY}%) — tạm ngừng nhận máy mới." if busy else
                 f"🚨 <b>{NODE_ID}: RAM thật đang dùng {ram_pct:.0f}%</b> (ngưỡng {RAM_BUSY}%) — tạm ngừng nhận máy mới." if ram_busy else
+                f"🚨 <b>{NODE_ID}: ổ cứng sắp đầy</b> (ngưỡng {DISK_BUSY}%) — tạm ngừng nhận máy mới. Xoá bớt máy hết hạn / file thừa." if disk_busy else
                 f"🚨 <b>{NODE_ID} đã đầy</b> — RAM cấp {a_ram:.0f}/{c_ram:.0f}GB, CPU cấp {a_cpu:.0f}/{c_cpu:.0f}.") + " Khách sẽ thấy HẾT HÀNG."
                if full else f"✅ <b>{NODE_ID}</b> đã có chỗ trống trở lại (RAM cấp {a_ram:.0f}/{ram_t:.0f}GB).")
     _alert["full"] = full

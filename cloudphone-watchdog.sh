@@ -113,6 +113,17 @@ for c in $(docker ps -a --filter status=restarting --format '{{.Names}}' | grep 
   if [ "$(bad "rs_$c")" -ge 3 ]; then log "$c kẹt khởi động → chạy lại"; docker restart "$c" >/dev/null 2>&1; good "rs_$c"; fixed=1; fi
 done
 
+# 6b) máy Android 9/10/11 KHÔNG thấy /dev/ashmem (máy bật TRƯỚC khi server nạp ashmem) → mọi app/Chrome/game văng khi bấm.
+#     Android 12+ dùng memfd nên không bị. Máy thấy thiết bị lúc khởi động → chỉ cần khởi động lại máy đó (dữ liệu giữ nguyên).
+if [ -e /dev/ashmem ]; then
+  for c in $(docker ps --format '{{.Names}}' | grep -E '^cp_'); do
+    v=$(timeout 10 docker exec "$c" getprop ro.build.version.sdk 2>/dev/null | tr -dc 0-9)
+    [ -n "$v" ] && [ "$v" -le 30 ] || continue
+    timeout 10 docker exec "$c" /system/bin/sh -c 'test -e /dev/ashmem' 2>/dev/null && continue
+    log "$c (SDK $v) thiếu /dev/ashmem → app sẽ văng → khởi động lại máy"; docker restart "$c" >/dev/null 2>&1; fixed=1
+  done
+fi
+
 # 7) máy Android bị treo (chạy > 6 phút mà Android không lên / mất màn hình) → 3 phút liền thì tự khởi động lại máy đó
 now=$(date +%s)
 for c in $(docker ps --format '{{.Names}}' | grep -E '^cp_'); do

@@ -453,6 +453,14 @@ const CFG = { supabaseUrl: "https://nprftgodswlpzomcttal.supabase.co", supabaseA
 const CF_PHONE = "https://phone.blueroblox.shop", FAST_PHONE = "https://fast.blueroblox.shop:8443";
 let PHONE = CF_PHONE, API = PHONE + "/cpapi", ROUTE = "cf";
 function setRoute(r) { ROUTE = r; PHONE = r === "fast" ? FAST_PHONE : CF_PHONE; API = PHONE + "/cpapi"; }
+/* NHIỀU SERVER: mỗi máy nằm ở 1 server (phone.…, phone2.…) — lấy từ link của máy. Server chính vẫn dùng được đường thẳng ⚡ */
+function hostOf(p) { try { const u = new URL(p && p.stream_url || ""); if (/^https:$/.test(u.protocol) && /(^|\.)blueroblox\.shop$/.test(u.hostname)) return u.origin; } catch (e) {} return CF_PHONE; }
+function baseOf(p) { const h = hostOf(p); return h === CF_PHONE ? PHONE : h; }
+const HOSTS = new Set([CF_PHONE, FAST_PHONE]), SESS = new Set(), JOBB = {};
+async function ensureSession(p) {           // mở phiên (cookie) ở server của máy này trước khi xem hình
+  const b = baseOf(p); HOSTS.add(b); if (b === PHONE || SESS.has(b)) return;
+  try { await api("session", { method: "POST", json: {} }, true, b + "/cpapi"); SESS.add(b); } catch (e) {}
+}
 async function pickRoute() {
   const want = new URLSearchParams(location.search).get("route") || store.get("cp_route") || "auto";
   if (want === "cf") return setRoute("cf");
@@ -522,15 +530,18 @@ $("dlgno").onclick = () => $("dlg").hidden = true;
 $("dlg").onclick = e => { if (e.target.id === "dlg") $("dlg").hidden = true; };
 
 /* ---------- gọi API server ---------- */
-async function api(path, { method = "GET", json, body, blob, headers = {} } = {}, retry = true) {
+async function api(path, { method = "GET", json, body, blob, headers = {} } = {}, retry = true, base) {
+  if (!base) { const jm = /^job\?id=([^&]+)/.exec(path), pid = path.split("/")[0], ph = (typeof phones !== "undefined" && phones || []).find(x => x.id === pid);
+    base = jm && JOBB[decodeURIComponent(jm[1])] || (ph ? baseOf(ph) + "/cpapi" : API); }
   const h = { Authorization: "Bearer " + token, ...headers };
   if (json) h["Content-Type"] = "application/json";
-  const r = await fetch(API + "/" + path, { method, headers: h, body: json ? JSON.stringify(json) : body, credentials: "include" });
-  if (r.status === 401 && retry) { await refreshToken(); return api(path, { method, json, body, blob, headers }, false); }
+  const r = await fetch(base + "/" + path, { method, headers: h, body: json ? JSON.stringify(json) : body, credentials: "include" });
+  if (r.status === 401 && retry) { await refreshToken(); return api(path, { method, json, body, blob, headers }, false, base); }
   if (blob && r.ok) return r.blob();
   let j = {}; try { j = await r.json(); } catch (e) {}
   if ((r.status === 503 && j.maint || r.status === 423) && !underMaint) setTimeout(checkInfo, 0);
   if (!r.ok) { const err = new Error(srv(j.error) || (L("Lỗi ", "Error ") + r.status)); err.status = r.status; err.data = j; throw err; }
+  if (j && j.job) JOBB[j.job] = base;           // theo dõi việc ở đúng server đã nhận việc
   return j;
 }
 async function refreshToken() {
@@ -547,8 +558,8 @@ async function openSession() { await api("session", { method: "POST", json: {} }
 function resOf(p) { const m = /^(\d+)x(\d+)$/.exec(p && p.res || ""); return m ? [+m[1], +m[2]] : [720, 1280]; }
 function streamUrl(p, q, sid, raw) {
   const udid = "127.0.0.1:" + p.port, [w, h] = resOf(p);
-  const ws = "wss://" + new URL(PHONE).host + "/?action=proxy-adb&remote=" + encodeURIComponent("tcp:8886") + "&udid=" + encodeURIComponent(udid) + "&cpv=" + PAGE_ID;
-  return PHONE + "/?v=" + sid + "#!action=stream&udid=" + encodeURIComponent(udid) + "&player=" + player + "&ws=" + encodeURIComponent(ws)
+  const B = baseOf(p), ws = "wss://" + new URL(B).host + "/?action=proxy-adb&remote=" + encodeURIComponent("tcp:8886") + "&udid=" + encodeURIComponent(udid) + "&cpv=" + PAGE_ID;
+  return B + "/?v=" + sid + "#!action=stream&udid=" + encodeURIComponent(udid) + "&player=" + player + "&ws=" + encodeURIComponent(ws)
     + "&captureKeyboard=1&cpq=" + q + "&cpfps=" + (p.fps || 30) + "&cpw=" + w + "&cph=" + h + "&cpn=" + sid + (raw ? "&cpraw=1" : "");
 }
 const CONNS = new Set();
@@ -572,7 +583,9 @@ class Conn {
   open(p, q) {
     this.p = p; this.q = q; this.ok = false; this.boot = false; this.legacy = false; this.soft = false;
     this.sid = Math.random().toString(36).slice(2, 10);
-    clearTimeout(this.t); this.f.src = streamUrl(p, q, this.sid, this.raw);
+    clearTimeout(this.t);
+    const b = baseOf(p), sid = this.sid, go = () => { if (this.p === p && this.sid === sid) this.f.src = streamUrl(p, q, sid, this.raw); };
+    if (b !== PHONE && !SESS.has(b)) ensureSession(p).finally(go); else go();
     this.arm(30000);   // máy mới khởi động trình phát hình có thể chậm
     this.h.connecting && this.h.connecting(this.tries, this.raw);
   }
@@ -608,13 +621,13 @@ class Conn {
     if (d.t === "ok") setTimeout(() => applyTools(this), 300);     // máy vừa lên hình → bật lại đồng bộ / gán phím
   }
   send(cpcmd, extra) {  // gửi lệnh không chờ trả lời (đồng bộ / macro / gán phím)
-    try { if (this.f.contentWindow && !this.legacy) this.f.contentWindow.postMessage({ cpcmd, ...(extra || {}) }, PHONE); } catch (e) {}
+    try { if (this.f.contentWindow && !this.legacy) this.f.contentWindow.postMessage({ cpcmd, ...(extra || {}) }, baseOf(this.p)); } catch (e) {}
   }
   cmd(cpcmd, extra) {   // gửi lệnh vào trình phát hình, chờ trả lời (tối đa 1,5 giây)
     return new Promise(res => {
       if (!this.ok || this.legacy || !this.f.contentWindow) return res(false);
       const id = Math.random().toString(36).slice(2); this.cb = this.cb || {}; this.cb[id] = res;
-      this.f.contentWindow.postMessage({ cpcmd, id, ...(extra || {}) }, PHONE);
+      this.f.contentWindow.postMessage({ cpcmd, id, ...(extra || {}) }, baseOf(this.p));
       setTimeout(() => { if (this.cb[id]) { delete this.cb[id]; res(false); } }, 1500);
     });
   }
@@ -622,13 +635,13 @@ class Conn {
     return new Promise(res => {
       if (!this.ok || this.legacy || this.soft || !this.f.contentWindow) return res(false);
       const id = Math.random().toString(36).slice(2); this.cb = this.cb || {}; this.cb[id] = res;
-      this.f.contentWindow.postMessage({ cpcmd: "key", key: name, id }, PHONE);
+      this.f.contentWindow.postMessage({ cpcmd: "key", key: name, id }, baseOf(this.p));
       setTimeout(() => { if (this.cb[id]) { delete this.cb[id]; res(false); } }, 700);
     });
   }
 }
 addEventListener("message", e => {
-  if ((e.origin !== CF_PHONE && e.origin !== FAST_PHONE) || !e.data || !e.data.cp) return;
+  if (!HOSTS.has(e.origin) || !e.data || !e.data.cp) return;
   for (const c of CONNS) if (c.f.contentWindow === e.source) { c.msg(e.data); break; }
 });
 async function pressKey(conn, p, code) {
@@ -725,7 +738,7 @@ let PING = 0;
 setInterval(async () => {
   if (!main.ok || document.hidden) return;
   const t0 = performance.now();
-  try { await fetch(PHONE + "/__cp/inject.js?ping=" + Date.now(), { mode: "no-cors", cache: "no-store" }); PING = Math.round(performance.now() - t0); info(); } catch (e) {}
+  try { await fetch(baseOf(cur) + "/__cp/inject.js?ping=" + Date.now(), { mode: "no-cors", cache: "no-store" }); PING = Math.round(performance.now() - t0); info(); } catch (e) {}
 }, 5000);
 function info() {
   if (!cur) { $("info").textContent = ""; return; }
@@ -1166,13 +1179,16 @@ const ACT = {
     $("f-gpsoff").onclick = async () => { try { const r = await api(cur.id + "/gps", { method: "POST", json: { off: true } }); toast(srv(r.msg)); } catch (e) { toast(e.message, 1); } };
   },
   async clone() {
-    ask({ title: L("🧬 Clone tab — chạy 2 bản cùng lúc", "🧬 Clone tab — run 2 copies at once"),
-      desc: L("Tạo bản thứ 2 của app (VD Roblox chính thức) trong <b>hồ sơ Công việc</b> của Android — đăng nhập acc khác, chạy song song với bản chính. Mỗi máy 1 bản clone cho mỗi app. Treo 2 tab Roblox nên thuê từ 8GB · 6 nhân.", "Make a 2nd copy of an app (e.g. official Roblox) in Android's <b>Work profile</b> — sign in with another account and run it side by side. One clone per app per phone. For 2 Roblox tabs, 8GB · 6 cores is recommended."),
+    ask({ title: L("🧬 Clone tab — chạy nhiều bản cùng lúc", "🧬 Clone tab — run several copies at once"),
+      desc: L("Tạo thêm bản của app (VD Roblox chính thức) để đăng nhập acc khác, chạy song song với bản chính. <b>Ô số</b>: muốn bao nhiêu bản clone thì nhập vào — chỉ cần 1 bản thì để trống, bấm Clone. Mỗi bản Roblox cần thêm ~2GB RAM · 2 nhân (2 bản: 8GB · 6 nhân).", "Make extra copies of an app (e.g. official Roblox) to sign in with other accounts side by side. <b>Number box</b>: type how many clones you want — leave it empty for just 1, then tap Clone. Each Roblox copy needs ~2GB RAM · 2 cores more (2 copies: 8GB · 6 cores)."),
       body: '<div class="apps" id="clonelist"><div class="spin" style="margin:16px auto"></div></div>', noOk: true });
     try {
-      const [{ apps }, c] = await Promise.all([api(cur.id + "/apps"), api(cur.id + "/clone")]); const has = new Set(c.cloned || []);
-      $("clonelist").innerHTML = apps.length ? apps.map(p => `<div class="app"><span title="${esc(p)}">${has.has(p) ? "🧬 " : ""}${esc(p)}${has.has(p) ? ` <small style="color:var(--ok)">✓ ${L("đã clone", "cloned")}</small>` : ""}</span>${has.has(p)
-          ? `<button class="btn sm red" data-unclone="${esc(p)}">${L("Bỏ bản clone", "Remove clone")}</button>` : `<button class="btn sm" data-clone="${esc(p)}">${L("Clone", "Clone")}</button>`}</div>`).join("")
+      const [{ apps }, c] = await Promise.all([api(cur.id + "/apps"), api(cur.id + "/clone")]);
+      const cnt = c.counts || Object.fromEntries((c.cloned || []).map(p => [p, 1])), mx = c.max || 4;
+      $("clonelist").innerHTML = apps.length ? apps.map(p => { const k = cnt[p] || 0;
+        return `<div class="app"><span title="${esc(p)}">${k ? "🧬 " : ""}${esc(p)}${k ? ` <small style="color:var(--ok)">✓ ${k} ${L("bản clone", k > 1 ? "clones" : "clone")}</small>` : ""}</span>
+          <input class="in clonen" type="number" min="1" max="${mx}" inputmode="numeric" placeholder="${k ? k + 1 : 1}" title="${L("Số bản clone (để trống = 1)", "Number of clones (empty = 1)")}" data-clonen="${esc(p)}" style="width:62px;padding:6px 8px;text-align:center">
+          <button class="btn sm" data-clone="${esc(p)}">${k ? L("Thêm", "More") : "Clone"}</button>${k ? `<button class="btn sm red" data-unclone="${esc(p)}">${L("Bỏ clone", "Remove")}</button>` : ""}</div>`; }).join("")
         : L("<p>Chưa có app nào. Cài app (VD Roblox từ CH Play) trước, rồi quay lại đây để clone.</p>", "<p>No apps yet. Install an app first (e.g. Roblox from Play Store), then come back to clone it.</p>");
     } catch (e) { $("clonelist").innerHTML = `<p style="color:var(--bad)">${esc(e.message)}</p>`; }
   },
@@ -1256,8 +1272,15 @@ const ACT = {
 };
 document.addEventListener("click", async e => {
   const cl = e.target.closest("[data-clone]"), ucl = e.target.closest("[data-unclone]");
-  if (cl) { cl.disabled = true; try { const j = await api(cur.id + "/clone", { method: "POST", json: { pkg: cl.dataset.clone } }); const item = trayItem("Clone " + cl.dataset.clone, 0); const ok = await pollJob(j.job, item); if (ok) { cl.textContent = "✓"; try { const r = await api("job?id=" + j.job); toast(srv(r.msg)); } catch (er) {} } else cl.disabled = false; } catch (er) { toast(er.message, 1); cl.disabled = false; } return; }
-  if (ucl) { if (!confirm(L("Bỏ bản clone? Dữ liệu của bản clone (acc đăng nhập trong đó) sẽ bị xoá.", "Remove the clone? Its data (the account signed in there) will be deleted."))) return; try { await api(cur.id + "/clone", { method: "POST", json: { pkg: ucl.dataset.unclone, remove: true } }); toast(L("Đã bỏ bản clone.", "Clone removed.")); ACT.clone(); } catch (er) { toast(er.message, 1); } return; }
+  if (cl) {
+    const inp = [...document.querySelectorAll("[data-clonen]")].find(x => x.dataset.clonen === cl.dataset.clone);
+    const has = parseInt(inp && inp.placeholder, 10) - 1 || 0, typed = parseInt(inp && inp.value, 10);
+    const n = Math.max(1, Math.min(+(inp && inp.max) || 4, typed > 0 ? typed : has + 1));    // để trống: máy chưa clone → 1 bản, đã có → thêm 1 bản
+    cl.disabled = true;
+    try { const j = await api(cur.id + "/clone", { method: "POST", json: { pkg: cl.dataset.clone, n } }); const item = trayItem("Clone " + cl.dataset.clone + " ×" + n, 0); const ok = await pollJob(j.job, item);
+      if (ok) { try { const r = await api("job?id=" + j.job); toast(srv(r.msg)); } catch (er) {} ACT.clone(); } else cl.disabled = false; }
+    catch (er) { toast(er.message, 1); cl.disabled = false; } return; }
+  if (ucl) { if (!confirm(L("Bỏ TẤT CẢ bản clone của app này? Dữ liệu trong các bản clone (acc đăng nhập trong đó) sẽ bị xoá.", "Remove ALL clones of this app? Their data (accounts signed in there) will be deleted."))) return; try { await api(cur.id + "/clone", { method: "POST", json: { pkg: ucl.dataset.unclone, remove: true } }); toast(L("Đã bỏ bản clone.", "Clone removed.")); ACT.clone(); } catch (er) { toast(er.message, 1); } return; }
   const st = e.target.closest("[data-store]"), pl = e.target.closest("[data-play]");
   if (pl) { try { await api(cur.id + "/play", { method: "POST", json: { pkg: pl.dataset.play } }); toast(L("Đã mở CH Play trong máy — bấm Cài đặt trên màn hình máy.", "Opened Play Store on the phone — tap Install there.")); } catch (er) { toast(er.message, 1); } return; }
   if (st) { st.disabled = true; try { const j = await api(cur.id + "/store", { method: "POST", json: { name: st.dataset.store } }); const item = trayItem(L("Cài ", "Install ") + st.dataset.store, 0); if (await pollJob(j.job, item)) st.textContent = "✓"; else st.disabled = false; } catch (er) { toast(er.message, 1); st.disabled = false; } return; }

@@ -4301,7 +4301,7 @@ function nodeAlerts(nodes) {
     if (!n.enabled) continue;
     const age = nAge(n), m = n.metrics || {};
     if (age > 3) { out.push(["r", `🔴 <b>${esc(n.name)}</b> mất kết nối ${Math.round(age)} phút — khách không thuê được máy mới trên server này.`]); continue; }
-    const pr = +n.alloc_ram / +n.ram_total * 100 || 0, pc = +n.alloc_cpu / +n.cpu_total * 100 || 0, top = Math.max(pr, pc);
+    const mm = n.metrics || {}, pr = +n.alloc_ram / +n.ram_total * 100 || 0, pc = mm.cpu_over ? (mm.cpu_avg5 || 0) : (+n.alloc_cpu / +n.cpu_total * 100 || 0), top = Math.max(pr, pc);
     if (+n.alloc_ram >= +n.cap_ram - 1 || +n.alloc_cpu >= +n.cap_cpu - 1)
       out.push(["r", `🚨 <b>${esc(n.name)}</b> đã đạt ${n.limit_pct || 85}% (RAM ${Math.round(pr)}%, CPU ${Math.round(pc)}%) — khách đang thấy <b>Hết hàng</b>. Thêm server hoặc chờ máy hết hạn.`]);
     else if (top >= 75) out.push(["y", `⚠️ <b>${esc(n.name)}</b> sắp đầy: RAM ${Math.round(pr)}%, CPU ${Math.round(pc)}% (ngưỡng ${n.limit_pct || 85}%).`]);
@@ -4347,9 +4347,10 @@ function renderNodes() {
     const d = m.disk_data;
     return `<div class="node${full ? " full" : ""}${off ? " off" : ""}">
       <div class="nh"><b>${esc(n.name)}</b><span class="hint">${esc(n.id)}</span>
-        <span class="pill ${off ? "bad" : full ? "bad" : "ok"}">${off ? "Mất kết nối " + Math.round(age) + " phút" : full ? "Đầy " + lim + "%" : "Đang chạy"}</span></div>
+        <span class="pill ${off ? "bad" : full ? "bad" : "ok"}">${off ? "Mất kết nối " + Math.round(age) + " phút" : full ? (m.cpu_busy ? "CPU nóng " + Math.round(m.cpu_avg5) + "%" : "Đầy") : "Đang chạy"}</span></div>
       ${nRow("CPU đang dùng thật", (m.cpu_pct ?? "?") + "%", m.cpu_pct)}
-      ${nRow("CPU đã cấp cho khách", `${+n.alloc_cpu}/${+n.cpu_total} luồng`, +n.alloc_cpu / +n.cpu_total * 100, lim)}
+      ${m.cpu_over ? nRow("CPU thật TB 5 phút (ngừng nhận khi ≥ " + (m.cpu_busy_pct || 85) + "%)", (m.cpu_avg5 ?? "?") + "%", m.cpu_avg5, m.cpu_busy_pct || 85) : ""}
+      ${nRow(m.cpu_over ? `CPU đã cấp (dùng chung ×${m.cpu_over})` : "CPU đã cấp cho khách", m.cpu_over ? `${+n.alloc_cpu}/${Math.round(+n.cpu_total * m.cpu_over)} nhân ảo` : `${+n.alloc_cpu}/${+n.cpu_total} luồng`, +n.alloc_cpu / (+n.cpu_total * (m.cpu_over || 1)) * 100, m.cpu_over ? 100 : lim)}
       ${nRow("RAM đang dùng thật", `${m.ram_used ?? "?"}/${+n.ram_total} GB`, (m.ram_used || 0) / +n.ram_total * 100)}
       ${nRow("RAM đã cấp cho khách", `${+n.alloc_ram}/${+n.ram_total} GB`, +n.alloc_ram / +n.ram_total * 100, lim)}
       ${g}
@@ -4706,11 +4707,22 @@ document.addEventListener("click", e => { const b = e.target.closest("[data-cpcu
 // ---- Admin: cài APK vào nhiều máy khách cùng lúc (qua cpapi trên máy chủ) ----
 const CPAPI = "https://phone.blueroblox.shop/cpapi";
 let apkSrc = "file", apkTgt = "all", apkBusy = false;
-async function cpapiCall(path, { method = "GET", json, body, headers = {} } = {}) {
+/* NHIỀU SERVER: mỗi máy nằm ở 1 server (phone.…, phone2.…). Server lấy từ link của máy / bảng cloud_nodes. */
+const CP_MAIN = "https://phone.blueroblox.shop";
+function cpHost(row) { try { const u = new URL(row && row.stream_url || ""); if (u.protocol === "https:" && /(^|\.)blueroblox\.shop$/.test(u.hostname)) return u.origin; } catch (e) {} return CP_MAIN; }
+async function cpNodeHosts() {               // admin: danh sách server đang chạy → { tên server: link }
+  const { data } = await sb.from("cloud_nodes").select("id,metrics,updated_at,enabled");
+  const out = {};
+  for (const n of data || []) { if (n.enabled === false || Date.now() - Date.parse(n.updated_at) > 5 * 60000) continue;
+    const b = n.metrics && n.metrics.base; out[n.id] = /^https:\/\/[\w.-]+\.blueroblox\.shop$/.test(b || "") ? b : CP_MAIN; }
+  if (!Object.keys(out).length) out.main = CP_MAIN;
+  return out;
+}
+async function cpapiCall(path, { method = "GET", json, body, headers = {}, base } = {}) {
   const tk = session && session.access_token; if (!tk) throw new Error("Phiên đăng nhập hết hạn, tải lại trang.");
   const h = { Authorization: "Bearer " + tk, ...headers }; if (json) h["Content-Type"] = "application/json";
   let r;
-  try { r = await fetch(CPAPI + "/" + path, { method, headers: h, body: json ? JSON.stringify(json) : body }); }
+  try { r = await fetch((base ? base + "/cpapi" : CPAPI) + "/" + path, { method, headers: h, body: json ? JSON.stringify(json) : body }); }
   catch (e) { throw new Error("Không kết nối được máy chủ điện thoại (server tắt hoặc chưa cập nhật cpapi.py)."); }
   let j = {}; try { j = await r.json(); } catch (e) {}
   if (!r.ok) { const err = new Error(j.error || (r.status === 404 ? "Máy chủ chưa có chức năng này — chạy: cloudphone update" : "Lỗi " + r.status)); err.status = r.status; err.data = j; throw err; }
@@ -4726,7 +4738,9 @@ function openApkDlg(fromSel) {
   show("apkdlg"); apkLoadPre();
 }
 async function apkLoadPre() {
-  try { const { files } = await cpapiCall("admin/preset");
+  try { const hs = [...new Set(Object.values(await cpNodeHosts()))], all = new Map();
+    for (const h of hs) { try { (await cpapiCall("admin/preset", { base: h })).files.forEach(f => all.set(f.name, f)); } catch (e) {} }
+    const files = [...all.values()];
     $("apk-precount").textContent = files.length ? `(${files.length})` : "(trống)";
     $("apk-pre").innerHTML = files.length ? files.map(f => `<li><span title="${esc(f.name)}">📦 ${esc(f.name)}</span><small class="hint">${(f.size / 1048576).toFixed(1)}MB</small><button class="btn danger sm" type="button" data-apkdel="${esc(f.name)}">Bỏ</button></li>`).join("")
       : '<li class="hint">Chưa có app nào. Tick “Cài sẵn cho mọi máy khách tạo sau này” khi cài để thêm.</li>';
@@ -4743,12 +4757,12 @@ $("apk-filebox").addEventListener("dragleave", () => $("apk-filebox").classList.
 $("apk-filebox").addEventListener("drop", e => { e.preventDefault(); if (e.dataTransfer.files[0]) { const dt = new DataTransfer(); dt.items.add(e.dataTransfer.files[0]); $("apk-file").files = dt.files; $("apk-file").onchange(); } });
 document.addEventListener("click", e => { const b = e.target.closest("[data-apkdel]"); if (!b) return;
   if (!confirm("Bỏ “" + b.dataset.apkdel + "” khỏi app cài sẵn? (máy đã cài vẫn giữ app)")) return;
-  cpapiCall("admin/preset-del", { method: "POST", json: { name: b.dataset.apkdel } }).then(apkLoadPre).catch(er => toast(er.message, 1)); });
+  cpNodeHosts().then(n => Promise.allSettled([...new Set(Object.values(n))].map(h => cpapiCall("admin/preset-del", { method: "POST", json: { name: b.dataset.apkdel }, base: h })))).then(apkLoadPre).catch(er => toast(er.message, 1)); });
 function apkProg(p, msg) { show("apk-prog"); $("apk-bar").style.width = Math.round(Math.max(0, Math.min(1, p)) * 100) + "%"; $("apk-msg").textContent = msg; }
-async function apkPoll(id, base, span, onStep) {
+async function apkPoll(id, base, span, onStep, host) {
   for (;;) {
     await new Promise(r => setTimeout(r, 1200));
-    const j = await cpapiCall("job?id=" + encodeURIComponent(id));
+    const j = await cpapiCall("job?id=" + encodeURIComponent(id), { base: host });
     if (onStep) onStep(j);
     if (j.total) apkProg(base + span * (j.done || 0) / j.total, j.msg); else apkProg(base + span * .3, j.msg);
     if (j.state === "done") return j;
@@ -4759,40 +4773,51 @@ $("apk-go").onclick = async () => {
   if (apkBusy) return; $("apk-err").textContent = ""; $("apk-fails").innerHTML = "";
   const ids = apkTgt === "sel" ? [...cpaSel] : [];
   if (apkTgt === "sel" && !ids.length) return $("apk-err").textContent = "Chưa chọn máy nào trong bảng.";
-  let fileId = null; const keep = $("apk-keep").checked;
+  const keep = $("apk-keep").checked;
   apkBusy = true; $("apk-go").disabled = true; $("apk-go").textContent = "Đang làm…";
   try {
+    // chọn server cần cài: máy đã chọn nằm ở server nào; "tất cả" → mọi server đang chạy
+    const nodes = await cpNodeHosts();
+    let hosts = [...new Set(Object.values(nodes))];
+    if (apkTgt === "sel") hosts = [...new Set((CPA_ROWS || []).filter(r => cpaSel.has(r.id)).map(r => r.node && nodes[r.node] || cpHost(r)))];
     if (apkSrc === "file") {
       const f = $("apk-file").files[0];
       if (!f) throw new Error("Chưa chọn file.");
       if (!/\.(apk|apks|apkm|xapk)$/i.test(f.name)) throw new Error("Chỉ nhận file .apk / .apks / .apkm / .xapk");
       if (f.size > 4 * 1073741824) throw new Error("File lớn hơn 4GB.");
-      const id = (crypto.randomUUID ? crypto.randomUUID().replace(/-/g, "") : Math.random().toString(36).slice(2) + Date.now().toString(36)).slice(0, 24).toLowerCase();
-      const CH = 8 * 1048576; let off = 0;
-      while (off < f.size) {
-        let j, tries = 0;
-        for (;;) {
-          try { j = await cpapiCall(`admin/upload?id=${id}&name=${encodeURIComponent(f.name)}&total=${f.size}&off=${off}`, { method: "POST", body: f.slice(off, off + CH), headers: { "Content-Type": "application/octet-stream" } }); break; }
-          catch (e) { if (e.status === 409 && e.data && e.data.size != null) { j = { size: e.data.size }; break; }
-            if (e.status && e.status < 500) throw e; if (++tries > 5) throw new Error("Mạng chập chờn, tải lên thất bại."); await new Promise(r => setTimeout(r, 1500 * tries)); }
+    } else if (!/^https?:\/\/\S+$/.test($("apk-url").value.trim())) throw new Error("Dán link bắt đầu bằng http:// hoặc https://");
+    const msgs = [], fails = [], span = 1 / hosts.length;
+    for (let k = 0; k < hosts.length; k++) {
+      const host = hosts[k], b0 = k * span, tag = hosts.length > 1 ? ` [${host.replace(/^https:\/\//, "").split(".")[0]}]` : "";
+      let fileId = null;
+      if (apkSrc === "file") {
+        const f = $("apk-file").files[0];
+        const id = (crypto.randomUUID ? crypto.randomUUID().replace(/-/g, "") : Math.random().toString(36).slice(2) + Date.now().toString(36)).slice(0, 24).toLowerCase();
+        const CH = 8 * 1048576; let off = 0;
+        while (off < f.size) {
+          let j, tries = 0;
+          for (;;) {
+            try { j = await cpapiCall(`admin/upload?id=${id}&name=${encodeURIComponent(f.name)}&total=${f.size}&off=${off}`, { method: "POST", body: f.slice(off, off + CH), headers: { "Content-Type": "application/octet-stream" }, base: host }); break; }
+            catch (e) { if (e.status === 409 && e.data && e.data.size != null) { j = { size: e.data.size }; break; }
+              if (e.status && e.status < 500) throw e; if (++tries > 5) throw new Error("Mạng chập chờn, tải lên thất bại."); await new Promise(r => setTimeout(r, 1500 * tries)); }
+          }
+          off = j.size; apkProg(b0 + span * off / f.size * .5, `Đang tải lên máy chủ${tag} ${Math.round(off / f.size * 100)}%`);
+          if (j.file) fileId = j.file;
         }
-        off = j.size; apkProg(off / f.size * .5, `Đang tải lên máy chủ ${Math.round(off / f.size * 100)}%`);
-        if (j.file) fileId = j.file;
+      } else {
+        apkProg(b0 + span * .05, "Máy chủ" + tag + " đang tải file về…");
+        const { job } = await cpapiCall("admin/fromurl", { method: "POST", json: { url: $("apk-url").value.trim() }, base: host });
+        const d = await apkPoll(job, b0, span * .5, null, host); fileId = d.file;
       }
-    } else {
-      const url = $("apk-url").value.trim();
-      if (!/^https?:\/\/\S+$/.test(url)) throw new Error("Dán link bắt đầu bằng http:// hoặc https://");
-      apkProg(.05, "Máy chủ đang tải file về…");
-      const { job } = await cpapiCall("admin/fromurl", { method: "POST", json: { url } });
-      const d = await apkPoll(job, 0, .5); fileId = d.file;
+      if (!fileId) throw new Error("Tải lên chưa xong, thử lại.");
+      apkProg(b0 + span * .5, "Bắt đầu cài" + tag + "…");
+      const { job } = await cpapiCall("admin/install", { method: "POST", json: { file: fileId, ids, all: apkTgt === "all", keep }, base: host });
+      const r = await apkPoll(job, b0 + span * .5, span * .5, null, host);
+      msgs.push(r.msg + tag); fails.push(...(r.fails || []));
     }
-    if (!fileId) throw new Error("Tải lên chưa xong, thử lại.");
-    apkProg(.5, "Bắt đầu cài…");
-    const { job } = await cpapiCall("admin/install", { method: "POST", json: { file: fileId, ids, all: apkTgt === "all", keep } });
-    const r = await apkPoll(job, .5, .5);
-    apkProg(1, "✅ " + r.msg);
-    $("apk-fails").innerHTML = (r.fails || []).map(x => `<li>${esc(x)}</li>`).join("");
-    toast(r.msg); if (keep) apkLoadPre();
+    apkProg(1, "✅ " + msgs.join(" · "));
+    $("apk-fails").innerHTML = fails.map(x => `<li>${esc(x)}</li>`).join("");
+    toast(msgs.join(" · ")); if (keep) apkLoadPre();
   } catch (e) { $("apk-err").textContent = e.message || "Có lỗi."; }
   apkBusy = false; $("apk-go").disabled = false; $("apk-go").textContent = "Cài ngay";
 };
@@ -5091,13 +5116,13 @@ $("fr-off") && ($("fr-off").onclick = () => busy($("fr-off"), async () => {
 
 
 /* ========= ROOT MÁY (Magisk) — khách bấm ở danh sách máy, admin root tất cả ========= */
-async function cpRunJob(path, label) {
-  const j = await cpapiCall(path, { method: "POST", json: {} });
+async function cpRunJob(path, label, base) {
+  const j = await cpapiCall(path, { method: "POST", json: {}, base });
   toast(label + "… " + L("(có thể mất 1–2 phút)", "(may take 1–2 minutes)"));
   const t0 = Date.now();
   while (Date.now() - t0 < 2 * 3600 * 1000) {
     await new Promise(r => setTimeout(r, 2500));
-    let s; try { s = await cpapiCall("job?id=" + encodeURIComponent(j.job)); } catch (e) { if (e.status === 404) throw new Error(L("Mất theo dõi (server vừa khởi động lại) — thử lại.", "Lost track — try again.")); continue; }
+    let s; try { s = await cpapiCall("job?id=" + encodeURIComponent(j.job), { base }); } catch (e) { if (e.status === 404) throw new Error(L("Mất theo dõi (server vừa khởi động lại) — thử lại.", "Lost track — try again.")); continue; }
     if (s.state === "done") return s.msg;
     if (s.state === "error") throw new Error(s.msg);
   }
@@ -5106,11 +5131,14 @@ async function cpRunJob(path, label) {
 document.addEventListener("click", e => {
   const b = e.target.closest("[data-cproot]"); if (!b) return;
   if (!confirm(L("Root máy này?\nMáy chưa root sẽ khởi động lại khoảng 1–2 phút — app và tài khoản vẫn giữ nguyên.", "Root this phone?\nIf it isn't rooted yet it restarts for 1–2 minutes — apps and accounts are kept."))) return;
-  busy(b, async () => { try { toast(await cpRunJob(b.dataset.cproot + "/root", L("Đang root máy", "Rooting")), 0); } catch (err) { toast(err.message, 1); } });
+  const row = (myCloud || []).concat(CPA_ROWS || []).find(x => x.id === b.dataset.cproot);
+  busy(b, async () => { try { toast(await cpRunJob(b.dataset.cproot + "/root", L("Đang root máy", "Rooting"), cpHost(row)), 0); } catch (err) { toast(err.message, 1); } });
 });
 $("cpa-rootall") && ($("cpa-rootall").onclick = () => {
   if (!confirm("Root TẤT CẢ máy chưa root?\nMỗi máy chưa root sẽ khởi động lại ~1–2 phút (app, tài khoản giữ nguyên). Máy đã root chỉ được kiểm tra lại.")) return;
-  busy($("cpa-rootall"), async () => { try { toast(await cpRunJob("admin/rootall", "Đang root các máy"), 0); } catch (err) { toast(err.message, 1); } });
+  busy($("cpa-rootall"), async () => { try { const hs = [...new Set(Object.values(await cpNodeHosts()))], out = [];
+    for (const h of hs) out.push((hs.length > 1 ? h.replace(/^https:\/\//, "").split(".")[0] + ": " : "") + await cpRunJob("admin/rootall", "Đang root các máy", h));
+    toast(out.join(" · "), 0); } catch (err) { toast(err.message, 1); } });
 });
 
 </script>

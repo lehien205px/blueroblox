@@ -1510,6 +1510,7 @@ window.BR_CONFIG = {
         <label class="full">Phiên bản Android đang bán (cách nhau dấu phẩy, VD 12,10 — bản 9 / 10 dựng bằng android-versions.sh build)<input id="cpa-andv" maxlength="40" placeholder="12,10,9,11,13,14"></label>
         <label>FPS tối thiểu<input id="cpa-minfps" type="number" min="1" max="240"></label>
         <label>FPS tối đa<input id="cpa-maxfps" type="number" min="1" max="240"></label>
+        <label>👤 Số máy tối đa mỗi tài khoản (cả miễn phí + trả phí · 0 = không giới hạn · admin không bị giới hạn)<input id="cpa-maxuser" type="number" min="0" step="1" value="1"></label>
         <label class="full">📝 Ghi chú trong bảng thuê máy — tiếng Việt (khung bên phải, trên nút Thanh toán · để trống = câu mặc định)<textarea id="cpa-onote" rows="3" maxlength="1000" placeholder="VD: Mỗi máy là một điện thoại Android mới tinh… Hết hạn máy tạm dừng; không gia hạn trong 30 phút thì máy và dữ liệu bị xoá."></textarea></label>
         <label class="full">📝 Ghi chú — tiếng Anh (khách chọn English sẽ thấy · để trống = câu mặc định)<textarea id="cpa-onote-en" rows="3" maxlength="1000" placeholder="E.g. Every phone is a brand-new Android device…"></textarea></label>
         <div class="acts full"><button class="btn" type="button" id="cpa-save">Lưu tất cả</button><span class="hint" id="cpa-msg"></span></div>
@@ -3817,6 +3818,7 @@ const CP_CARD_DEF = { name: "Điện thoại đám mây (Cloud Phone)", feats: "
 let CPpricing = null, cpSel = { ram: 2, cpu: 2, days: 7, res: "720x1280", fps: 30, qty: 1 }, myCloud = [], cpPollT = null;
 Object.assign(ERR, { BAD_RAM: "RAM nằm ngoài giới hạn cho phép.", BAD_CPU: "Số nhân CPU nằm ngoài giới hạn cho phép.", BAD_DAYS: "Số ngày nằm ngoài giới hạn cho phép.",
   BAD_RES: "Độ phân giải không hợp lệ (dạng 720x1280).", BAD_FPS: "FPS nằm ngoài giới hạn cho phép.", BAD_QTY: "Số lượng không hợp lệ.", PHONE_LOCKED: "Máy đang bị khoá, không gia hạn được. Liên hệ hỗ trợ.", BAD_DISCOUNT: "Chiết khấu phải từ 0 đến 90%.", NOT_ADMIN: "Chỉ admin mới làm được việc này.", MAINTENANCE: "Hệ thống đang bảo trì, vui lòng quay lại sau.",
+  MAX_PER_USER: "Mỗi tài khoản chỉ được thuê tối đa số máy cho phép — bạn đã đủ máy. Gia hạn máy đang có hoặc xoá máy cũ để thuê máy khác.",
   FREE_OFF: "Ưu đãi miễn phí đã kết thúc.", FREE_LIMIT: "Máy miễn phí vượt cấu hình tối đa cho phép.", FREE_USED: "Mỗi tài khoản chỉ được dùng thử 1 máy miễn phí — bạn đã nhận rồi.", FREE_ONE: "Máy miễn phí chỉ nhận 1 máy mỗi lần.", FREE_NO_RENEW: "Máy miễn phí không gia hạn được — hãy thuê máy mới.",
   OUT_OF_CAPACITY: "Máy chủ đã hết chỗ cho cấu hình này. Chọn cấu hình nhỏ hơn hoặc quay lại sau.", SERVER_OFFLINE: "Máy chủ điện thoại đang tạm ngưng, vui lòng quay lại sau.", PHONE_GONE: "Máy đã bị xoá vì hết hạn quá 30 phút — hãy thuê máy mới.", NO_PHONE: "Không tìm thấy máy." });
 
@@ -3873,6 +3875,7 @@ function cpCheck() {
   if (!(cpSel.fps >= p.min_fps && cpSel.fps <= p.max_fps)) return `FPS phải từ ${p.min_fps} đến ${p.max_fps}.`;
   if (cpSel.cpu < 4 && cpSel.fps > 60) return L("Máy dưới 4 nhân chỉ chọn tối đa 60 FPS — treo game nên để 30 FPS cho mượt, hoặc chọn từ 4 nhân trở lên.", "Under 4 cores the limit is 60 FPS (30 FPS is smoothest for farming), or pick 4+ cores.");
   if (!(cpSel.qty >= 1 && cpSel.qty <= 20)) return "Số lượng máy phải từ 1 đến 20.";
+  if (!isAdmin() && window.__cpLeft != null && cpSel.qty > window.__cpLeft) return L(`Tài khoản của bạn chỉ còn được thuê thêm ${window.__cpLeft} máy.`, `Your account can only rent ${window.__cpLeft} more phone(s).`);
   if (p.stock != null && cpSel.qty > +p.stock && !isAdmin()) return +p.stock <= 0 ? L("Đã hết hàng.", "Sold out.") : L(`Chỉ còn ${p.stock} máy — chọn số lượng nhỏ hơn.`, `Only ${p.stock} left — choose a smaller quantity.`);
   const s = CPstatus;
   if (s && !isAdmin() && (cpSel.ram * cpSel.qty > +s.free_ram || cpSel.cpu * cpSel.qty > +s.free_cpu))
@@ -3979,6 +3982,18 @@ async function openCpOrder(wantFree) {
   CPpricing = null; await Promise.all([cpLoadPricing(), cpLoadStatus()]);
   const why = cpBlocked(); if (why) { toast(why, 1); try { renderGrid(); } catch (e) {} return; }
   const p = CPpricing;
+  // GIỚI HẠN SỐ MÁY / TÀI KHOẢN — chặn ngay trên web (SQL cũng chặn lại lần nữa)
+  let cpLeft = 20;
+  if (!isAdmin() && +p.max_per_user > 0) {
+    let have = 0;
+    try { const { count } = await sb.from("cloud_phones").select("id", { count: "exact", head: true }).eq("user_id", profile.id).in("status", ["pending", "creating", "active", "expired", "cancelling"]); have = count || 0; } catch (e) {}
+    cpLeft = +p.max_per_user - have;
+    if (cpLeft <= 0) {
+      toast(L(`Mỗi tài khoản chỉ được thuê ${p.max_per_user} máy — bạn đã có ${have} máy. Gia hạn máy đang có hoặc xoá máy cũ để thuê máy khác.`,
+              `Each account can rent up to ${p.max_per_user} phone(s) — you already have ${have}. Renew it or delete it to rent another.`), 1);
+      try { openCloud(); } catch (e) {} return;
+    }
+  }
   try { const nt = $("cp-note"); if (nt) { if (nt.dataset.def == null) nt.dataset.def = nt.innerHTML;
     const own = LANG === "en" ? (p.order_note_en || "") : (p.order_note || "");
     if (own.trim()) nt.innerHTML = esc(own.trim()).replace(/\n/g, "<br>");
@@ -3990,6 +4005,8 @@ async function openCpOrder(wantFree) {
   cpChips("cp-days", CP_DAYS.filter(v => v >= p.min_days && v <= p.max_days), "days", " ngày");
   cpChips("cp-fps", CP_FPS.filter(v => v >= p.min_fps && v <= p.max_fps), "fps", " FPS");
   cpChips("cp-qty", CP_QTY, "qty", " máy");
+  { const qf = $("cp-qty").closest(".cpf"); if (qf) qf.hidden = cpLeft <= 1; if (cpLeft <= 1) cpSel.qty = 1;
+    $("cp-qty").querySelectorAll("button").forEach(b => { b.hidden = +b.dataset.v > cpLeft; }); if ($("cp-qty-x")) $("cp-qty-x").max = Math.min(20, cpLeft); window.__cpLeft = cpLeft; }
   cpResChips(); cpAndChips(); cpGuide();
   cpSel.free = false; cpFreeBox(freeLive(p) && wantFree !== false);
   ["cp-ram-x", "cp-cpu-x", "cp-days-x", "cp-fps-x", "cp-qty-x"].forEach(id => { $(id).value = ""; });
@@ -4086,6 +4103,7 @@ async function cpRenew(id) {
 Object.assign(ERR, { BAD_CODE: "Mã không đúng, đã bị huỷ hoặc đã hết hạn.", CODE_USED: "Mã này đã có người dùng rồi.", OWN_PHONE: "Đây là máy của chính bạn.",
   ALREADY_SHARED: "Bạn đã được chia sẻ máy này rồi.", SHARE_LIMIT: "Máy này đã có quá nhiều mã chia sẻ (tối đa 20). Thu hồi bớt rồi tạo lại.",
   PHONE_NOT_ACTIVE: "Máy phải đang chạy mới chia sẻ được.", FPS_TOO_HIGH: "Máy dưới 4 nhân chỉ chọn tối đa 60 FPS.", BAD_ANDROID: "Phiên bản Android này chưa mở bán.", NOT_ALLOWED: "Bạn không có quyền làm việc này." });
+Object.assign(ERR_EN, { MAX_PER_USER: "Your account has reached the maximum number of phones. Renew or delete an existing phone to rent another." });
 Object.assign(ERR_EN, { BAD_CODE: "Wrong, cancelled or expired code.", CODE_USED: "This code has already been used.", OWN_PHONE: "This is your own phone.",
   ALREADY_SHARED: "This phone is already shared with you.", SHARE_LIMIT: "Too many share codes for this phone (max 20). Revoke some first.",
   PHONE_NOT_ACTIVE: "The phone must be running to share it.", FPS_TOO_HIGH: "Phones with under 4 cores are limited to 60 FPS.", BAD_ANDROID: "This Android version isn't available yet.", NOT_ALLOWED: "You are not allowed to do this." });
@@ -4221,6 +4239,7 @@ async function loadCloudAdm() {
   $("cpa-minfps").value = pr.min_fps; $("cpa-maxfps").value = pr.max_fps;
   if ($("cpa-andv")) $("cpa-andv").value = pr.android_versions || "11";
   if ($("cpa-onote")) { $("cpa-onote").value = pr.order_note || ""; $("cpa-onote-en").value = pr.order_note_en || ""; }
+  if ($("cpa-maxuser")) $("cpa-maxuser").value = pr.max_per_user == null ? 1 : pr.max_per_user;
   $("cpa-stock").value = pr.stock == null ? "" : pr.stock;
   $("cpa-stockhint").textContent = pr.stock == null ? "Đang: không giới hạn" : +pr.stock <= 0 ? "Đang HẾT HÀNG" : "Đang còn " + pr.stock + " máy";
   $("cpa-msg").textContent = ""; cpaAnalyze(); frFill(pr);
@@ -4245,6 +4264,8 @@ $("cpa-save") && ($("cpa-save").onclick = () => busy($("cpa-save"), async () => 
     if (/_fps/.test(error.message || "")) return toast("Chưa chạy file SQL cloud-phones-v4.sql trên Supabase.", 1);
     return toast(errMsg(error), 1);
   }
+  if ($("cpa-maxuser")) { const mu = Math.max(0, Math.floor(+$("cpa-maxuser").value || 0)); const { error: em } = await sb.from("cloudphone_pricing").update({ max_per_user: mu }).eq("id", 1);
+    if (em) toast("Giới hạn máy / tài khoản chưa lưu được — chạy file SQL cloud-phones-v18.sql trên Supabase.", 1); }
   if ($("cpa-onote")) { const { error: en } = await sb.from("cloudphone_pricing").update({ order_note: $("cpa-onote").value.trim() || null, order_note_en: $("cpa-onote-en").value.trim() || null }).eq("id", 1);
     if (en && ($("cpa-onote").value.trim() || $("cpa-onote-en").value.trim())) toast("Ghi chú chưa lưu được — chạy file SQL cloud-phones-v16.sql trên Supabase.", 1); }
   toast("Đã lưu. Khách mở form thuê sẽ thấy giá mới ngay."); $("cpa-msg").textContent = "✓ Đã lưu lúc " + new Date().toLocaleTimeString("vi-VN");

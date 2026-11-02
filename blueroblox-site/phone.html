@@ -275,6 +275,7 @@ body.focus .exitfocus{display:block}
   <div class="seg" id="viewseg" role="group" aria-label="Kiểu xem">
     <button id="v-one" class="on" title="Xem 1 máy"><svg class="ic sm" viewBox="0 0 24 24"><rect x="7" y="3" width="10" height="18" rx="2"/></svg><span style="min-width:0;padding:0;color:inherit;font:inherit">1 máy</span></button>
     <button id="v-multi" title="Xem nhiều máy cùng lúc"><svg class="ic sm" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="8" rx="1.5"/><rect x="14" y="3" width="7" height="8" rx="1.5"/><rect x="3" y="13" width="7" height="8" rx="1.5"/><rect x="14" y="13" width="7" height="8" rx="1.5"/></svg><span style="min-width:0;padding:0;color:inherit;font:inherit" id="multin">Nhiều máy</span></button>
+    <button id="v-sync" hidden title="Đồng bộ thao tác: bấm 1 máy, mọi máy làm theo"><svg class="ic sm" viewBox="0 0 24 24"><path d="M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 00-5.7 0l-3 3a4 4 0 005.7 5.7l1-1"/></svg><span style="min-width:0;padding:0;color:inherit;font:inherit" id="syncl">Đồng bộ: Tắt</span></button>
   </div>
   <div class="langsw" id="langsw" role="group" aria-label="Language / Ngôn ngữ"><button type="button" id="lang-vi" title="Tiếng Việt"><span class="fl"><svg viewBox="0 0 30 20" aria-hidden="true"><rect width="30" height="20" fill="#da251d"/><path fill="#ff0" d="M15 4l1.76 5.42h5.7l-4.61 3.35 1.76 5.42L15 14.84l-4.61 3.35 1.76-5.42-4.61-3.35h5.7z"/></svg></span><span class="ln">Tiếng Việt</span><span class="ls">VI</span></button><button type="button" id="lang-en" title="English"><span class="fl"><svg viewBox="0 0 60 30" aria-hidden="true"><clipPath id="ukc"><path d="M0 0v30h60V0z"/></clipPath><clipPath id="ukt"><path d="M30 15h30v15zv15H0zH0V0zV0h30z"/></clipPath><g clip-path="url(#ukc)"><path d="M0 0v30h60V0z" fill="#012169"/><path d="M0 0l60 30m0-30L0 30" stroke="#fff" stroke-width="6"/><path d="M0 0l60 30m0-30L0 30" clip-path="url(#ukt)" stroke="#C8102E" stroke-width="4"/><path d="M30 0v30M0 15h60" stroke="#fff" stroke-width="10"/><path d="M30 0v30M0 15h60" stroke="#C8102E" stroke-width="6"/></g></svg></span><span class="ln">English</span><span class="ls">EN</span></button></div>
   <div class="meta"><span class="spec" id="spec"></span><span id="left"></span></div>
@@ -322,6 +323,9 @@ body.focus .exitfocus{display:block}
       <button class="tb" data-act="upload"><svg class="ic" viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v4h16v-4"/></svg>Tải file / APK</button>
       <button class="tb" data-act="fromurl"><svg class="ic" viewBox="0 0 24 24"><path d="M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 00-5.7 0l-3 3a4 4 0 005.7 5.7l1-1"/></svg>Cài từ link</button>
       <button class="tb" data-act="store"><svg class="ic" viewBox="0 0 24 24"><path d="M4 7h16l-1.5 12a2 2 0 01-2 1.8h-9a2 2 0 01-2-1.8L4 7z"/><path d="M9 10V6a3 3 0 016 0v4"/></svg>Kho ứng dụng</button>
+      <button class="tb" data-act="macro"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5" fill="currentColor"/></svg>Macro</button>
+      <button class="tb" data-act="keymap"><svg class="ic" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M8 14h8"/></svg>Gán phím</button>
+      <button class="tb" data-act="gps"><svg class="ic" viewBox="0 0 24 24"><path d="M12 21s-7-6.1-7-11.5A7 7 0 0119 9.5C19 14.9 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>Vị trí GPS</button>
       <button class="tb" data-act="clone"><svg class="ic" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M4 16V6a2 2 0 012-2h10"/><path d="M14 11v6M11 14h6"/></svg>Clone tab</button>
       <button class="tb" data-act="apps"><svg class="ic" viewBox="0 0 24 24"><rect x="4" y="4" width="6" height="6" rx="1.5"/><rect x="14" y="4" width="6" height="6" rx="1.5"/><rect x="4" y="14" width="6" height="6" rx="1.5"/><rect x="14" y="14" width="6" height="6" rx="1.5"/></svg>Ứng dụng</button>
       <button class="tb" data-act="text"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 10h.01M11 10h.01M15 10h.01M7 14h10"/></svg>Dán chữ</button>
@@ -384,7 +388,7 @@ const EN = {
   "Âm thanh": "Sound", "Tăng âm": "Volume up", "Giảm âm": "Volume down", "Màn hình": "Display", "Chất lượng": "Quality", "FPS & độ nét": "FPS & resolution",
   "Xoay": "Rotate", "Chụp màn": "Screenshot", "Toàn màn": "Full screen", "Tải lại hình": "Reload video", "Tệp & ứng dụng": "Files & apps",
   "Tải file / APK": "Upload file / APK", "Cài từ link": "Install from link", "Ứng dụng": "Apps", "Dán chữ": "Paste text", "Copy từ máy": "Copy from phone",
-  "Mở web": "Open website", "Lỗi Google": "Google sign-in", "Máy": "Phone", "Khởi động lại": "Restart", "Root máy": "Root phone", "Kho ứng dụng": "App store", "Clone tab": "Clone tab", "Điều hướng nhanh": "Quick navigation", "Thoát toàn màn": "Exit full screen",
+  "Mở web": "Open website", "Lỗi Google": "Google sign-in", "Máy": "Phone", "Khởi động lại": "Restart", "Root máy": "Root phone", "Kho ứng dụng": "App store", "Clone tab": "Clone tab", "Gán phím": "Key mapping", "Vị trí GPS": "GPS location", "Đồng bộ: Tắt": "Sync: Off", "Điều hướng nhanh": "Quick navigation", "Thoát toàn màn": "Exit full screen",
   "Thả file vào đây": "Drop files here", "File APK sẽ tự cài · file khác lưu vào thư mục Download": "APK files install automatically · other files go to the Download folder",
   "Đóng": "Close", "Gửi": "Send", "📋 Máy ảo vừa copy": "📋 The cloud phone just copied", "Copy về máy tôi": "Copy to my device", "Ẩn": "Hide",
 };
@@ -599,6 +603,12 @@ class Conn {
     else if (d.t === "clipcap") { this.clip = true; }
     else if (d.t === "clip") { this.h.clip && this.h.clip(d.text || ""); }
     else if (d.t === "pasteKey") { this.h.pasteKey && this.h.pasteKey(); }
+    else if (d.t === "in") { onTileInput(this, d); }
+    else if (d.t === "kmpick") { onKmPick(d); }
+    if (d.t === "ok") setTimeout(() => applyTools(this), 300);     // máy vừa lên hình → bật lại đồng bộ / gán phím
+  }
+  send(cpcmd, extra) {  // gửi lệnh không chờ trả lời (đồng bộ / macro / gán phím)
+    try { if (this.f.contentWindow && !this.legacy) this.f.contentWindow.postMessage({ cpcmd, ...(extra || {}) }, PHONE); } catch (e) {}
   }
   cmd(cpcmd, extra) {   // gửi lệnh vào trình phát hình, chờ trả lời (tối đa 1,5 giây)
     return new Promise(res => {
@@ -995,9 +1005,11 @@ function setView(v, ids, openP) {
   if (multi) { main.stop(); for (const t of tiles.values()) { t.conn.stop(); CONNS.delete(t.conn); } tiles.clear(); buildGrid(); }
   else { for (const t of tiles.values()) { t.conn.stop(); CONNS.delete(t.conn); } tiles.clear(); $("grid").innerHTML = ""; if (cur) openPhone(cur); }
   renderDevMenu();
+  $("v-sync").hidden = !multi; if (!multi && SYNC) setSync(false);
 }
 $("v-one").onclick = () => setView("one");
 $("v-multi").onclick = () => setView("multi");
+$("v-sync").onclick = () => setSync(!SYNC);
 function buildGrid() {
   const list = phones.filter(p => p.status === "active" && p.port && (!gridIds || gridIds.includes(p.id)));
   const g = $("grid"); g.innerHTML = list.length ? "" : L('<div class="gempty">Chưa có máy nào đang chạy.</div>', '<div class="gempty">No running phones.</div>');
@@ -1138,6 +1150,20 @@ const ACT = {
       $("storelist").innerHTML = (files.length ? `<h4 style="margin:4px 0 6px">${L("Có sẵn — cài 1 chạm", "Ready to install — one tap")}</h4>` + files.map(f =>
         `<div class="app"><span title="${esc(f.name)}">📦 ${esc(f.name.replace(/\.(apk|apks|apkm|xapk)$/i, ""))} <small>${(f.size / 1048576).toFixed(0)}MB</small></span><button class="btn sm" data-store="${esc(f.name)}">${L("Cài", "Install")}</button></div>`).join("") : "") + play(inst);
     } catch (e) { $("storelist").innerHTML = `<p style="color:var(--bad)">${esc(e.message)}</p>` + play(new Set()); }
+  },
+  sync() { if (!document.body.classList.contains("multi")) { toast(L("Bấm \"Nhiều máy\" ở trên cùng, rồi bật \"Đồng bộ\" — bấm 1 máy, mọi máy làm theo.", "Open \"Multi\" view at the top, then turn on \"Sync\".")); return; } setSync(!SYNC); },
+  macro() { macroDlg(); },
+  keymap() { kmDlg(); },
+  gps() {
+    const C = [["Hà Nội", "21.028511,105.854164"], ["TP.HCM", "10.776889,106.700806"], ["Đà Nẵng", "16.054407,108.202167"], ["Tokyo", "35.689487,139.691711"], ["Singapore", "1.352083,103.819836"], ["New York", "40.712776,-74.005974"], ["London", "51.507351,-0.127758"]];
+    ask({ title: L("📍 Đổi vị trí GPS", "📍 Set GPS location"), desc: L("Đặt vị trí giả cho máy (Android 12 trở lên). Lấy toạ độ: mở Google Maps → bấm chuột phải vào điểm → bấm dòng số đầu tiên để copy → dán vào đây.", "Set a fake location (Android 12+). Get coordinates: Google Maps → right-click a spot → click the numbers to copy → paste here."),
+      body: `<input class="in" id="f-gps" placeholder="21.028511, 105.854164" style="width:100%"><div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">${C.map(([n, v]) => `<button type="button" class="btn sm gh" data-gpsc="${v}">${n}</button>`).join("")}</div>
+        <button type="button" class="btn sm red" id="f-gpsoff" style="margin-top:10px">${L("Tắt vị trí giả", "Turn off fake location")}</button>`, ok: L("Đặt vị trí", "Set location"),
+      onOk: async () => { const m = /(-?\d+(?:\.\d+)?)\s*[,; ]\s*(-?\d+(?:\.\d+)?)/.exec($("f-gps").value); if (!m) { toast(L("Nhập dạng: vĩ độ, kinh độ", "Format: lat, lng"), 1); return false; }
+        try { const r = await api(cur.id + "/gps", { method: "POST", json: { lat: +m[1], lng: +m[2] } }); toast(srv(r.msg)); store.set("cp_gps_" + cur.id, m[1] + "," + m[2]); } catch (e) { toast(e.message, 1); return false; } } });
+    $("f-gps").value = store.get("cp_gps_" + cur.id) || "";
+    document.querySelectorAll("[data-gpsc]").forEach(b => b.onclick = () => { $("f-gps").value = b.dataset.gpsc; });
+    $("f-gpsoff").onclick = async () => { try { const r = await api(cur.id + "/gps", { method: "POST", json: { off: true } }); toast(srv(r.msg)); } catch (e) { toast(e.message, 1); } };
   },
   async clone() {
     ask({ title: L("🧬 Clone tab — chạy 2 bản cùng lúc", "🧬 Clone tab — run 2 copies at once"),
@@ -1397,6 +1423,99 @@ applyStatic();
   if (store.get("cp_view") === "multi" && phones.filter(x => x.status === "active").length > 1 && !new URLSearchParams(location.search).get("id")) { cur = p; renderHead(); setView("multi"); }
   else openPhone(p);
 })();
+
+/* ===================== ĐỒNG BỘ · MACRO · GÁN PHÍM (giống LDPlayer / Multi) ===================== */
+let SYNC = false, MREC = null, MPLAY = null, KMPICK = null;
+function setSync(on) {
+  SYNC = on; for (const c of CONNS) c.send("sync", { on });
+  $("syncl").textContent = on ? L("Đồng bộ: BẬT", "Sync: ON") : L("Đồng bộ: Tắt", "Sync: Off"); $("v-sync").classList.toggle("on", on);
+  toast(on ? L("🔗 Đã bật đồng bộ — bấm / vuốt trên 1 máy, mọi máy đang mở làm theo.", "🔗 Sync on — tap / swipe one phone, all open phones follow.") : L("Đã tắt đồng bộ.", "Sync off."));
+}
+function kmKey() { return "cp_km_" + (cur && cur.id); }
+function kmLoad() { try { return JSON.parse(store.get(kmKey()) || "{}"); } catch (e) { return {}; } }
+function kmOn() { return store.get(kmKey() + "_on") !== "0"; }
+function applyTools(c) {
+  if (SYNC) c.send("sync", { on: true });
+  if (c === main) { const m = kmLoad(); c.send("km", { map: kmOn() ? m : {} }); if (MREC) c.send("rec", { on: true }); }
+}
+function onTileInput(src, d) {
+  if (SYNC) for (const c of CONNS) if (c !== src && c.ok) c.send("in", { k: d.k, x: d.x, y: d.y, id: d.id || 0 });
+  if (MREC && src === main) MREC.ev.push({ k: d.k, x: +(+d.x).toFixed(4), y: +(+d.y).toFixed(4), t: Date.now() - MREC.t0 });
+}
+function cpBar(html) {
+  let b = $("cpbar"); if (!b) { b = document.createElement("div"); b.id = "cpbar"; b.style.cssText = "position:fixed;left:50%;bottom:76px;transform:translateX(-50%);z-index:80;background:#151b3a;border:1px solid #ffb800;color:#fff;border-radius:14px;padding:10px 14px;display:flex;gap:10px;align-items:center;box-shadow:0 10px 30px rgba(0,0,0,.5);font-weight:600"; document.body.appendChild(b); }
+  if (!html) { b.remove(); return; } b.innerHTML = html;
+}
+// ----- MACRO -----
+function mcKey() { return "cp_macros_" + (cur && cur.id); }
+function mcList() { try { return JSON.parse(store.get(mcKey()) || "[]"); } catch (e) { return []; } }
+function macroDlg() {
+  const list = mcList();
+  ask({ title: L("⏺ Macro — ghi & tự lặp thao tác", "⏺ Macro — record & replay"), desc: L("Bấm <b>Ghi</b>, thao tác trên màn hình máy (bấm, vuốt), rồi bấm <b>Dừng</b>. Sau đó bấm <b>Chạy</b> để máy tự làm lại (có thể lặp mãi). Macro chạy khi trang này đang mở.", "Press <b>Record</b>, tap/swipe on the phone, then <b>Stop</b>. Press <b>Play</b> to replay (can loop forever). Runs while this page is open."),
+    body: `<button type="button" class="btn" id="mc-rec">⏺ ${L("Ghi macro mới", "Record new macro")}</button><div class="apps" style="margin-top:10px">${list.length ? list.map((m, i) => `<div class="app"><span>▶ ${esc(m.name)} <small>${m.ev.length} ${L("thao tác", "actions")} · ${(m.dur / 1000).toFixed(1)}s</small></span>
+      <button class="btn sm" data-mcplay="${i}" data-n="1">${L("Chạy 1 lần", "Play once")}</button><button class="btn sm gh" data-mcplay="${i}" data-n="0">${L("Lặp mãi", "Loop")}</button><button class="btn sm red" data-mcdel="${i}">✕</button></div>`).join("") : `<p>${L("Chưa có macro nào.", "No macros yet.")}</p>`}</div>`, noOk: true });
+  $("mc-rec").onclick = () => { $("dlg").hidden = true; macroRec(); };
+}
+function macroRec() {
+  if (!main.ok) { toast(L("Máy chưa lên hình.", "The phone isn't showing yet."), 1); return; }
+  MREC = { t0: Date.now(), ev: [] }; main.send("rec", { on: true });
+  cpBar(`<span style="color:#ff5d5d">● ${L("Đang ghi macro…", "Recording…")}</span><button class="btn sm" id="mc-stop">${L("Dừng & lưu", "Stop & save")}</button><button class="btn sm gh" id="mc-cancel">${L("Huỷ", "Cancel")}</button>`);
+  $("mc-stop").onclick = () => { const r = MREC; MREC = null; main.send("rec", { on: false }); cpBar(null);
+    if (!r || !r.ev.length) { toast(L("Chưa ghi được thao tác nào.", "Nothing recorded."), 1); return; }
+    const name = (prompt(L("Đặt tên macro:", "Macro name:"), "Macro " + (mcList().length + 1)) || "").trim() || ("Macro " + (mcList().length + 1));
+    const l = mcList(); l.push({ name, ev: r.ev, dur: Math.max(500, Date.now() - r.t0) }); store.set(mcKey(), JSON.stringify(l)); toast(L("Đã lưu macro ", "Saved macro ") + name); };
+  $("mc-cancel").onclick = () => { MREC = null; main.send("rec", { on: false }); cpBar(null); };
+}
+function macroPlay(m, times) {
+  macroStop(); let round = 0; const st = { stop: false, timers: [] }; MPLAY = st;
+  const run = () => {
+    if (st.stop) return; round++;
+    cpBar(`<span>▶ ${esc(m.name)} — ${L("lần", "round")} ${round}${times ? "/" + times : " (∞)"}</span><button class="btn sm red" id="mc-pstop">${L("Dừng", "Stop")}</button>`);
+    $("mc-pstop").onclick = macroStop;
+    for (const e of m.ev) st.timers.push(setTimeout(() => { if (!st.stop) main.send("in", { k: e.k, x: e.x, y: e.y, id: 7 }); }, e.t));
+    st.timers.push(setTimeout(() => { if (st.stop) return; if (!times || round < times) run(); else { macroStop(); toast(L("Macro chạy xong.", "Macro finished.")); } }, m.dur + 600));
+  };
+  run();
+}
+function macroStop() { if (MPLAY) { MPLAY.stop = true; MPLAY.timers.forEach(clearTimeout); main.send("in", { k: "up", x: 0.5, y: 0.5, id: 7 }); MPLAY = null; } cpBar(null); }
+document.addEventListener("click", e => {
+  const p = e.target.closest("[data-mcplay]"), d = e.target.closest("[data-mcdel]");
+  if (p) { const m = mcList()[+p.dataset.mcplay]; if (m) { $("dlg").hidden = true; macroPlay(m, +p.dataset.n); } }
+  if (d) { const l = mcList(); l.splice(+d.dataset.mcdel, 1); store.set(mcKey(), JSON.stringify(l)); macroDlg(); }
+});
+// ----- GÁN PHÍM -----
+function kmName(code) { return code.replace(/^Key/, "").replace(/^Digit/, "").replace(/^Arrow/, "↑→↓←".charAt(["Up", "Right", "Down", "Left"].indexOf(code.slice(5))) || code); }
+function kmCode(txt) {
+  const t = String(txt || "").trim(); if (!t) return null; const u = t.toUpperCase();
+  if (/^[A-Z]$/.test(u)) return "Key" + u; if (/^[0-9]$/.test(u)) return "Digit" + u;
+  const M = { SPACE: "Space", "DẤU CÁCH": "Space", ENTER: "Enter", SHIFT: "ShiftLeft", CTRL: "ControlLeft", ALT: "AltLeft", TAB: "Tab", Q: "KeyQ", UP: "ArrowUp", DOWN: "ArrowDown", LEFT: "ArrowLeft", RIGHT: "ArrowRight", F: "KeyF" };
+  return M[u] || null;
+}
+function kmDlg() {
+  const m = kmLoad(), keys = Object.keys(m).filter(k => k !== "__joy");
+  ask({ title: L("⌨️ Gán phím chơi game", "⌨️ Key mapping"), desc: L("Gán phím máy tính vào 1 điểm trên màn hình máy (VD phím J = nút bắn). Joystick WASD: W/A/S/D điều khiển cần di chuyển. Bấm vào màn hình máy 1 lần trước khi chơi để nhận phím.", "Map a PC key to a spot on the phone (e.g. J = fire). WASD joystick moves the analog stick. Click the phone screen once before playing."),
+    body: `<label class="fsw" style="display:flex;gap:8px;align-items:center;margin-bottom:10px"><input type="checkbox" id="km-on"${kmOn() ? " checked" : ""}> <b>${L("Bật gán phím", "Enable key mapping")}</b></label>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn sm" id="km-add">➕ ${L("Thêm phím bấm", "Add tap key")}</button><button type="button" class="btn sm gh" id="km-joy">🕹️ ${L("Đặt joystick WASD", "Set WASD joystick")}</button><button type="button" class="btn sm red" id="km-clear">${L("Xoá hết", "Clear all")}</button></div>
+      <div class="apps" style="margin-top:10px">${m.__joy ? `<div class="app"><span>🕹️ W A S D → ${L("joystick tại", "joystick at")} ${Math.round(m.__joy.x * 100)}%, ${Math.round(m.__joy.y * 100)}%</span><button class="btn sm red" data-kmdel="__joy">✕</button></div>` : ""}${keys.map(k => `<div class="app"><span>⌨️ ${esc(kmName(k))} → ${Math.round(m[k].x * 100)}%, ${Math.round(m[k].y * 100)}%</span><button class="btn sm red" data-kmdel="${esc(k)}">✕</button></div>`).join("") || (m.__joy ? "" : `<p>${L("Chưa gán phím nào.", "No keys mapped.")}</p>`)}</div>`, noOk: true });
+  $("km-on").onchange = () => { store.set(kmKey() + "_on", $("km-on").checked ? "1" : "0"); applyTools(main); };
+  $("km-add").onclick = () => kmStartPick("tap");
+  $("km-joy").onclick = () => kmStartPick("joy");
+  $("km-clear").onclick = () => { store.set(kmKey(), "{}"); applyTools(main); kmDlg(); };
+}
+function kmStartPick(kind) {
+  if (!main.ok) { toast(L("Máy chưa lên hình.", "The phone isn't showing yet."), 1); return; }
+  $("dlg").hidden = true; KMPICK = kind; main.send("kmedit", { on: true });
+  cpBar(`<span>👆 ${kind === "joy" ? L("Bấm vào GIỮA cần joystick trong game", "Click the CENTER of the in-game joystick") : L("Bấm vào vị trí nút trên màn hình máy", "Click the button's spot on the phone screen")}</span><button class="btn sm gh" id="km-cancel">${L("Huỷ", "Cancel")}</button>`);
+  $("km-cancel").onclick = () => { KMPICK = null; main.send("kmedit", { on: false }); cpBar(null); };
+}
+function onKmPick(d) {
+  if (!KMPICK) return; const kind = KMPICK; KMPICK = null; main.send("kmedit", { on: false }); cpBar(null);
+  const m = kmLoad();
+  if (kind === "joy") { m.__joy = { x: +d.x, y: +d.y, r: 0.09, keys: { KeyW: [0, -1], KeyA: [-1, 0], KeyS: [0, 1], KeyD: [1, 0] } }; }
+  else { const code = kmCode(prompt(L("Nhập phím muốn gán (VD: J, K, 1, Space, Shift):", "Key to map (e.g. J, K, 1, Space, Shift):"), "")); if (!code) { toast(L("Phím không hợp lệ.", "Invalid key."), 1); return; } m[code] = { x: +d.x, y: +d.y }; }
+  store.set(kmKey(), JSON.stringify(m)); store.set(kmKey() + "_on", "1"); applyTools(main); toast(L("Đã gán. Bấm vào màn hình máy 1 lần rồi dùng phím.", "Mapped. Click the phone screen once, then use the key.")); kmDlg();
+}
+document.addEventListener("click", e => { const d = e.target.closest("[data-kmdel]"); if (!d) return; const m = kmLoad(); delete m[d.dataset.kmdel]; store.set(kmKey(), JSON.stringify(m)); applyTools(main); kmDlg(); });
 </script>
 </body>
 </html>

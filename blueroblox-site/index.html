@@ -4347,14 +4347,14 @@ function renderNodes() {
     const d = m.disk_data;
     return `<div class="node${full ? " full" : ""}${off ? " off" : ""}">
       <div class="nh"><b>${esc(n.name)}</b><span class="hint">${esc(n.id)}</span>
-        <span class="pill ${off ? "bad" : full ? "bad" : "ok"}">${off ? "Mất kết nối " + Math.round(age) + " phút" : full ? (m.cpu_busy ? "CPU nóng " + Math.round(m.cpu_avg5) + "%" : m.ram_busy ? "RAM đầy " + Math.round(m.ram_pct) + "%" : "Đầy") : "Đang chạy"}</span></div>
+        <span class="pill ${off ? "bad" : full ? "bad" : "ok"}">${off ? "Mất kết nối " + Math.round(age) + " phút" : full ? (m.cpu_busy ? "CPU nóng " + Math.round(m.cpu_avg5) + "%" : m.ram_busy ? "RAM đầy " + Math.round(m.ram_pct) + "%" : m.disk_busy ? "Ổ cứng sắp đầy" : "Đầy") : "Đang chạy"}</span></div>
       ${nRow("CPU đang dùng thật", (m.cpu_pct ?? "?") + "%", m.cpu_pct)}
       ${m.cpu_over ? nRow("CPU thật TB 5 phút (ngừng nhận khi ≥ " + (m.cpu_busy_pct || 85) + "%)", (m.cpu_avg5 ?? "?") + "%", m.cpu_avg5, m.cpu_busy_pct || 85) : ""}
       ${nRow(m.cpu_over ? `CPU đã cấp (dùng chung ×${m.cpu_over})` : "CPU đã cấp cho khách", m.cpu_over ? `${+n.alloc_cpu}/${Math.round(+n.cpu_total * m.cpu_over)} nhân ảo` : `${+n.alloc_cpu}/${+n.cpu_total} luồng`, +n.alloc_cpu / (+n.cpu_total * (m.cpu_over || 1)) * 100, m.cpu_over ? 100 : lim)}
       ${nRow("RAM đang dùng thật", `${m.ram_used ?? "?"}/${+n.ram_total} GB`, (m.ram_used || 0) / +n.ram_total * 100)}
       ${nRow(m.ram_over ? `RAM đã cấp (dùng chung ×${m.ram_over} · ngừng nhận khi RAM thật ≥ ${m.ram_busy_pct || 85}%)` : "RAM đã cấp cho khách", m.ram_over ? `${+n.alloc_ram}/${Math.round(+n.cap_ram)} GB` : `${+n.alloc_ram}/${+n.ram_total} GB`, m.ram_over ? +n.alloc_ram / Math.max(1, +n.cap_ram) * 100 : +n.alloc_ram / +n.ram_total * 100, m.ram_over ? 100 : lim)}
       ${g}
-      ${d ? nRow("Ổ cứng (dữ liệu máy)", `${d.used}/${d.total} GB`, d.used / d.total * 100, 90) : ""}
+      ${d ? nRow(`Ổ cứng (dùng chung · ngừng nhận khi ≥ ${m.disk_busy_pct || 90}%)`, `${d.used}/${d.total} GB`, d.used / d.total * 100, m.disk_busy_pct || 90) : ""}
       <div class="nf"><span>📱 ${n.phones || 0} máy${m.running != null ? " (" + m.running + " đang chạy)" : ""}</span>
         ${m.cpu_temp ? `<span>🌡️ CPU ${Math.round(m.cpu_temp)}°C</span>` : ""}${m.load ? `<span>Tải ${m.load[0]}</span>` : ""}${m.uptime_h != null ? `<span>Bật ${m.uptime_h >= 48 ? Math.round(m.uptime_h / 24) + " ngày" : m.uptime_h + " giờ"}</span>` : ""}
         <span>Cập nhật ${age < 1 ? "vừa xong" : Math.round(age) + " phút trước"}</span>

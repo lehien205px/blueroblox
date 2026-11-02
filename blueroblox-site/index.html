@@ -1510,6 +1510,8 @@ window.BR_CONFIG = {
         <label class="full">Phiên bản Android đang bán (cách nhau dấu phẩy, VD 12,10 — bản 9 / 10 dựng bằng android-versions.sh build)<input id="cpa-andv" maxlength="40" placeholder="12,10,9,11,13,14"></label>
         <label>FPS tối thiểu<input id="cpa-minfps" type="number" min="1" max="240"></label>
         <label>FPS tối đa<input id="cpa-maxfps" type="number" min="1" max="240"></label>
+        <label class="full">📝 Ghi chú trong bảng thuê máy — tiếng Việt (khung bên phải, trên nút Thanh toán · để trống = câu mặc định)<textarea id="cpa-onote" rows="3" maxlength="1000" placeholder="VD: Mỗi máy là một điện thoại Android mới tinh… Hết hạn máy tạm dừng; không gia hạn trong 30 phút thì máy và dữ liệu bị xoá."></textarea></label>
+        <label class="full">📝 Ghi chú — tiếng Anh (khách chọn English sẽ thấy · để trống = câu mặc định)<textarea id="cpa-onote-en" rows="3" maxlength="1000" placeholder="E.g. Every phone is a brand-new Android device…"></textarea></label>
         <div class="acts full"><button class="btn" type="button" id="cpa-save">Lưu tất cả</button><span class="hint" id="cpa-msg"></span></div>
       </div>
       <h3 style="margin:4px 0 0">📊 Phân tích giá (theo đơn giá đang nhập)</h3>
@@ -1655,7 +1657,7 @@ window.BR_CONFIG = {
         <div class="sum"><span>Số dư hiện tại</span><span id="cp-bal" style="font-family:var(--mono)"></span></div>
       </div>
       <div class="cpside">
-        <div class="note" style="margin-top:10px">Mỗi máy là một điện thoại Android <b>mới tinh</b>, không có dữ liệu hay tài khoản Gmail của ai. Hết hạn máy tạm dừng; không gia hạn trong <b>30 phút</b> thì máy và toàn bộ dữ liệu bị xoá.</div>
+        <div class="note" id="cp-note" style="margin-top:10px">Mỗi máy là một điện thoại Android <b>mới tinh</b>, không có dữ liệu hay tài khoản Gmail của ai. Hết hạn máy tạm dừng; không gia hạn trong <b>30 phút</b> thì máy và toàn bộ dữ liệu bị xoá.</div>
         <div class="err" id="cp-err"></div>
         <div class="acts"><button class="btn ghost" type="button" id="cp-ocancel">Đóng</button><button class="btn" type="button" id="cp-obuy">Thanh toán &amp; tạo máy</button></div>
       </div>
@@ -3977,6 +3979,10 @@ async function openCpOrder(wantFree) {
   CPpricing = null; await Promise.all([cpLoadPricing(), cpLoadStatus()]);
   const why = cpBlocked(); if (why) { toast(why, 1); try { renderGrid(); } catch (e) {} return; }
   const p = CPpricing;
+  try { const nt = $("cp-note"); if (nt) { if (nt.dataset.def == null) nt.dataset.def = nt.innerHTML;
+    const own = LANG === "en" ? (p.order_note_en || "") : (p.order_note || "");
+    if (own.trim()) nt.innerHTML = esc(own.trim()).replace(/\n/g, "<br>");
+    else nt.innerHTML = LANG === "en" ? "Every phone is a <b>brand-new</b> Android device with no one else's data or Gmail account. When it expires it pauses; renew within <b>30 minutes</b> or the phone and all its data are deleted." : nt.dataset.def; } } catch (e) {}
   const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
   cpSel = { ram: clamp(2, p.min_ram, p.max_ram), cpu: clamp(2, p.min_cpu, p.max_cpu), days: clamp(7, p.min_days, p.max_days), res: "720x1280", fps: clamp(30, p.min_fps, p.max_fps), qty: 1, android: cpAndList().includes("12") ? "12" : "11" };
   cpChips("cp-ram", CP_RAM.filter(v => v >= p.min_ram && v <= p.max_ram), "ram", "GB");
@@ -4214,6 +4220,7 @@ async function loadCloudAdm() {
   $("cpa-mindays").value = pr.min_days; $("cpa-maxdays").value = pr.max_days;
   $("cpa-minfps").value = pr.min_fps; $("cpa-maxfps").value = pr.max_fps;
   if ($("cpa-andv")) $("cpa-andv").value = pr.android_versions || "11";
+  if ($("cpa-onote")) { $("cpa-onote").value = pr.order_note || ""; $("cpa-onote-en").value = pr.order_note_en || ""; }
   $("cpa-stock").value = pr.stock == null ? "" : pr.stock;
   $("cpa-stockhint").textContent = pr.stock == null ? "Đang: không giới hạn" : +pr.stock <= 0 ? "Đang HẾT HÀNG" : "Đang còn " + pr.stock + " máy";
   $("cpa-msg").textContent = ""; cpaAnalyze(); frFill(pr);
@@ -4238,6 +4245,8 @@ $("cpa-save") && ($("cpa-save").onclick = () => busy($("cpa-save"), async () => 
     if (/_fps/.test(error.message || "")) return toast("Chưa chạy file SQL cloud-phones-v4.sql trên Supabase.", 1);
     return toast(errMsg(error), 1);
   }
+  if ($("cpa-onote")) { const { error: en } = await sb.from("cloudphone_pricing").update({ order_note: $("cpa-onote").value.trim() || null, order_note_en: $("cpa-onote-en").value.trim() || null }).eq("id", 1);
+    if (en && ($("cpa-onote").value.trim() || $("cpa-onote-en").value.trim())) toast("Ghi chú chưa lưu được — chạy file SQL cloud-phones-v16.sql trên Supabase.", 1); }
   toast("Đã lưu. Khách mở form thuê sẽ thấy giá mới ngay."); $("cpa-msg").textContent = "✓ Đã lưu lúc " + new Date().toLocaleTimeString("vi-VN");
   CPpricing = null; const np = await cpLoadPricing(); try { renderGrid(); } catch (e) {}
   if (np) $("cpa-stockhint").textContent = np.stock == null ? "Đang: không giới hạn" : +np.stock <= 0 ? "Đang HẾT HÀNG" : "Đang còn " + np.stock + " máy";

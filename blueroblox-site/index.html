@@ -1386,7 +1386,8 @@ window.BR_CONFIG = {
         <div class="hint" style="align-self:end">👤 Mỗi tài khoản chỉ được dùng thử <b>1 máy</b> mỗi đợt (đã nhận rồi thì không nhận lại được, kể cả khi máy đã hết hạn).</div>
         <label>RAM tối đa (GB)<input id="fr-ram" type="number" min="1" inputmode="numeric" value="4"></label>
         <label>CPU tối đa (nhân)<input id="fr-cpu" type="number" min="1" inputmode="numeric" value="4"></label>
-        <label class="full">Dòng chữ chạy trên web (để trống = tự viết)<input id="fr-msg" maxlength="200" placeholder="VD: 🎁 Miễn phí thuê điện thoại đám mây 3 ngày — nhận ngay!"></label>
+        <label class="full">Dòng chữ chạy — tiếng Việt (để trống = tự viết)<input id="fr-msg" maxlength="200" placeholder="VD: 🎁 Miễn phí thuê điện thoại đám mây 3 ngày — nhận ngay!"></label>
+        <label class="full">Dòng chữ chạy — tiếng Anh, khách chọn English sẽ thấy (để trống = tự viết)<input id="fr-msg-en" maxlength="200" placeholder="VD: 🎁 FREE Cloud Phone for 1 day — claim yours now!"></label>
         <div class="hint full">Bật: khách nhận máy <b>0đ</b> (đúng số ngày trên), web hiện dòng chữ chạy. Hết số ngày → máy tự tắt, 30 phút sau tự xoá. Máy miễn phí không gia hạn được.<br><b>Tắt: quay lại tính phí và XOÁ SẠCH mọi máy miễn phí đã phát.</b></div>
         <div class="acts full"><button class="btn" type="button" id="fr-on">Bật / Lưu ưu đãi</button><button class="btn ghost" type="button" id="fr-off" style="border-color:var(--bad);color:var(--bad)">Tắt ưu đãi & xoá máy miễn phí</button><span class="hint" id="fr-msgout"></span></div>
       </div>
@@ -2297,7 +2298,7 @@ function applyStatic() {
 }
 function setLang(l) { LANG = l === "en" ? "en" : "vi"; try { localStorage.setItem("br_lang", LANG); } catch (e) {}
   $("lang-vi").classList.toggle("on", LANG === "vi"); $("lang-en").classList.toggle("on", LANG === "en");
-  applyStatic(); renderSite(); renderCats(); renderGrid(); renderUser(); if (sel) { renderPlans(); upd(); setVpsMethod(vpsMethod); } try { i18nCrypto(); } catch (e) {} }
+  applyStatic(); renderSite(); renderCats(); renderGrid(); renderUser(); if (sel) { renderPlans(); upd(); setVpsMethod(vpsMethod); } try { i18nCrypto(); } catch (e) {} try { renderFreeBar(); } catch (e) {} }
 $("lang-vi").onclick = () => setLang("vi"); $("lang-en").onclick = () => setLang("en");
 const plansOf = p => (Array.isArray(p.plans) ? p.plans : []).filter(x => +x.days > 0 && +x.price >= 0).sort((a, b) => a.days - b.days);
 const minPrice = p => { const pl = plansOf(p); return pl.length ? Math.min(...pl.map(x => +x.price)) : +p.price; };
@@ -4807,6 +4808,7 @@ setInterval(() => { if (profile && isAdmin() && !rtAdmin) startRealtime(); }, 20
 
 /* ========= MIỄN PHÍ ƯU ĐÃI ========= */
 function freeText(p) {
+  if (LANG === "en") return (p.free_msg_en || "").trim() || `🎁 FREE Cloud Phone for ${p.free_days} day${+p.free_days > 1 ? "s" : ""}: keep games & apps running 24/7 (up to ${p.free_max_ram}GB RAM · ${p.free_max_cpu} cores) — tap here to claim yours! 📱☁️`;
   return (p.free_msg || "").trim() || L(`🎁 MIỄN PHÍ thuê điện thoại đám mây ${p.free_days} ngày — tối đa ${p.free_max_ram}GB RAM · ${p.free_max_cpu} nhân. Bấm vào đây để nhận máy ngay!`,
     `🎁 FREE cloud phone for ${p.free_days} day(s) — up to ${p.free_max_ram}GB RAM · ${p.free_max_cpu} cores. Tap here to get yours now!`);
 }
@@ -4849,7 +4851,7 @@ document.addEventListener("change", e => { if (e.target && e.target.id === "cp-f
 function frFill(pr) {
   if (!$("fr-days")) return;
   $("fr-days").value = pr.free_days || 1;
-  $("fr-ram").value = pr.free_max_ram || 4; $("fr-cpu").value = pr.free_max_cpu || 4; $("fr-msg").value = pr.free_msg || "";
+  $("fr-ram").value = pr.free_max_ram || 4; $("fr-cpu").value = pr.free_max_cpu || 4; $("fr-msg").value = pr.free_msg || ""; if ($("fr-msg-en")) $("fr-msg-en").value = pr.free_msg_en || "";
   const n = (CPA_ROWS || []).filter(r => r.is_free && r.status !== "cancelled").length;
   $("fr-state").innerHTML = pr.free_on == null ? "⚠️ Chưa chạy file SQL <b>cloud-phones-v12.sql</b> trên Supabase."
     : pr.free_on ? `🟢 <b>ĐANG BẬT</b> — khách nhận máy 0đ ${pr.free_days} ngày. Đang có <b>${n}</b> máy miễn phí.` : `⚪ Đang tắt (tính phí bình thường).`;
@@ -4858,6 +4860,7 @@ $("fr-on") && ($("fr-on").onclick = () => busy($("fr-on"), async () => {
   const n = id => Math.max(1, Math.floor(+$(id).value || 1));
   const { error } = await sb.rpc("cloudphone_free_set", { p_on: true, p_days: n("fr-days"), p_max_ram: n("fr-ram"), p_max_cpu: n("fr-cpu"), p_per_user: 1, p_msg: $("fr-msg").value });
   if (error) return toast(/cloudphone_free_set|function/.test(error.message || "") ? "Chưa chạy file SQL cloud-phones-v12.sql trên Supabase." : errMsg(error), 1);
+  if ($("fr-msg-en")) { const { error: e2 } = await sb.from("cloudphone_pricing").update({ free_msg_en: $("fr-msg-en").value.trim() || null }).eq("id", 1); if (e2 && $("fr-msg-en").value.trim()) toast("Dòng chữ tiếng Anh chưa lưu được — chạy file SQL cloud-phones-v13.sql (web vẫn tự viết bản tiếng Anh).", 1); }
   toast("🎁 Đã BẬT ưu đãi miễn phí — web đang hiện dòng chữ chạy."); notifyTg && notifyTg(`🎁 Bật ưu đãi miễn phí ${n("fr-days")} ngày`);
   await loadCloudAdm();
 }));

@@ -249,10 +249,9 @@ TUNE = (# tắt hẳn hiệu ứng chuyển cảnh → CPU không phải vẽ th
         "settings put global package_verifier_user_consent -1; settings put global upload_apk_enable 0; "
         "settings put global verifier_verify_adb_installs 0; settings put global stay_on_while_plugged_in 7; "
         "settings put system screen_off_timeout 2147483647; svc power stayon true; "
-        # Trình duyệt bị MÀN ĐEN (máy ảo không có chip đồ hoạ): Chrome / WebView vẽ bằng CPU, Firefox dùng WebRender phần mềm
-        "for f in /data/local/chrome-command-line /data/local/tmp/chrome-command-line /data/local/tmp/webview-command-line; do "
-        "grep -q disable-gpu $f 2>/dev/null || echo '_ --disable-gpu --disable-gpu-compositing --disable-features=Vulkan' > $f 2>/dev/null; "
-        "chmod 644 $f 2>/dev/null; done; "
+        # Trình duyệt bị MÀN ĐEN (máy ảo không có chip đồ hoạ): Firefox dùng WebRender phần mềm
+        # (Chrome trên Android KHÔNG chạy được khi tắt GPU → đã bỏ cờ --disable-gpu cũ, nó làm Chrome văng ngay lúc mở)
+        "rm -f /data/local/chrome-command-line /data/local/tmp/chrome-command-line /data/local/tmp/webview-command-line 2>/dev/null; "
         "for d in /data/data/org.mozilla.firefox/files/mozilla/*.default*; do [ -d \"$d\" ] || continue; "
         "grep -q webrender.software \"$d/user.js\" 2>/dev/null || { printf 'user_pref(\"gfx.webrender.software\", true);\\nuser_pref(\"layers.acceleration.disabled\", true);\\nuser_pref(\"gfx.canvas.accelerated\", false);\\n' >> \"$d/user.js\"; "
         "chown $(stat -c %u \"$d\"):$(stat -c %g \"$d\") \"$d/user.js\"; }; done 2>/dev/null; "

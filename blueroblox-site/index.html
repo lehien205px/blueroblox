@@ -819,12 +819,14 @@ body.past-hero .stage, body.past-hero .stage *, body.past-hero h1 .ch, body.past
 @media (max-width:980px){ .cpguide{grid-template-columns:repeat(2,minmax(0,1fr))} }
 
 /* ===== Ưu đãi miễn phí: dòng chữ chạy + khung trong form thuê ===== */
-.freebar{position:relative;z-index:1;overflow:hidden;cursor:pointer;background:linear-gradient(90deg,#ff7a18,#ffb800,#ff7a18);color:#1a0f00;font-weight:800;font-size:15px;line-height:36px;height:36px;white-space:nowrap;box-shadow:0 2px 10px rgba(0,0,0,.25)}
+.freebar{position:relative;z-index:1;overflow:hidden;cursor:pointer;background:linear-gradient(90deg,#0a1438,#13306e 25%,#1d4fa8 50%,#13306e 75%,#0a1438);color:#f2f7ff;font-weight:700;font-size:15px;line-height:36px;height:36px;white-space:nowrap;border-bottom:1px solid rgba(143,208,255,.35);box-shadow:0 2px 14px rgba(29,79,168,.35);text-shadow:0 1px 2px rgba(0,0,0,.35)}
+.freebar:hover{background:linear-gradient(90deg,#0c1840,#173a82 25%,#2460c4 50%,#173a82 75%,#0c1840)}
 .freebar .fb-track{display:inline-block;padding-left:12px;animation:fbmove var(--fb-dur,22s) linear infinite}
 .freebar .fb-track span{margin-right:80px}
-.freebar:hover .fb-track,.freebar:focus .fb-track{animation-play-state:paused}
+.freebar .fb-track{animation-play-state:running!important}
 @keyframes fbmove{from{transform:translateX(0)}to{transform:translateX(-50%)}}
-@media (prefers-reduced-motion:reduce){.freebar .fb-track{animation:none;padding-left:16px}}
+/* chạy cả trên máy tính đã tắt hiệu ứng (Windows "Hiển thị hoạt ảnh" = Tắt) — chỉ chạy chậm hơn */
+@media (prefers-reduced-motion:reduce){.freebar .fb-track{animation-duration:calc(var(--fb-dur,22s) * 1.6)!important}}
 .cpfree{margin:4px 0 12px;padding:12px 14px;border-radius:14px;border:2px solid #ffb800;background:rgba(255,184,0,.1);display:flex;gap:12px;align-items:center;flex-wrap:wrap}
 .cpfree b{color:#ffcf4a}
 .cpfree .sw input:checked+i{background:#ffb800;border-color:#ffb800}

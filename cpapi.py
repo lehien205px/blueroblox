@@ -269,12 +269,55 @@ def safe_name(n):
     return n or ("file_" + secrets.token_hex(3))
 
 
+INSTALL_ERR = [   # lỗi cài APK thường gặp → lời báo dễ hiểu
+    ("OLDER_SDK", "App này cần bản Android mới hơn máy của bạn — chọn máy Android mới hơn, hoặc tìm bản cũ hơn của app."),
+    ("NO_MATCHING_ABIS", "File APK này không hợp với máy (sai loại chip). Hãy tải bản \"universal\" hoặc bản arm64/x86_64 của app."),
+    ("INSUFFICIENT_STORAGE", "Máy hết bộ nhớ — gỡ bớt app hoặc xoá file trong Download rồi thử lại."),
+    ("UPDATE_INCOMPATIBLE", "Máy đã có app này nhưng khác chữ ký (bản mod / bản khác nguồn). Gỡ app cũ trong \"Ứng dụng\" rồi cài lại."),
+    ("VERSION_DOWNGRADE", "Máy đang có bản MỚI hơn file này. Gỡ app cũ trước nếu muốn cài bản cũ."),
+    ("INVALID_APK", "File APK bị hỏng hoặc tải chưa hết — tải lại file rồi thử lại."),
+    ("NOT_APK", "File APK bị hỏng hoặc tải chưa hết — tải lại file rồi thử lại."),
+    ("MISSING_SPLIT", "App này phải cài kèm các phần khác — dùng file .apks / .xapk đầy đủ thay vì chỉ 1 file .apk."),
+    ("DUPLICATE_PERMISSION", "App này trùng quyền với 1 app đã cài (thường là bản mod/bản sao). Gỡ app kia rồi thử lại."),
+    ("TEST_ONLY", "File này là bản thử nghiệm (test-only), Android không cho cài."),
+]
+def install_err(o):
+    for k, msg in INSTALL_ERR:
+        if k in o: return msg
+    return "Cài APK lỗi: " + o[-300:]
+
+def sniff_apk(path):
+    """File không có đuôi nhưng thật ra là APK / gói APK → trả về đuôi đúng."""
+    import zipfile
+    try:
+        with zipfile.ZipFile(path) as z:
+            ns = z.namelist()
+            if "AndroidManifest.xml" in ns: return "apk"
+            if any(n.lower().endswith(".apk") for n in ns): return "xapk" if "manifest.json" in ns else "apks"
+    except Exception: pass
+    return ""
+
 def deliver(port, path, name, jid=None):
-    """File đã nằm trên server → đưa vào máy: APK thì cài, file khác vào thư mục Download."""
+    """File đã nằm trên server → đưa vào máy: APK / gói APK (.apks .xapk .apkm) thì cài, file khác vào thư mục Download."""
     ext = name.lower().rsplit(".", 1)[-1] if "." in name else ""
     ext = re.sub(r"[^a-z0-9]", "", ext)[:10]
+    if ext not in ("apk", "apks", "xapk", "apkm"):
+        e2 = sniff_apk(path)
+        if e2 and ext in ("", "bin", "zip", "tmp", "download"): name = (name.rsplit(".", 1)[0] if ext else name) + "." + e2; ext = e2
     tmp = "/tmp/cpup_" + secrets.token_hex(6) + ("." + ext if ext else "")   # adb install bắt buộc tên file đuôi .apk
     try:
+        if ext in ("apks", "xapk", "apkm"):              # gói nhiều phần (game tải từ APKPure… hay dùng .xapk)
+            if jid: JOBS[jid]["msg"] = "Đang giải nén gói ứng dụng…"
+            files, dst = stage_pkg(path, name)
+            try:
+                if jid: JOBS[jid]["msg"] = "Đang cài ứng dụng…"
+                args = (["install", "-r", "-g", files[0]] if len(files) == 1 else ["install-multiple", "-r", "-g"] + files)
+                o = out(adb(port, args, timeout=1200))
+                if "Success" not in o: raise RuntimeError(install_err(o))
+            finally:
+                subprocess.run(["docker", "exec", WSNAME, "rm", "-rf", dst], capture_output=True, timeout=60)
+            obb = push_obb(port, path, jid)
+            return f"Đã cài xong {name}" + (f" (kèm {obb} file dữ liệu game)" if obb else "")
         if jid: JOBS[jid]["msg"] = "Đang chép vào máy…"
         r = subprocess.run(["docker", "cp", path, f"{WSNAME}:{tmp}"], capture_output=True, timeout=900)
         if r.returncode: raise RuntimeError("Không chép được file: " + out(r)[-200:])
@@ -282,7 +325,7 @@ def deliver(port, path, name, jid=None):
             if jid: JOBS[jid]["msg"] = "Đang cài ứng dụng…"
             r = adb(port, ["install", "-r", "-g", tmp], timeout=1200)
             o = out(r)
-            if "Success" not in o: raise RuntimeError("Cài APK lỗi: " + o[-300:])
+            if "Success" not in o: raise RuntimeError(install_err(o))
             return f"Đã cài xong {name}"
         dest = "/sdcard/Download/" + name
         r = adb(port, ["push", tmp, dest], timeout=1200)
@@ -294,6 +337,28 @@ def deliver(port, path, name, jid=None):
         try: os.remove(path)
         except OSError: pass
 
+def push_obb(port, path, jid=None):
+    """Gói .xapk có dữ liệu game (Android/obb/…) → chép vào /sdcard/Android/obb của máy. Trả về số file đã chép."""
+    import zipfile, tempfile
+    try:
+        with zipfile.ZipFile(path) as z:
+            obbs = [n for n in z.namelist() if re.match(r"^Android/obb/[\w.]+/[^/]+\.obb$", n)]
+            if not obbs: return 0
+            d = tempfile.mkdtemp(prefix="obb_", dir=UP_DIR)
+            try:
+                n = 0
+                for f in obbs:
+                    if jid: JOBS[jid]["msg"] = f"Đang chép dữ liệu game {n + 1}/{len(obbs)}…"
+                    z.extract(f, d); tag = "/tmp/obb_" + secrets.token_hex(5)
+                    subprocess.run(["docker", "cp", os.path.join(d, f), f"{WSNAME}:{tag}"], capture_output=True, timeout=1200)
+                    shell(port, "mkdir -p " + shlex.quote("/sdcard/" + os.path.dirname(f)), 20)
+                    r = adb(port, ["push", tag, "/sdcard/" + f], timeout=1800)
+                    subprocess.run(["docker", "exec", WSNAME, "rm", "-f", tag], capture_output=True, timeout=60)
+                    os.remove(os.path.join(d, f)); n += 0 if r.returncode else 1
+                return n
+            finally: shutil.rmtree(d, ignore_errors=True)
+    except zipfile.BadZipFile:
+        return 0
 
 
 # ---------------- Admin: cài 1 APK vào nhiều máy cùng lúc ----------------
@@ -356,6 +421,14 @@ def min_sdk(path):
     if k not in _MINSDK: _MINSDK[k] = apk_min_sdk(path)
     return _MINSDK[k]
 
+def for_sdk(fname, path, sdk):
+    """App trong kho có chạy được trên máy SDK này không. File tên có '-sdkNN-' (lấy riêng cho Android cũ) chỉ dành cho đúng máy SDK đó;
+    file thường bị ẩn trên máy cũ nếu cần Android mới hơn, và nhường chỗ cho bản '-sdkNN-' cùng tên nếu có."""
+    if not sdk: return True
+    m = re.search(r"-sdk(\d+)-", fname)
+    if m: return int(m.group(1)) == sdk
+    return min_sdk(path) <= sdk
+
 def pre_dir():
     import glob
     for d in [os.path.join(os.path.dirname(os.path.abspath(__file__)), "apk-cai-san"), os.path.join(HOME, "apk-cai-san")] + sorted(glob.glob("/home/*/apk-cai-san")):
@@ -409,7 +482,7 @@ def bulk_install(jid, fid, ids, every, keep):
             try: adb(r["port"], ["shell", "touch /data/local/tmp/.cp_pre_" + re.sub(r"[^\w.-]", "_", name)], timeout=60)
             except Exception: pass
         with lock:
-            (ok if good else bad).append(r["name"] if good else f"{r['name']}: {o[-120:]}")
+            (ok if good else bad).append(r["name"] if good else f"{r['name']}: {install_err(o)[:140]}")
             JOBS[jid]["msg"] = f"Đang cài {len(ok) + len(bad)}/{len(rows)} máy… (lỗi {len(bad)})"
             JOBS[jid]["done"], JOBS[jid]["total"] = len(ok) + len(bad), len(rows)
     try:
@@ -439,7 +512,15 @@ class SafeRedirect(urllib.request.HTTPRedirectHandler):
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
-def download(url, jid):
+def direct_link(url):
+    """Đổi link trang chia sẻ thành link tải thẳng (Google Drive, Dropbox)."""
+    m = re.search(r"drive\.google\.com/(?:file/d/|open\?id=|uc\?(?:[^#]*&)?id=)([\w-]{20,})", url)
+    if m: return "https://drive.usercontent.google.com/download?id=" + m.group(1) + "&export=download&confirm=t"
+    if re.match(r"^https?://(www\.)?dropbox\.com/", url): return re.sub(r"([?&])dl=0", r"\1dl=1", url) if "dl=0" in url else url + ("&" if "?" in url else "?") + "dl=1"
+    return url
+
+def download(url, jid, _hop=0):
+    url = direct_link(url)
     u = urllib.parse.urlparse(url)
     if u.scheme not in ("http", "https") or not u.hostname or not public_host(u.hostname):
         raise RuntimeError("Link không hợp lệ (chỉ nhận link http/https công khai).")
@@ -453,6 +534,13 @@ def download(url, jid):
         name = safe_name(urllib.parse.unquote(m.group(1)) if m else urllib.parse.unquote(os.path.basename(urllib.parse.urlparse(r.geturl()).path)))
         if "android.package-archive" in (r.headers.get("Content-Type") or "") and not name.lower().endswith(".apk"):
             name += ".apk"
+        if "text/html" in (r.headers.get("Content-Type") or ""):      # link trang web chứ không phải file
+            page = r.read(3 * 1024 * 1024).decode("utf-8", "replace")
+            m2 = re.search(r'href="(https?://download[^"]*\.mediafire\.com/[^"]+)"', page) or re.search(r'id="downloadButton"[^>]*href="(https?://[^"]+)"', page)
+            if m2 and _hop < 2: return download(m2.group(1).replace("&amp;", "&"), jid, _hop + 1)
+            if "drive.usercontent.google.com" in url or "accounts.google.com" in r.geturl():
+                raise RuntimeError("Không tải được từ Google Drive — hãy chia sẻ file ở chế độ \"Bất kỳ ai có đường liên kết\".")
+            raise RuntimeError("Link này là TRANG WEB, không phải link tải file. Mở link trên máy tính, bấm nút Tải xuống, rồi copy link tải thật (thường kết thúc bằng .apk) dán vào đây — hoặc tải file về rồi dùng nút \"Tải file / APK\".")
         path = os.path.join(UP_DIR, "dl_" + secrets.token_hex(6))
         got = 0
         with open(path, "wb") as f:
@@ -743,7 +831,7 @@ class H(BaseHTTPRequestHandler):
             inst = set(l.split(":", 1)[1].strip() for l in out(shell(port, "pm list packages", 30)).splitlines() if l.startswith("package:"))
             try: sdk = int(out(shell(port, "getprop ro.build.version.sdk", 15)).strip() or 0)
             except ValueError: sdk = 0
-            fs = [f for f in fs if not sdk or min_sdk(os.path.join(d, f)) <= sdk]   # ẩn app không chạy được trên bản Android của máy này
+            fs = [f for f in fs if for_sdk(f, os.path.join(d, f), sdk)]   # ẩn app không chạy được trên bản Android của máy này
             return self.send_json(200, {"files": [{"name": f, "size": os.path.getsize(os.path.join(d, f))} for f in fs], "installed": sorted(inst)})
         if act == "store" and self.command == "POST":          # cài 1 app trong kho vào máy này
             n = safe_name(str(self.jbody().get("name") or "")); fp = os.path.join(pre_dir(), n)
@@ -757,8 +845,7 @@ class H(BaseHTTPRequestHandler):
                     o = out(adb(port, args, timeout=900))
                 finally:
                     subprocess.run(["docker", "exec", WSNAME, "rm", "-rf", dst], capture_output=True, timeout=60)
-                if "OLDER_SDK" in o: raise RuntimeError("App này cần bản Android mới hơn máy của bạn — hãy chọn máy Android 10 trở lên, hoặc cài bản cũ hơn từ CH Play.")
-                if "Success" not in o: raise RuntimeError("Cài lỗi: " + o[-200:])
+                if "Success" not in o: raise RuntimeError(install_err(o))
                 return "✅ Đã cài " + n
             run_job(jid, work)
             return self.send_json(200, {"job": jid})
@@ -900,7 +987,7 @@ class H(BaseHTTPRequestHandler):
             run_job(jid, work)
             return self.send_json(200, {"job": jid})
 
-        if act == "root" and self.command == "POST":        # khách bấm "Root máy": kiểm tra + bật root (Magisk) + cấp sẵn quyền root cho app
+        if act == "root" and self.command == "POST":        # khách bấm "Root máy": kiểm tra + bật root (su) cho máy
             if not cont: return self.send_json(409, {"error": "Không xác định được máy."})
             jid = new_job(me["uid"], "Root máy")
             def work(j):
@@ -908,7 +995,7 @@ class H(BaseHTTPRequestHandler):
                 r = subprocess.run(["python3", os.path.join(HOME, "phonectl.py"), "rootfix", cont, "--force"], capture_output=True, text=True, timeout=600)
                 line = next((l for l in (r.stdout or "").splitlines() if l.startswith("ROOT_")), "")
                 msg = line.split(":", 1)[1].strip() if ":" in line else "Không kiểm tra được, thử lại sau."
-                if line.startswith("ROOT_OK"): return "✅ Máy đã ROOT (Magisk). Mở tool là dùng được — nếu hiện bảng Magisk thì bấm Cho phép (Grant)."
+                if line.startswith("ROOT_OK"): return "✅ Máy đã ROOT. Tool cần root (gọi lệnh su) dùng được ngay, không cần khởi động lại."
                 if line.startswith("ROOT_WAIT"): return "⏳ Máy đang bật root, chờ 1 phút rồi bấm lại."
                 raise RuntimeError("Chưa root được: " + msg)
             run_job(jid, work)

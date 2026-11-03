@@ -234,9 +234,14 @@ rootboot)
 D=${0%/*}; L=/data/local/tmp/cproot.log
 [ "$1" = early ] && exec >$L 2>&1 || exec >>$L 2>&1; chmod 644 $L; echo "== $1 $(date)"; id
 setenforce 0 2>/dev/null; echo "selinux: $(getenforce)"
-mkdir -p /dev/cpbin; cp -f $D/cpsu /dev/cpbin/su; chown 0:0 /dev/cpbin/su; chmod 755 /dev/cpbin/su
+mkdir -p /dev/cpbin; chmod 755 /dev/cpbin; chown 0:2000 /dev/cpbin; cp -f $D/cpsu /dev/cpbin/su; chown 0:0 /dev/cpbin/su; chmod 755 /dev/cpbin/su
+chcon u:object_r:system_file:s0 /dev/cpbin /dev/cpbin/su 2>/dev/null
 ours() { [ "$(/system/bin/su -v 2>/dev/null)" = "30.7:MAGISKSU" ]; }
-if ! ours; then mount -t overlay cpbin -o lowerdir=/dev/cpbin:/system/bin /system/bin && echo "overlay /system/bin OK" || echo "overlay LỖI"; fi
+if ! ours; then
+  mount -t overlay cpbin -o lowerdir=/dev/cpbin:/system/bin,context=u:object_r:system_file:s0 /system/bin && echo "overlay /system/bin OK" || echo "overlay LỖI"
+  # an toàn: nếu sh không chạy được qua lớp mới → gỡ ngay, không để hỏng máy
+  if ! /system/bin/sh -c true 2>/dev/null || [ "$(stat -c %a /system/bin)" != 755 ]; then umount -l /system/bin; echo "overlay bị gỡ (không an toàn)"; fi
+fi
 ours && echo "su: CỦA BLUEROBLOX" || echo "su: CHƯA ĐÚNG ($(ls -la /system/bin/su 2>&1))"
 [ -S /dev/socket/cpsu ] && chmod 666 /dev/socket/cpsu
 echo "cpsud: $(pidof cpsud || echo chưa chạy)"
@@ -268,6 +273,10 @@ RC
   A uninstall com.topjohnwu.magisk >/dev/null 2>&1                # không cần app Magisk
   echo "== Khởi động lại máy thử =="
   bash "$0" stop >/dev/null 2>&1; bash "$0" start >/dev/null 2>&1; sleep 20
+  if ! A shell echo ok 2>/dev/null | grep -q ok; then             # máy hỏng shell → tự trả lại như cũ
+    err "Máy bị lỗi sau khi gắn root → tự trả lại bản trước"; cp "$RD.magisk" "$RD"; bash "$0" stop >/dev/null 2>&1; bash "$0" start >/dev/null 2>&1
+    A shell 'cat /data/local/tmp/cproot.log 2>/dev/null | tail -20' | tr -d '\r' | sed 's/^/   /'; exit 1
+  fi
   if A shell 'su -c id' 2>/dev/null | grep -q "uid=0"; then
     ok "ROOT SÂU: CHẠY ✓  ($(A shell 'su -c id' | tr -d '\r' | cut -c1-40))"
     A shell 'su -c "mount -o remount,rw / 2>/dev/null; echo ok-root-write > /data/local/tmp/.rootw && cat /data/local/tmp/.rootw"' | tr -d '\r' | grep -q ok-root-write && ok "App gọi su chạy được lệnh root (ghi file hệ thống OK)"

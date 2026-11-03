@@ -142,6 +142,7 @@ class App:
         btn("♻ Làm mới máy khách", self.remake)
         btn("⚡ Tối ưu Windows", self.optimize)
         btn("🖼 Ảnh nền cho máy", lambda: self.job("Đặt ảnh nền BlueRoblox cho các máy đang chạy (máy chưa có)", [PY, "phonectl.py", "wallpaper", "--all"]))
+        btn("⏻ Thoát hẳn", self.quit_all, "#3a2030", "#ffb3bb")
         btn("🙈 Ẩn cửa sổ MEmu", lambda: self.job("Cho cửa sổ MEmu chạy ngầm", [PY, "phonectl.py", "hide"]))
         # nhật ký
         self.nb = ttk.Notebook(r); self.nb.pack(fill="both", expand=True, padx=14, pady=(0, 6))
@@ -430,8 +431,12 @@ Write-Host '[OK] Tat Xbox Game DVR'
             self._auto_on = False
 
     def on_close(self):
+        """Bấm X: chỉ THU NHỎ (dịch vụ vẫn chạy, khách vẫn dùng máy). Muốn tắt hẳn: nút ⏻ Thoát hẳn."""
         if any(s.alive() for s in self.svcs.values()):
-            if not messagebox.askyesno("Thoát", "Thoát bảng điều khiển sẽ TẮT dịch vụ (khách không dùng được máy). Vẫn thoát?"): return
+            self.root.iconify(); self.say("Tổng quan", "ℹ Đã thu nhỏ — dịch vụ vẫn chạy. Muốn tắt hẳn: bấm ⏻ Thoát hẳn."); return
+        self.root.destroy()
+    def quit_all(self):
+        if not messagebox.askyesno("Thoát hẳn", "TẮT toàn bộ dịch vụ (khách không dùng được máy, không nhận đơn mới) và đóng bảng?"): return
         self.stop_all(); self.root.destroy()
 
 if __name__ == "__main__":

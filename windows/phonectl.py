@@ -637,7 +637,7 @@ def cmd_cleanup(a):
 
 # ---------- MÁY DỰNG SẴN: tạo + khởi động + ảnh nền + cài app TRƯỚC → khách mua là có máy sau ~1 phút ----------
 POOL_F = os.path.join(HOME, "redroid", "pool.json")
-POOL_SIZE = int(CONF.get("POOL_SIZE", "2") or 0)          # giữ sẵn 2 máy dựng trước (đổi: POOL_SIZE=N trong cloudphone.conf, 0 = tắt)
+POOL_SIZE = int(CONF.get("POOL_SIZE", "1") or 0)          # giữ sẵn 1 máy dựng trước (đổi: POOL_SIZE=N trong cloudphone.conf, 0 = tắt)
 def _pl():
     try: return json.load(open(POOL_F, encoding="utf-8"))
     except Exception: return {"ready": []}
@@ -650,7 +650,7 @@ def take_spare(new_name):
         with _Lock("poolstate", wait=20):
             d = _pl(); v = vms()
             while d["ready"]:
-                nm = d["ready"].pop(0)
+                nm = d["ready"].pop(0); d["building"] = [x for x in d.get("building", []) if x != nm]
                 i = next((k for k, x in v.items() if x["name"] == nm and not x["running"]), None)
                 if i is None: continue
                 for _ in range(3):                                           # đổi tên PHẢI thành công (tìm máy theo tên)
@@ -684,20 +684,26 @@ def cmd_pool(a):
     try: lk = _Lock("pool", wait=1); lk.__enter__()
     except Exception: return                       # đang dựng máy khác
     try:
-        d = _pl(); v = vms()
+        d = _pl(); v = vms(); d.setdefault("building", [])
         names = {x["name"] for x in v.values()}
+        mine = {p["name"] for p in load()["phones"]}
         d["ready"] = [n for n in d["ready"] if n in names]
-        for i, x in sorted(v.items(), reverse=True):                     # máy dựng dở (bị ngắt giữa chừng) → xoá
-            if x["name"].startswith("spare_") and x["name"] not in d["ready"]:
+        # CHỈ xoá máy mà CHÍNH bộ dựng sẵn đang dựng dở (ghi trong "building") — KHÔNG BAO GIỜ đụng máy đã giao cho khách
+        for i, x in sorted(v.items(), reverse=True):
+            if x["name"] in d["building"] and x["name"] not in d["ready"] and x["name"] not in mine:
                 print(f"XOA_DO {x['name']}", flush=True)
                 if x["running"]: memuc("stop", "-i", i, timeout=120); time.sleep(3)
                 memuc("remove", "-i", i, timeout=180)
+        d["building"] = []
         _ps(d)
         if len(d["ready"]) >= POOL_SIZE: return
         import shutil
         if shutil.disk_usage(HOME).free / 2**30 < 20: print("Ổ cứng < 20GB trống — không dựng máy sẵn."); return
         nm = f"spare_{int(time.time())}"
         if _creating_now(): return
+        # có máy (khách) vừa bật < 3 phút → để nó khởi động xong đã (2 máy cùng khởi động → MEmu hay báo "memory is low")
+        recent = [p for p in load()["phones"] if time.time() - os.path.getmtime(STATE) < 180]
+        if recent: return
         print(f"DUNG_SAN {nm}: tạo + khởi động + cài sẵn…", flush=True)
         with _Lock("memu", wait=5):                     # không chờ: đang có việc MEmu khác (máy khách) → để lần sau
             before = set(vms())
@@ -706,6 +712,7 @@ def cmd_pool(a):
             idx = int(m.group(1)) if m else next(iter(sorted(set(vms()) - before)), None)
             if idx is None: print("LỖI dựng máy sẵn:", ((r.stdout or "") + (r.stderr or "")).strip()[-200:]); return
             memuc("rename", "-i", idx, nm, timeout=60)
+            d = _pl(); d.setdefault("building", []).append(nm); _ps(d)
         # chỉnh cài đặt NGOÀI khoá "memu" → đơn máy khách chen vào được bất cứ lúc nào; có đơn khách → dừng, lần sau làm tiếp
         if _creating_now(): print(f"LỖI {nm}: nhường đơn máy khách — dựng lại sau"); return
         configure(idx, 2, 2, "720x1280", auto_dpi("720x1280")); memuc("setconfigex", "-i", idx, "fps", 30, timeout=60); apply_template(idx)
@@ -725,7 +732,8 @@ def cmd_pool(a):
         i2 = next((k for k, x in vms().items() if x["name"] == nm), None)
         if i2 is not None: memuc("stop", "-i", i2, timeout=120)
         if ok:
-            d = _pl(); d["ready"].append(nm); _ps(d); print(f"SAN_SANG {nm}: máy dựng sẵn đã xong ({len(d['ready'])}/{POOL_SIZE})")
+            d = _pl(); d["ready"].append(nm); d["building"] = [x for x in d.get("building", []) if x != nm]; _ps(d)
+            print(f"SAN_SANG {nm}: máy dựng sẵn đã xong ({len(d['ready'])}/{POOL_SIZE})")
         else: print(f"LỖI {nm}: Android không lên — sẽ dựng lại lần sau")
     finally: lk.__exit__()
 

@@ -264,6 +264,20 @@ class App:
     def _heal(self, n, c):
         if self.booting: return
         on = lambda name: self.svcs[name].want
+        # hộp thoại lỗi của MEmu ("MEmu start error"…) chặn MEmu tới khi có người bấm OK → tự đóng + ghi lại
+        try:
+            u = ctypes.windll.user32
+            for t in ("MEmu start error", "MEmu error", "Error"):
+                h = u.FindWindowW(None, t)
+                if h:
+                    n_ = u.GetWindowTextLengthW(h); buf = ctypes.create_unicode_buffer(n_ + 1); u.GetWindowTextW(h, buf, n_ + 1)
+                    pid = ctypes.c_ulong(); u.GetWindowThreadProcessId(h, ctypes.byref(pid))
+                    exe = ""
+                    try: exe = subprocess.run(["tasklist", "/FI", f"PID eq {pid.value}", "/FO", "CSV", "/NH"], capture_output=True, text=True, creationflags=NOWIN).stdout.lower()
+                    except Exception: pass
+                    if "memu" in exe:
+                        u.PostMessageW(h, 0x0010, 0, 0); self._fix(f"đóng hộp thoại lỗi MEmu: {buf.value}")
+        except Exception: pass
         # adb server do CHÍNH bảng giữ (không làm "con" của dịch vụ nào → tắt/bật dịch vụ không kéo adb chết theo)
         if n % 2 == 0 and on("ws-scrcpy") and not adb_pid():
             subprocess.run([os.path.join(B, "platform-tools", "adb.exe"), "start-server"], capture_output=True, creationflags=NOWIN, env=ENV, timeout=30)

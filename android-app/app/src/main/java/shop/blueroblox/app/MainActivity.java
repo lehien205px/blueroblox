@@ -619,7 +619,8 @@ public class MainActivity extends Activity {
         ac.addView(Ui.text(this, Ui.L("Phiên bản Android", "Android version"), 14, Ui.MUTED, true));
         Ui.Wrap aw = new Ui.Wrap(this, 8);
         for (String v : avs) {
-            TextView ch = Ui.chip(this, "Android " + v + ("12".equals(v) ? Ui.L("  ⭐ Khuyên dùng", "  ⭐ Best") : ""), v.equals(sAnd));
+            TextView ch = Ui.chip(this, "Android " + v + ("12".equals(v) ? Ui.L("  ⭐ Khuyên dùng", "  ⭐ Best")
+                    : "10".equals(v) ? Ui.L("  ⚡ GPU · app x86", "  ⚡ GPU · x86 apps") : ""), v.equals(sAnd));
             ch.setTag(v);
             ch.setOnClickListener(x -> {
                 sAnd = (String) x.getTag();

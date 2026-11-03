@@ -50,7 +50,7 @@ import java.util.Random;
 /** Màn điều khiển máy ảo: hình máy ở giữa, thanh nút Android + công cụ bằng giao diện app. */
 public class ControlActivity extends Activity {
     private static final int REQ_APK = 51;
-    private static final String[][] QUAL = {{"eco", "Tiết kiệm", "Saver"}, {"bal", "Cân bằng", "Balanced"}, {"hd", "Siêu nét", "Ultra HD"}};
+    private static final String[][] QUAL = {{"eco", "Tiết kiệm", "Saver"}, {"bal", "Ít trễ", "Low latency"}, {"hd", "Siêu nét", "Ultra HD"}};
 
     private final Handler h = new Handler(Looper.getMainLooper());
     private FrameLayout stage;
@@ -460,14 +460,18 @@ public class ControlActivity extends Activity {
     private void pickQuality() {
         LinearLayout c = Ui.col(this, 10);
         final Dialog[] d = new Dialog[1];
-        String[] desc = {Ui.L("Nhẹ mạng, 30 FPS — hợp 4G yếu", "Light, 30 FPS — weak 4G"), Ui.L("Rõ nét, mượt — khuyên dùng", "Sharp & smooth — recommended"),
-                Ui.L("Đúng độ phân giải máy — cần mạng khoẻ", "Full resolution — needs fast network")};
+        String[] desc = {Ui.L("Nhẹ nhất, 24 FPS — mạng 4G/wifi yếu", "Lightest, 24 FPS — weak 4G/wifi"),
+                Ui.L("Mượt, phản hồi nhanh, 30 FPS — khuyên dùng", "Smooth, responsive, 30 FPS — recommended"),
+                Ui.L("Nét nhất, 60 FPS — cần máy ≥4 nhân + mạng khoẻ", "Sharpest, 60 FPS — needs ≥4 cores + fast network")};
         for (int i = 0; i < QUAL.length; i++) {
             final String k = QUAL[i][0];
             Button b = Ui.button(this, Ui.L(QUAL[i][1], QUAL[i][2]) + " — " + desc[i], k.equals(quality) ? Ui.PRIMARY : Ui.GHOST);
             b.setOnClickListener(v -> { d[0].dismiss(); quality = k; pref.edit().putString("q", k).apply(); updQ(); page("cpApp.quality('" + k + "')"); });
             c.addView(b, Ui.fill());
         }
+        Button more = Ui.button(this, "⚙️ " + Ui.L("Cách giải mã hình (khi bị đen / giật)…", "Video decoder (if black / choppy)…"), Ui.GHOST);
+        more.setOnClickListener(v -> { d[0].dismiss(); page("cpApp.act('quality')"); });
+        c.addView(more, Ui.fill());
         d[0] = Ui.sheet(this, Ui.L("Chất lượng hình", "Video quality"), c);
         d[0].show();
     }

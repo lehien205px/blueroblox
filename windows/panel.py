@@ -124,11 +124,14 @@ class App:
             sub = tk.Label(box, text="đang kiểm tra…", fg=MUTED, bg=CARD, font=("Segoe UI", 9), anchor="w"); sub.pack(fill="x")
             self.lights[k] = (dot, sub)
         # nút
-        bar = tk.Frame(r, bg=BG); bar.pack(fill="x", padx=14, pady=8)
+        bar1 = tk.Frame(r, bg=BG); bar1.pack(fill="x", padx=14, pady=(8, 2))
+        bar2 = tk.Frame(r, bg=BG); bar2.pack(fill="x", padx=14, pady=(2, 8))
         def btn(text, cmd, color=CARD, fg=FG):
+            bar = bar1 if len(bar1.winfo_children()) < 5 else bar2
             b = tk.Button(bar, text=text, command=cmd, bg=color, fg=fg, activebackground=BLUE, activeforeground="white", relief="flat",
                           font=("Segoe UI", 10, "bold"), padx=12, pady=7, cursor="hand2", bd=0)
             b.pack(side="left", padx=3); return b
+        btn("🚀 TỰ ĐỘNG A→Z", self.auto, GOOD, "#062012")
         btn("① Cài đặt / Cập nhật", self.install)
         btn("② Dán khoá Supabase", self.set_key)
         btn("③ Nối Cloudflare", self.cloudflare)
@@ -206,20 +209,24 @@ class App:
             n += 1; time.sleep(4)
 
     # ---------- việc chạy 1 lần ----------
-    def job(self, title, cmd, cwd=B, done=None):
-        self.nb.select(len(SERVICES) + 1); self.say("Việc đang làm", f"\n===== {title} =====")
+    def job(self, title, cmd, cwd=B, done=None, wait=False):
+        self.root.after(0, self.nb.select, len(SERVICES) + 1); self.say("Việc đang làm", f"\n===== {title} =====")
         def go():
+            out = []
             try:
                 p = subprocess.Popen(cmd, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=ENV, creationflags=NOWIN,
                                      text=True, encoding="utf-8", errors="replace")
-                for line in p.stdout: self.say("Việc đang làm", line.rstrip())
+                for line in p.stdout: self.say("Việc đang làm", line.rstrip()); out.append(line)
                 code = p.wait(); self.say("Việc đang làm", f"===== xong ({'OK' if code == 0 else 'mã ' + str(code)}) =====")
                 if done: self.root.after(0, done, code)
-            except Exception as e: self.say("Việc đang làm", f"✗ {e}")
+                return code, "".join(out)
+            except Exception as e:
+                self.say("Việc đang làm", f"✗ {e}"); return 99, str(e)
+        if wait: return go()
         threading.Thread(target=go, daemon=True).start()
 
-    def tail(self, path, title, secs=3600):
-        self.nb.select(len(SERVICES) + 1); self.say("Việc đang làm", f"\n===== {title} (cửa sổ Admin) =====")
+    def tail(self, path, title, secs=3600, wait=False):
+        self.root.after(0, self.nb.select, len(SERVICES) + 1); self.say("Việc đang làm", f"\n===== {title} (cửa sổ Admin) =====")
         def go():
             import codecs
             dec = codecs.getincrementaldecoder("utf-8")(errors="replace"); t0, pos, buf = time.time(), 0, ""
@@ -229,11 +236,13 @@ class App:
                     buf += dec.decode(data).lstrip("\ufeff")
                     *lines, buf = buf.split("\n")
                     for line in lines:
-                        if line.strip() == "XONG_JOB": self.say("Việc đang làm", f"===== {title}: xong ====="); return
+                        if line.strip() == "XONG_JOB": self.say("Việc đang làm", f"===== {title}: xong ====="); return True
                         if line.strip(): self.say("Việc đang làm", line.rstrip())
                 except FileNotFoundError:
-                    if time.time() - t0 > 90: self.say("Việc đang làm", "✗ Cửa sổ Admin chưa chạy (bạn bấm Không / No?)"); return
+                    if time.time() - t0 > 90: self.say("Việc đang làm", "✗ Cửa sổ Admin chưa chạy (bạn bấm Không / No?)"); return False
                 time.sleep(1)
+            return False
+        if wait: return go()
         threading.Thread(target=go, daemon=True).start()
 
     def install(self):
@@ -249,24 +258,34 @@ class App:
     def set_key(self):
         k = simpledialog.askstring("Khoá Supabase", "Mở Supabase → Project Settings → API Keys → khoá service_role (Reveal → Copy)\n"
                                    "rồi dán vào đây. Khoá chỉ lưu trong C:\\blue\\cloudphone.conf, không gửi đi đâu.", show="•", parent=self.root)
-        if not k: return
+        if not k: return False
         k = k.strip()
-        if not (k.startswith("eyJ") or k.startswith("sb_secret_")): messagebox.showerror("Sai khoá", "Khoá service_role bắt đầu bằng eyJ… hoặc sb_secret_…"); return
+        if not (k.startswith("eyJ") or k.startswith("sb_secret_")): messagebox.showerror("Sai khoá", "Khoá service_role bắt đầu bằng eyJ… hoặc sb_secret_…"); return False
         set_conf("SUPABASE_SERVICE_KEY", k)
         for x, v in (("SUPABASE_URL", "https://nprftgodswlpzomcttal.supabase.co"), ("PUBLIC_BASE", "https://phone.blueroblox.shop"), ("NODE_ID", "win1")):
             if not conf().get(x): set_conf(x, v)
         self.say("Tổng quan", "✓ Đã lưu khoá Supabase. Bấm ▶ Bật tất cả (hoặc Bật lại) để dùng khoá mới.")
+        return True
 
-    def cloudflare(self):
+    def cf_token(self):
         s = simpledialog.askstring("Nối Cloudflare", "Cloudflare → Zero Trust → Networks → Tunnels → chọn đường hầm cũ → Configure\n"
                                    "→ phần Install connector chọn Windows → copy cả lệnh (có chữ eyJ…) rồi dán vào đây.", parent=self.root)
-        if not s: return
+        if not s: return None
         m = re.search(r"(eyJ[A-Za-z0-9_\-=.]{40,})", s)
-        if not m: messagebox.showerror("Không thấy mã", "Trong chữ vừa dán không có mã bắt đầu bằng eyJ…"); return
+        if not m: messagebox.showerror("Không thấy mã", "Trong chữ vừa dán không có mã bắt đầu bằng eyJ…"); return None
+        return m.group(1)
+
+    def cf_install(self, token, wait=False):
         log = os.path.join(LOGS, "cloudflare.log")
+        try: os.remove(log)
+        except OSError: pass
         exe = r'$c = (Get-Command cloudflared -ErrorAction SilentlyContinue).Source; if (-not $c) { $c = "C:\Program Files (x86)\cloudflared\cloudflared.exe" }'
-        run_admin(f"{exe}\n& $c service uninstall 2>$null\n& $c service install {m.group(1)}\nStart-Sleep 3\nsc.exe query cloudflared", log)
-        self.tail(log, "Nối Cloudflare", 120)
+        run_admin(f"{exe}\n& $c service uninstall 2>$null\n& $c service install {token}\nStart-Sleep 3\nsc.exe start cloudflared\nStart-Sleep 2\nsc.exe query cloudflared", log)
+        return self.tail(log, "Nối Cloudflare", 180, wait=wait)
+
+    def cloudflare(self):
+        t = self.cf_token()
+        if t: self.cf_install(t)
 
     def start_all(self):
         if not os.path.isfile(os.path.join(B, "platform-tools", "adb.exe")): self.say("Tổng quan", "✗ Chưa cài — bấm ① Cài đặt trước"); return
@@ -289,6 +308,97 @@ class App:
                                    "Nên báo khách trước. Làm từng máy một, có thể mất khá lâu."):
                 self.job("Làm mới máy khách", [PY, "run.py", "remake.py", "all"])
         self.job("Máy khách cần làm mới", [PY, "run.py", "remake.py", "list"], done=ask)
+
+    # ================= TỰ ĐỘNG A→Z =================
+    def _ui(self, fn, *a):
+        """Gọi hộp thoại trên luồng giao diện rồi chờ kết quả."""
+        ev, box = threading.Event(), {}
+        def w():
+            try: box["r"] = fn(*a)
+            finally: ev.set()
+        self.root.after(0, w); ev.wait(); return box.get("r")
+
+    def auto(self):
+        if getattr(self, "_auto_on", False): return
+        self._auto_on = True
+        threading.Thread(target=self._auto, daemon=True).start()
+
+    def _auto(self):
+        S = lambda m: self.say("Tổng quan", m)
+        res = []
+        def step(name, ok, note=""):
+            res.append((name, ok, note)); S(("✓ " if ok else "✗ ") + name + (f" — {note}" if note else ""))
+        try:
+            self.root.after(0, self.nb.select, 0)
+            S("\n🚀 ========== TỰ ĐỘNG A→Z: bắt đầu ==========")
+            # 1) cài đặt
+            if not (os.path.isfile(os.path.join(B, "platform-tools", "adb.exe")) and os.path.isfile(os.path.join(B, "ws-scrcpy", "dist", "index.js"))):
+                S("1/6 Đang cài đặt (Windows sẽ hỏi quyền Admin → bấm Yes)…")
+                self.stop_all(); log = os.path.join(LOGS, "setup.log")
+                try: os.remove(log)
+                except OSError: pass
+                run_admin(f"Set-Location C:\\\ncurl.exe -fsSL -o C:\\blue\\setup.ps1 {RAW}/windows/setup.ps1\n& C:\\blue\\setup.ps1", log)
+                self.tail(log, "Cài đặt", 3600, wait=True)
+            ok = os.path.isfile(os.path.join(B, "ws-scrcpy", "dist", "index.js"))
+            step("1/6 Cài đặt phần mềm", ok, "" if ok else "cài chưa xong — xem tab Việc đang làm")
+            if not ok: return
+            # 2) khoá Supabase (+ thử khoá)
+            c = conf()
+            if len(c.get("SUPABASE_SERVICE_KEY", "")) < 30: self._ui(self.set_key)
+            c = conf(); okk = False
+            try:
+                rq = urllib.request.Request(c["SUPABASE_URL"].rstrip("/") + "/rest/v1/cloudphone_pricing?select=id&limit=1",
+                                            headers={"apikey": c["SUPABASE_SERVICE_KEY"], "Authorization": "Bearer " + c["SUPABASE_SERVICE_KEY"]})
+                okk = urllib.request.urlopen(rq, timeout=15).status == 200
+            except Exception as e: S(f"   thử khoá: {e}")
+            step("2/6 Khoá Supabase", okk, "" if okk else "khoá sai hoặc chưa dán — bấm ② dán lại")
+            if not okk: return
+            # 3) Cloudflare
+            q = subprocess.run(["sc", "query", "cloudflared"], capture_output=True, text=True, creationflags=NOWIN).stdout or ""
+            if "SERVICE_NAME" not in q:
+                t = self._ui(self.cf_token)
+                if t: self.cf_install(t, wait=True)
+            elif "RUNNING" not in q:
+                run_admin("sc.exe start cloudflared", os.path.join(LOGS, "cfstart.log")); time.sleep(8)
+            q = subprocess.run(["sc", "query", "cloudflared"], capture_output=True, text=True, creationflags=NOWIN).stdout or ""
+            step("3/6 Đường hầm Cloudflare", "RUNNING" in q, "" if "RUNNING" in q else "chưa chạy — bấm ③ dán lại lệnh connector")
+            # 4) bật dịch vụ
+            self.start_all()
+            t0 = time.time()
+            while time.time() - t0 < 90 and not (port_open(8000) and port_open(8010)): time.sleep(2)
+            okd = port_open(8000) and port_open(8010) and self.svcs["cloudphoned"].alive()
+            step("4/6 Bật trình phát hình + cổng bảo vệ + nhận đơn", okd, "" if okd else "xem tab ws-scrcpy / cpapi / cloudphoned")
+            # 5) thử MEmu
+            code, out = self.job("Danh sách máy", [PY, "phonectl.py", "list"], wait=True)
+            if "chưa có máy nào" in out:
+                S("5/6 Đang tạo máy thử test1 trên MEmu (1–3 phút)…")
+                code, out = self.job("Tạo máy thử test1", [PY, "phonectl.py", "create", "test1", "--ram", "4", "--cpu", "4"], wait=True)
+                okm = code == 0 and "✅" in out and "sẵn sàng" in out
+                step("5/6 Tạo + điều khiển máy MEmu", okm, "" if okm else "lỗi tạo máy — chụp tab Việc đang làm gửi hỗ trợ")
+                if okm: self.job("Xoá máy thử", [PY, "phonectl.py", "delete", "test1"], wait=True)
+            else:
+                step("5/6 Máy MEmu", True, "đã có máy đang chạy")
+            # 6) web
+            okw, note = False, ""
+            try:
+                rr = urllib.request.urlopen(urllib.request.Request("https://phone.blueroblox.shop/", headers={"User-Agent": "BlueRoblox-panel"}), timeout=15)
+                okw = True; note = f"HTTP {rr.status}"
+            except urllib.error.HTTPError as e:
+                okw = e.code < 500; note = f"HTTP {e.code}" + ("" if okw else " — đường hầm chưa tới được máy này")
+            except Exception as e: note = str(e)[:80]
+            step("6/6 Web phone.blueroblox.shop", okw, note)
+            bad = [r for r in res if not r[1]]
+            S("🎉 ========== XONG: mọi thứ đã chạy! ==========" if not bad else f"⚠ ========== XONG, còn {len(bad)} mục lỗi (dòng ✗ ở trên) ==========")
+            if not bad:
+                code, out = self.job("Máy khách cần làm mới", [PY, "run.py", "remake.py", "list"], wait=True)
+                m = re.findall(r"cần làm mới trên Windows: (\d+)", out)
+                if m and m[-1] != "0" and self._ui(messagebox.askyesno, "Làm mới máy khách",
+                        f"Có {m[-1]} máy khách cũ (từ server Ubuntu). Tạo lại tất cả trên MEmu ngay?\n(giữ chủ máy, cấu hình, hạn dùng; app/dữ liệu cũ mất)"):
+                    self.job("Làm mới máy khách", [PY, "run.py", "remake.py", "all"], wait=True)
+        except Exception as e:
+            S(f"✗ Tự động bị lỗi: {e}")
+        finally:
+            self._auto_on = False
 
     def on_close(self):
         if any(s.alive() for s in self.svcs.values()):

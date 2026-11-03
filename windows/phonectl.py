@@ -261,7 +261,7 @@ def configure(idx, ram, cpu, res, dpi):
     for k, v in (("memory", int(float(ram) * 1024)), ("cpus", max(1, int(round(float(cpu))))), ("is_customed_resolution", 1),
                  ("resolution_width", w), ("resolution_height", h), ("vbox_dpi", int(dpi or auto_dpi(res))), ("enable_su", 1),
                  ("graphics_render_mode", CONF.get("MEMU_RENDER", "1")),          # 1 = DirectX (nhẹ, ổn định hơn trên Windows)
-                 ("gmem_opt", CONF.get("MEMU_GMEM_OPT", "1")),                    # GPU memory optimization: BẬT (tắt thì nhiều game không chạy)
+                 ("gmem_opt", CONF.get("MEMU_GMEM_OPT", "1")),                    # GPU memory optimization: BẬT (game cần). Tắt: MEMU_GMEM_OPT=0
                  ("enable_audio", 0)):                                            # máy cloud không cần âm thanh → đỡ CPU
         memuc("setconfigex", "-i", idx, k, v, timeout=60)
 
@@ -352,7 +352,7 @@ def cmd_create(a):
            "android": "9", "kind": "memu", "created": fmt(now()), "expires": exp.isoformat()}
     st = load(); st["phones"].append(row); save(st)
     print(f"[3/4] Bật máy…", flush=True)
-    s = memuc("start", "-i", idx, timeout=150)
+    s = memu_start(idx)
     if not a.nowait: print(f"[4/4] Chờ Android khởi động (tối đa {BOOT_WAIT // 60} phút)…", flush=True)
     if s.returncode not in (0, None) and "SUCCESS" not in (s.stdout or "").upper():
         print("CẢNH BÁO bật máy:", (s.stdout or s.stderr or "").strip()[-200:])
@@ -383,13 +383,33 @@ def cmd_stop(a):
     st, p = _need(a.name); adb("disconnect", serial(p), timeout=15)
     memuc("stop", "-i", IDX(p), timeout=120); print(f"⏸  Đã tạm dừng '{a.name}'.")
 
+def _start_failed(r): return "fail" in ((r.stdout or "") + (r.stderr or "")).lower() or r.returncode not in (0, None)
+def memu_unstick():
+    """MEmu bị kẹt (mọi máy 'start vm failed') → tắt hẳn tiến trình MEmu chạy ngầm. Chỉ làm khi KHÔNG có máy nào đang chạy."""
+    r = run([os.path.join(MEMU, "memuc.exe"), "listvms", "--running"], 30)
+    if r.returncode not in (0, None) or any(ln.strip() and ln[0].isdigit() for ln in (r.stdout or "").splitlines()):
+        return False
+    for im in ("MEmuConsole.exe", "MEmuHeadless.exe", "MEmu.exe", "MemuService.exe", "MEmuSVC.exe"):
+        run(["taskkill", "/F", "/T", "/IM", im], 30)
+    time.sleep(5); print("   (MEmu bị kẹt → đã tự khởi động lại phần chạy ngầm của MEmu)", flush=True); return True
+def memu_start(idx):
+    r = memuc("start", "-i", idx, timeout=150)
+    if _start_failed(r):
+        time.sleep(8); r = memuc("start", "-i", idx, timeout=150)
+    if _start_failed(r) and memu_unstick():
+        r = memuc("start", "-i", idx, timeout=150)
+    return r
 def start_phone(p):
-    r = memuc("start", "-i", IDX(p), timeout=150); adb_connect(p["port"]); return r
+    r = memu_start(IDX(p)); adb_connect(p["port"]); return r
 def cmd_start(a):
-    st, p = _need(a.name); start_phone(p); print("✅ Đã bật")
+    st, p = _need(a.name); r = start_phone(p)
+    if _start_failed(r): print("❌ MEmu không bật được máy:", ((r.stdout or "") + (r.stderr or "")).strip()[-200:]); sys.exit(5)
+    print("✅ Đã bật")
 def cmd_restart(a):
     st, p = _need(a.name); adb("disconnect", serial(p), timeout=15)
-    memuc("stop", "-i", IDX(p), timeout=120); time.sleep(3); start_phone(p); print("✅ Đã khởi động lại")
+    memuc("stop", "-i", IDX(p), timeout=120); time.sleep(3); r = start_phone(p)
+    if _start_failed(r): print("❌ MEmu không bật được máy:", ((r.stdout or "") + (r.stderr or "")).strip()[-200:]); sys.exit(5)
+    print("✅ Đã khởi động lại")
 
 def cmd_waitboot(a):
     st, p = _need(a.name)

@@ -217,9 +217,7 @@ rootboot)
   A() { "$ADB" -s emulator-$PORT "$@"; }
   [ "$(A shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ] || { err "Bật máy thử trước:  bash $0 start"; exit 1; }
   A shell 'ls -la /system/bin/su' 2>/dev/null | grep -q magisk || { err "Bản này chưa có Magisk trong file khởi động — chạy:  bash $0 root"; exit 1; }
-  if ! A shell pm list packages 2>/dev/null | grep -q com.topjohnwu.magisk; then          # app Magisk bị mất khi tạo lại máy → cài lại
-    cp "$HOME/rootAVD/Magisk.zip" /tmp/cp-magisk.apk 2>/dev/null && A install -r /tmp/cp-magisk.apk >/dev/null 2>&1 && ok "Đã cài lại app Magisk"
-  fi
+
   SYS=$(grep "^image.sysdir.1=" "$ANDROID_AVD_HOME/$AVD.avd/config.ini" | cut -d= -f2 | sed 's|/*$||'); RD="$SDK/$SYS/ramdisk.img"
   [ -f "$RD.magisk" ] || cp "$RD" "$RD.magisk"            # bản đã có Magisk (chưa gắn dịch vụ) — luôn làm lại từ bản này
   AB=$(A shell getprop ro.product.cpu.abi | tr -d '\r'); case "$AB" in x86_64) L=x86_64;; *) L=x86;; esac
@@ -264,7 +262,15 @@ RC
   A pull $T/rd.new /tmp/cp-rd.new >/dev/null 2>&1 && [ -s /tmp/cp-rd.new ] || { err "Đóng gói ramdisk lỗi"; exit 1; }
   cp /tmp/cp-rd.new "$RD" && ok "Đã gắn dịch vụ root tự động ($FMT) vào $SYS"
   A shell "rm -f $T/mb $T/rd.img $T/rd.cpio $T/rd.new $T/cpgrant.sh $T/cpgrant.rc"
-  bash "$0" stop >/dev/null 2>&1; bash "$0" start >/dev/null 2>&1; sleep 25
+  bash "$0" stop >/dev/null 2>&1; bash "$0" start >/dev/null 2>&1; sleep 20
+  # App Magisk phải là bản CHÍNH THỨC đúng phiên bản (Magisk kiểm tra chữ ký app; sai chữ ký → từ chối mọi quyền root)
+  MV=$(A shell 'magisk -v' 2>/dev/null | tr -d '\r' | cut -d: -f1)
+  if [ -n "$MV" ] && grep -q "pkg: APK signature mismatch\|cannot find com.topjohnwu.magisk" <(A shell 'cat /data/local/tmp/magisk.log' 2>/dev/null) ; then
+    APK="$HOME/.cache/Magisk-v$MV.apk"; mkdir -p "$HOME/.cache"
+    [ -s "$APK" ] || curl -fsSL -o "$APK" "https://github.com/topjohnwu/Magisk/releases/download/v$MV/Magisk-v$MV.apk" || { err "Không tải được Magisk v$MV từ GitHub"; exit 1; }
+    A uninstall com.topjohnwu.magisk >/dev/null 2>&1; A install -r "$APK" >/dev/null 2>&1 && ok "Đã cài app Magisk chính thức v$MV"
+    bash "$0" stop >/dev/null 2>&1; bash "$0" start >/dev/null 2>&1; sleep 25
+  fi
   if A shell 'su -c id' 2>/dev/null | grep -q "uid=0"; then ok "ROOT TỰ ĐỘNG: CHẠY ✓ (Shell + mọi app có root, không cần bấm)"
   else err "Root tự động chưa chạy. Thông tin dò lỗi:"
     echo "   dịch vụ cpgrant: $(A shell getprop init.svc.cpgrant | tr -d '\r')"

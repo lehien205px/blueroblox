@@ -933,6 +933,71 @@ def cmd_resize(a):
     p["ram"], p["cpu"] = ram, cpu; save(st)
     print(f"⬆️ '{a.name}' → {ram:g}GB RAM · {cpu:g} nhân")
 
+# ===================== CHUYỂN MÁY THƯỜNG (redroid) → MÁY GPU =====================
+# Sao lưu app + dữ liệu app (+ thư mục Android/data, obb) từ máy cũ → tạo máy GPU mới cùng cấu hình & hạn → cài lại + chép dữ liệu.
+# KHÔNG xoá máy cũ (cloudphone-migrate.py xoá sau khi đã đổi trên web). Lỗi giữa chừng → xoá máy GPU mới, máy cũ giữ nguyên.
+PKG_RE = re.compile(r"^[A-Za-z0-9_]+(\.[A-Za-z0-9_]+)+$")
+MIGRATE_MAP = {"9": "11", "10": "11"}          # 9/10 lên 11: máy GPU 11 chạy được game ARM (bản 10 của Google thì không)
+def _hadb(port, args, timeout=900, **kw):
+    return subprocess.run([os.path.join(SDK, "platform-tools", "adb"), "-s", f"emulator-{int(port) - 1}"] + args,
+                          capture_output=True, text=True, timeout=timeout, env=GPU_ENV, **kw)
+
+def cmd_migrate(a):
+    import glob, shutil, math
+    st = load(); p = rec(a.name, st)
+    if not p: print("Không có máy tên này."); sys.exit(1)
+    if is_gpu(p): print("Máy này đã là máy GPU."); sys.exit(0)
+    av = a.android or MIGRATE_MAP.get(str(p.get("android", "11")), str(p.get("android", "11")))
+    if not gpu_img_ok(av): print(f"SKIP: chưa có máy GPU Android {av} trên server."); sys.exit(2)
+    if not gpu_slot(st): print("SKIP: card đồ hoạ đầy."); sys.exit(2)
+    W = os.path.join(DATA_ROOT, "_migrate", a.name); shutil.rmtree(W, ignore_errors=True); os.makedirs(W)
+    # 1) sao lưu từ máy cũ (máy cũ vẫn chạy)
+    pkgs = [l.split(":", 1)[1].strip() for l in (ashell(a.name, "pm list packages -3").stdout or "").splitlines() if l.startswith("package:")]
+    skip = {"com.topjohnwu.magisk"}
+    pkgs = [x for x in pkgs if x not in skip and PKG_RE.match(x)]
+    print(f"[1/4] Sao lưu {len(pkgs)} app từ {a.name}…")
+    for pk in pkgs:
+        d = os.path.join(W, pk); os.makedirs(d)
+        paths = [l.split(":", 1)[1].strip() for l in (ashell(a.name, f"pm path {pk}").stdout or "").splitlines() if l.startswith("package:")]
+        for i, ap in enumerate(paths): sh(["docker", "cp", f"{a.name}:{ap}", os.path.join(d, f"{i:02d}.apk")])
+        ashell(a.name, f"am force-stop {pk}")
+        for tag, cmd in (("data", f"cd /data/data && tar -cf - --exclude={pk}/lib --exclude={pk}/cache --exclude={pk}/code_cache {pk}"),
+                         ("sd", f"cd /data/media/0 && ls -d Android/data/{pk} Android/obb/{pk} 2>/dev/null | xargs -r tar -cf -")):
+            with open(os.path.join(d, tag + ".tar"), "wb") as fo:
+                subprocess.run(["docker", "exec", a.name, "/system/bin/sh", "-c", cmd], stdout=fo, stderr=subprocess.DEVNULL)
+    # 2) tạo máy GPU mới cùng cấu hình
+    left = max(1, math.ceil((parse_dt(p["expires"]) - now()).total_seconds() / 86400))
+    print(f"[2/4] Tạo máy GPU {a.new} (Android {av}, {p['ram']}GB, {p['cpu']} nhân)…")
+    r = subprocess.run(["python3", os.path.abspath(__file__), "create", a.new, "--ram", str(p["ram"]), "--cpu", str(p["cpu"]), "--days", str(left),
+                        "--res", p.get("res") or "720x1280", "--fps", str(p.get("fps", 30)), "--android", av], capture_output=True, text=True)
+    st = load(); q = rec(a.new, st)
+    if r.returncode != 0 or not q or not is_gpu(q):
+        if q: subprocess.run(["python3", os.path.abspath(__file__), "delete", a.new], capture_output=True)
+        print("LỖI tạo máy GPU:", (r.stdout + r.stderr)[-300:]); sys.exit(4)
+    q["expires"] = p["expires"]; q["dpi"] = p.get("dpi", 0); save(st)        # giữ ĐÚNG hạn cũ
+    port = q["port"]
+    # 3) cài lại app + chép dữ liệu (máy GPU có root sâu)
+    print(f"[3/4] Cài lại app + chép dữ liệu vào {a.new}…"); fails = []
+    for pk in pkgs:
+        d = os.path.join(W, pk); apks = sorted(glob.glob(os.path.join(d, "*.apk")))
+        if not apks: continue
+        ri = _hadb(port, (["install-multiple"] if len(apks) > 1 else ["install"]) + ["-r", "-g"] + apks)
+        if ri.returncode != 0 or "Success" not in (ri.stdout or ""): fails.append(pk); continue
+        for tag, dest in (("data", "/data/data"), ("sd", "/data/media/0")):
+            t = os.path.join(d, tag + ".tar")
+            if not os.path.exists(t) or os.path.getsize(t) < 1024: continue
+            _hadb(port, ["push", t, "/data/local/tmp/m.tar"])
+            if tag == "data":
+                cmd = (f"am force-stop {pk}; U=$(stat -c %u /data/data/{pk}); cd /data/data && tar -xf /data/local/tmp/m.tar && "
+                       f"chown -R $U:$U /data/data/{pk} && restorecon -RF /data/data/{pk}")
+            else:
+                cmd = (f"U=$(stat -c %u /data/data/{pk}); cd /data/media/0 && tar -xf /data/local/tmp/m.tar; "
+                       f"[ -d Android/data/{pk} ] && chown -R $U:$U Android/data/{pk}; [ -d Android/obb/{pk} ] && chmod -R 775 Android/obb/{pk}; true")
+            _hadb(port, ["shell", f"su -c '{cmd}; rm -f /data/local/tmp/m.tar'"])
+    shutil.rmtree(W, ignore_errors=True)
+    print(f"[4/4] Xong: {len(pkgs) - len(fails)}/{len(pkgs)} app" + (f" (không cài lại được: {', '.join(fails[:8])})" if fails else ""))
+    print(f"MIGRATED {a.new} {port} {av}")
+
 def cmd_list(a):
     st = load()
     if not st["phones"]: print("(chưa có máy nào)"); return
@@ -968,6 +1033,7 @@ def main():
     d = sub.add_parser("delete"); d.add_argument("name"); d.set_defaults(f=cmd_delete)
     r = sub.add_parser("renew"); r.add_argument("name"); r.add_argument("--days", type=int, default=7); r.set_defaults(f=cmd_renew)
     z = sub.add_parser("resize"); z.add_argument("name"); z.add_argument("--ram", type=float, default=0); z.add_argument("--cpu", type=float, default=0); z.set_defaults(f=cmd_resize)
+    mg = sub.add_parser("migrate"); mg.add_argument("name"); mg.add_argument("new"); mg.add_argument("--android", default=""); mg.set_defaults(f=cmd_migrate)
     sub.add_parser("reap").set_defaults(f=cmd_reap)
     s = sub.add_parser("stop"); s.add_argument("name"); s.set_defaults(f=cmd_stop)
     sub.add_parser("connect-all").set_defaults(f=cmd_connect_all)

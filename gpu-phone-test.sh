@@ -88,13 +88,14 @@ xsetup)
 start)
   [ -x "$EMU" ] || { err "Chưa cài. Chạy:  bash $0 install"; exit 1; }
   [ -w /dev/kvm ] || { err "Chưa có quyền KVM — thoát SSH rồi vào lại"; exit 1; }
-  [ -S "/tmp/.X11-unix/X${XD#:}" ] || bash "$0" xsetup || exit 1
+  EG="${EMU_GPU:-host}"     # host = card NVIDIA · swiftshader_indirect = vẽ bằng CPU (OpenGL ES 3, không cần màn hình ảo)
+  [ "$EG" != host ] || [ -S "/tmp/.X11-unix/X${XD#:}" ] || bash "$0" xsetup || exit 1
   if pgrep -f -- "-avd $AVD" >/dev/null; then
     if [ "$("$ADB" -s emulator-$PORT shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; then ok "Máy thử đang chạy rồi"; bash "$0" check; exit 0; fi
     warn "Có máy thử cũ bị kẹt → tắt hẳn rồi bật lại"; bash "$0" stop >/dev/null 2>&1
   fi
-  echo "== Bật máy thử bằng GPU NVIDIA =="
-  DISPLAY=$XD setsid nohup "$EMU" -avd "$AVD" -port "$PORT" -no-window -gpu host -feature -Vulkan -no-audio -no-boot-anim -no-snapshot \
+  echo "== Bật máy thử (đồ hoạ: $EG) =="
+  DISPLAY=$XD setsid nohup "$EMU" -avd "$AVD" -port "$PORT" -no-window -gpu "$EG" -feature -Vulkan -no-audio -no-boot-anim -no-snapshot \
       -camera-back none -camera-front none -netdelay none -netspeed full > "$LOG" 2>&1 < /dev/null &
   "$ADB" start-server >/dev/null 2>&1
   for i in $(seq 1 90); do
@@ -109,6 +110,11 @@ start)
   docker exec wsscrcpy adb connect 127.0.0.1:$((PORT + 1)) >/dev/null 2>&1 && ok "Đã nối vào trình điều khiển: thiết bị 127.0.0.1:$((PORT + 1))"
   echo "   Xem màn hình: đăng nhập admin trên web → https://phone.blueroblox.shop/ → chọn 127.0.0.1:$((PORT + 1))"
   bash "$0" check ;;
+
+chrome)
+  # mở Chrome vào google.com trong máy thử → báo chạy được hay văng (đúng lỗi máy 9/10/11 đang gặp)
+  "$ADB" -s emulator-$PORT shell 'logcat -c; logcat -b crash -c; am start -a android.intent.action.VIEW -d https://www.google.com -p com.android.chrome >/dev/null 2>&1; sleep 15; pidof com.android.chrome >/dev/null && echo "✅ CHROME CHẠY ĐƯỢC" || echo "❌ CHROME VĂNG"; logcat -d -b crash | grep -m2 -E "Abort|FATAL"' | tr -d '\r'
+  echo "   Đồ hoạ: $("$ADB" -s emulator-$PORT shell dumpsys SurfaceFlinger 2>/dev/null | grep -m1 'GLES:' | tr -d '\r')" ;;
 
 check)
   echo "== Android: $("$ADB" -s emulator-$PORT shell getprop ro.build.version.release 2>/dev/null | tr -d '\r') · chip hỗ trợ: $("$ADB" -s emulator-$PORT shell getprop ro.product.cpu.abilist 2>/dev/null | tr -d '\r')"

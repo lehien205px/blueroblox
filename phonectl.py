@@ -207,9 +207,28 @@ def gpu_ready():
     return (GPU_MAX > 0 and os.path.exists(os.path.join(SDK, "emulator", "emulator"))
             and os.path.exists("/tmp/.X11-unix/X9") and os.path.exists("/etc/systemd/system/cloudgpu@.service"))
 
-def gpu_slot(st):
-    """Còn chỗ trên card cho 1 máy GPU nữa không."""
-    return gpu_ready() and len(gpu_used(st)) < GPU_MAX and gpu_vram_free() >= GPU_MIN_VRAM
+GPU_RAM_RESERVE = float(CONF.get("GPU_RAM_RESERVE", "8") or 8)   # GB RAM thật luôn chừa lại cho hệ thống
+GPU_FALLBACK = CONF.get("GPU_FALLBACK", "0") == "1"            # 1 = card đầy thì tạo máy thường (redroid); 0 = báo HẾT HÀNG
+def ram_avail_gb():
+    try:
+        m = {l.split(":")[0]: int(l.split()[1]) for l in open("/proc/meminfo")}
+        return m["MemAvailable"] / 1048576
+    except Exception: return None
+
+def gpu_full_reason(st, ram=0):
+    """Lý do KHÔNG thêm được máy GPU (chuỗi rỗng = còn chỗ)."""
+    if not gpu_ready(): return "máy GPU chưa sẵn sàng"
+    if len(gpu_used(st)) >= GPU_MAX: return f"đủ {GPU_MAX} máy GPU"
+    v = gpu_vram_free()
+    if v < GPU_MIN_VRAM: return f"card đồ hoạ đầy (còn {v} MB)"
+    ra = ram_avail_gb()   # máy GPU là máy ảo → chiếm RAM thật, không dùng chung như redroid
+    if ra is not None and ra - (float(ram) + 1) < GPU_RAM_RESERVE:
+        return f"RAM thật còn {ra:.0f}GB, máy {ram}GB cần thêm {float(ram) + 1:g}GB và chừa {GPU_RAM_RESERVE:g}GB"
+    return ""
+
+def gpu_slot(st, ram=0):
+    """Còn chỗ trên card (và RAM thật) cho 1 máy GPU nữa không."""
+    return not gpu_full_reason(st, ram)
 
 def gpu_port(st):
     busy = {int(x["port"]) for x in st["phones"]}
@@ -513,12 +532,15 @@ def cmd_create(a):
     # (muốn ưu tiên GPU hơn root: thêm GPU_OVER_ROOT=1 vào ~/cloudphone.conf)
     rooted = pick_image(IMAGES[av][0]) != IMAGES[av][0]
     # Máy GPU nay đã có root sâu → bản nào có máy GPU (10/11/12) thì ưu tiên GPU khi card còn chỗ
-    gpu = gpu_img_ok(av) and not a.nogpu and (gpu_rooted() or not rooted or CONF.get("GPU_OVER_ROOT") == "1") and gpu_slot(st)
-    if av in GPU_ONLY and not gpu:
-        print(f"HẾT HÀNG: Android {av} chỉ chạy bằng máy GPU và card đồ hoạ đang đầy."); sys.exit(2)
+    want_gpu = gpu_img_ok(av) and not a.nogpu and (gpu_rooted() or not rooted or CONF.get("GPU_OVER_ROOT") == "1")
+    why = gpu_full_reason(st, a.ram) if want_gpu else "chưa có máy GPU bản này"
+    gpu = want_gpu and not why
+    # Card đầy → KHÔNG tạo nữa (báo HẾT HÀNG, web tự hoàn tiền). Chỉ khi GPU tắt hẳn mới dùng máy thường.
+    if not gpu and (av in GPU_ONLY or (want_gpu and gpu_ready() and not GPU_FALLBACK)):
+        print(f"HẾT HÀNG: Android {av} chỉ tạo máy GPU — {why}."); sys.exit(2)
     port = gpu_port(st) if gpu else free_port(st)
     if gpu and not port:
-        if av in GPU_ONLY: print("HẾT HÀNG: hết cổng máy GPU."); sys.exit(2)
+        if av in GPU_ONLY or not GPU_FALLBACK: print("HẾT HÀNG: hết cổng máy GPU."); sys.exit(2)
         gpu, port = False, free_port(st)
     if not port: print("LỖI: hết cổng (tối đa 30 máy/node)."); sys.exit(3)
     if not SAFE.match(a.name): print("LỖI: tên máy chỉ gồm chữ, số, _ . -"); sys.exit(1)
@@ -906,6 +928,8 @@ def cmd_restart(a):
 def cmd_gpuinfo(a):
     st = load(); g = gpu_used(st)
     print(f"Máy GPU: {len(g)}/{GPU_MAX} · card còn trống {gpu_vram_free()} MB · sẵn sàng: {'có' if gpu_ready() else 'CHƯA (chạy: sudo bash ~/cloudphone-gpu.sh install)'}")
+    ra = ram_avail_gb()
+    print(f"RAM thật còn trống: {'?' if ra is None else f'{ra:.0f} GB'} (chừa {GPU_RAM_RESERVE:g} GB) · card đầy thì: {'tạo máy thường' if GPU_FALLBACK else 'HẾT HÀNG, không tạo nữa'}")
     for p in g: print(f"   {p['name']}  cổng {p['port']}  {'đang chạy' if is_running(p['name'], p) else 'đang tắt'}")
 
 def cmd_renew(a):
@@ -949,7 +973,8 @@ def cmd_migrate(a):
     if is_gpu(p): print("Máy này đã là máy GPU."); sys.exit(0)
     av = a.android or MIGRATE_MAP.get(str(p.get("android", "11")), str(p.get("android", "11")))
     if not gpu_img_ok(av): print(f"SKIP: chưa có máy GPU Android {av} trên server."); sys.exit(2)
-    if not gpu_slot(st): print("SKIP: card đồ hoạ đầy."); sys.exit(2)
+    why = gpu_full_reason(st, p.get("ram", 4))
+    if why: print(f"SKIP: {why} — máy cũ giữ nguyên."); sys.exit(2)
     W = os.path.join(DATA_ROOT, "_migrate", a.name); shutil.rmtree(W, ignore_errors=True); os.makedirs(W)
     # 1) sao lưu từ máy cũ (máy cũ vẫn chạy)
     pkgs = [l.split(":", 1)[1].strip() for l in (ashell(a.name, "pm list packages -3").stdout or "").splitlines() if l.startswith("package:")]

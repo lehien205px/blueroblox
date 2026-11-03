@@ -335,7 +335,8 @@ def gpu_status():
 def stream_url_of(port):
     q = urllib.parse.quote; base = "https://" + PUBLIC_HOST; udid = f"127.0.0.1:{port}"
     ws = base.replace("https://", "wss://") + "/?action=proxy-adb&remote=" + q("tcp:8886", safe="") + "&udid=" + q(udid, safe="")
-    return f"{base}/#!action=stream&udid={q(udid, safe='')}&player=webcodecs&ws={q(ws, safe='')}"
+    # máy GPU (máy ảo Google): dùng trình phát tinyh264 (giải mã bằng JS/WASM) — webcodecs của Chrome có thể từ chối loại hình máy GPU gửi ra
+    return f"{base}/#!action=stream&udid={q(udid, safe='')}&player=tinyh264&ws={q(ws, safe='')}"
 
 def gpu_run(args, env=None, timeout=1800):
     e = dict(os.environ); e.update(env or {})

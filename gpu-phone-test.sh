@@ -112,7 +112,7 @@ start)
     else rm -f "$HOME/.android/adbkey.ws" "$HOME/.android/adbkey.pub.ws"; fi
   fi
   echo "== Bật máy thử (đồ hoạ: $EG) =="
-  DISPLAY=$XD setsid nohup "$EMU" -avd "$AVD" -port "$PORT" -no-window -gpu "$EG" -feature -Vulkan -no-audio -no-boot-anim -no-snapshot \
+  DISPLAY=$XD setsid nohup "$EMU" -avd "$AVD" -port "$PORT" -no-window -gpu "$EG" -feature -Vulkan -no-audio -no-boot-anim -no-snapshot ${WIPE:+-wipe-data} \
       -camera-back none -camera-front none -netdelay none -netspeed full > "$LOG" 2>&1 < /dev/null &
   "$ADB" start-server >/dev/null 2>&1
   for i in $(seq 1 90); do

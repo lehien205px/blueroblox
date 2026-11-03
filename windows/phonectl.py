@@ -331,6 +331,8 @@ def cmd_create(a):
     tot, av = mem()
     if av - (a.ram + 1) < RESERVE:
         print(f"HẾT HÀNG: RAM Windows còn {av:.1f}GB, máy {a.ram:g}GB cần thêm {a.ram + 1:g}GB và chừa {RESERVE:g}GB."); sys.exit(2)
+    try: open(os.path.join(HOME, "redroid", f"creating_{os.getpid()}.flag"), "w").write(a.name)   # báo "đang tạo máy khách" → dựng máy sẵn nhường đường
+    except OSError: pass
     sp = take_spare(a.name)
     if sp is not None:
         idx = sp
@@ -626,9 +628,20 @@ def take_spare(new_name):
             _ps(d)
     except Exception as e: print("   (không lấy được máy dựng sẵn:", e, ")")
     return None
+def _creating_now():
+    """Có đơn máy khách đang được tạo không (để máy dựng sẵn KHÔNG giành lượt MEmu của khách)."""
+    d = os.path.join(HOME, "redroid"); busy = False
+    for fn in os.listdir(d) if os.path.isdir(d) else []:
+        if fn.startswith("creating_") and fn.endswith(".flag"):
+            pid = fn[9:-5]
+            if pid.isdigit() and _pid_alive(pid): busy = True
+            else:
+                try: os.remove(os.path.join(d, fn))
+                except OSError: pass
+    return busy
 def cmd_pool(a):
     """Giữ sẵn POOL_SIZE máy dựng sẵn (đang tắt, không tốn RAM — chỉ ~1GB ổ cứng mỗi máy)."""
-    if POOL_SIZE <= 0: return
+    if POOL_SIZE <= 0 or _creating_now(): return
     try: lk = _Lock("pool", wait=1); lk.__enter__()
     except Exception: return                       # đang dựng máy khác
     try:
@@ -645,6 +658,7 @@ def cmd_pool(a):
         import shutil
         if shutil.disk_usage(HOME).free / 2**30 < 20: print("Ổ cứng < 20GB trống — không dựng máy sẵn."); return
         nm = f"spare_{int(time.time())}"
+        if _creating_now(): return
         print(f"DUNG_SAN {nm}: tạo + khởi động + cài sẵn…", flush=True)
         with _Lock("memu"):
             before = set(vms())

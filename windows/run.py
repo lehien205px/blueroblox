@@ -68,7 +68,9 @@ def _translate(args, text):
         p = _phones().get(who)                         # docker exec cp_xxx /system/bin/sh -c …  → adb shell
         if not p: return None, _done(a, 1, err="không có máy", text=text)
         cmd = rest[-1] if len(rest) >= 3 and rest[-2] == "-c" else " ".join(rest)
-        return [ADB, "-s", f"127.0.0.1:{p['port']}", "shell", cmd], None
+        # docker exec chạy bằng root; adb shell của MEmu là người dùng shell → chạy qua su (máy đã bật root)
+        import shlex
+        return [ADB, "-s", f"127.0.0.1:{p['port']}", "shell", f"su -c {shlex.quote(cmd)} 2>/dev/null || {{ {cmd}; }}"], None
     if sub == "cp" and len(a) >= 4:
         src, dst = a[2], a[3]
         if ":" in dst and dst.split(":", 1)[0] == "wsscrcpy":

@@ -42,7 +42,7 @@ def memuc(*a, timeout=300):
     """memuc chỉ xử lý 1 lệnh một lúc (chạy chồng → "read failed: 233") → xếp hàng bằng khoá + thử lại."""
     r = None
     for i in range(4):
-        with _Lock("memuc", wait=max(120, timeout)):
+        with _Lock("memuc", wait=min(max(120, timeout), 260)):
             r = run([os.path.join(MEMU, "memuc.exe")] + list(a), timeout)
         o = (r.stdout or "") + (r.stderr or "")
         if "read failed" not in o and "connect failed" not in o.lower(): return r
@@ -333,8 +333,11 @@ def cmd_create(a):
         print(f"HẾT HÀNG: RAM Windows còn {av:.1f}GB, máy {a.ram:g}GB cần thêm {a.ram + 1:g}GB và chừa {RESERVE:g}GB."); sys.exit(2)
     print(f"[1/4] Tạo máy Android 9 trên MEmu…", flush=True)
     with _Lock("memu"):
+        for oi, ox in sorted(vms().items(), reverse=True):   # máy trùng tên còn sót trong MEmu (lần tạo trước bị ngắt) → xoá trước
+            if ox["name"] == a.name:
+                print(f"   (xoá máy sót cùng tên #{oi})", flush=True); memuc("stop", "-i", oi, timeout=60); memuc("remove", "-i", oi, timeout=180)
         before = set(vms())
-        r = memuc("create", "96", timeout=900)                       # 96 = Android 9 64-bit
+        r = memuc("create", "96", timeout=240)                       # 96 = Android 9 64-bit
         m = re.search(r"index\D*(\d+)", r.stdout or "")
         idx = int(m.group(1)) if m else next(iter(sorted(set(vms()) - before)), None)
         if idx is None: print("LỖI tạo máy:", ((r.stdout or "") + (r.stderr or "")).strip()[-300:]); sys.exit(4)
@@ -349,7 +352,7 @@ def cmd_create(a):
            "android": "9", "kind": "memu", "created": fmt(now()), "expires": exp.isoformat()}
     st = load(); st["phones"].append(row); save(st)
     print(f"[3/4] Bật máy…", flush=True)
-    s = memuc("start", "-i", idx, timeout=600)
+    s = memuc("start", "-i", idx, timeout=150)
     if not a.nowait: print(f"[4/4] Chờ Android khởi động (tối đa {BOOT_WAIT // 60} phút)…", flush=True)
     if s.returncode not in (0, None) and "SUCCESS" not in (s.stdout or "").upper():
         print("CẢNH BÁO bật máy:", (s.stdout or s.stderr or "").strip()[-200:])
@@ -372,7 +375,7 @@ def cmd_delete(a):
     adb("disconnect", serial(p), timeout=15)
     with _Lock("memu"):
         memuc("stop", "-i", IDX(p), timeout=120); time.sleep(3)
-        memuc("remove", "-i", IDX(p), timeout=600)
+        memuc("remove", "-i", IDX(p), timeout=180)
     st = load(); st["phones"] = [x for x in st["phones"] if x["name"] != a.name]; save(st)
     print(f"🗑️  Đã xoá máy '{a.name}' và toàn bộ dữ liệu.")
 
@@ -381,7 +384,7 @@ def cmd_stop(a):
     memuc("stop", "-i", IDX(p), timeout=120); print(f"⏸  Đã tạm dừng '{a.name}'.")
 
 def start_phone(p):
-    r = memuc("start", "-i", IDX(p), timeout=600); adb_connect(p["port"]); return r
+    r = memuc("start", "-i", IDX(p), timeout=150); adb_connect(p["port"]); return r
 def cmd_start(a):
     st, p = _need(a.name); start_phone(p); print("✅ Đã bật")
 def cmd_restart(a):
@@ -390,6 +393,7 @@ def cmd_restart(a):
 
 def cmd_waitboot(a):
     st, p = _need(a.name)
+    if not is_running(a.name, p): start_phone(p)          # máy đang tắt (lần bật trước bị ngắt) → bật lại rồi mới chờ
     ok = wait_boot(a.name, p["port"], apps=not a.noapps)
     print("Android đã khởi động xong." if ok else "Chưa kết nối được, sẽ tự thử lại."); sys.exit(0 if ok else 5)
 

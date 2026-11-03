@@ -583,7 +583,8 @@ let token = "", me = null, phones = [], cur = null, underMaint = false;
 const PAGE_ID = Math.random().toString(36).slice(2, 12);      // mã của trang này (mỗi máy chỉ 1 nơi xem cùng lúc)
 if (EMBED) document.documentElement.classList.add("embed");
 let player = store.get("cp_player") === "broadway" ? "broadway" : "webcodecs";
-let quality = ["eco", "bal", "hd"].includes(store.get("cp_q")) ? store.get("cp_q") : "bal";
+const Q_URL = new URLSearchParams(location.search).get("q");          // app Android gửi kèm mức chất lượng (mặc định Siêu nét)
+let quality = ["eco", "bal", "hd"].includes(Q_URL) ? Q_URL : ["eco", "bal", "hd"].includes(store.get("cp_q")) ? store.get("cp_q") : "bal";
 let zoom = 1;
 
 /* ---------- giao diện chung ---------- */

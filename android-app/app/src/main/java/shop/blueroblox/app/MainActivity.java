@@ -5,6 +5,8 @@ import android.app.Activity;
 import android.app.Dialog;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Build;
@@ -17,6 +19,7 @@ import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.FrameLayout;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -43,6 +46,29 @@ public class MainActivity extends Activity {
     private boolean loaded = false;
     private final Handler h = new Handler(Looper.getMainLooper());
     private final Runnable poll = this::refresh;
+    // MÀN HÌNH TRỰC TIẾP: ảnh nhỏ của từng máy trong tab "Máy của tôi", cập nhật ~4 giây/lần (xem acc có đang chạy không)
+    private final java.util.Map<String, ImageView> shots = new java.util.HashMap<>();
+    private final java.util.Map<String, Bitmap> lastShot = new java.util.HashMap<>();
+    private final java.util.Set<String> shotBusy = new java.util.HashSet<>();
+    private boolean resumed = false;
+    private final Runnable shotTick = new Runnable() {
+        @Override public void run() {
+            h.removeCallbacks(this);
+            if (!resumed || tab != 0) return;
+            for (java.util.Map.Entry<String, ImageView> e : new java.util.HashMap<>(shots).entrySet()) {
+                final String id = e.getKey(); final ImageView iv = e.getValue();
+                if (shotBusy.contains(id)) continue;
+                shotBusy.add(id);
+                Api.bg(() -> {
+                    byte[] b = Api.cpBytes(java.net.URLEncoder.encode(id, "UTF-8") + "/shot?w=270");
+                    return BitmapFactory.decodeByteArray(b, 0, b.length);
+                }, bmp -> { shotBusy.remove(id); if (bmp != null) { lastShot.put(id, bmp); iv.setImageBitmap(bmp);
+                    Object t = iv.getTag(); if (t instanceof View) { ((View) t).setVisibility(View.GONE); iv.setTag(null); } } },
+                   msg -> shotBusy.remove(id));
+            }
+            h.postDelayed(this, 4000);
+        }
+    };
 
     JSONArray phones = new JSONArray();
     JSONObject prof = new JSONObject(), price = new JSONObject(), status = new JSONObject();
@@ -140,8 +166,8 @@ public class MainActivity extends Activity {
         refresh();
     }
 
-    @Override protected void onResume() { super.onResume(); if (Api.loggedIn()) refresh(); Updater.check(this, false); }
-    @Override protected void onPause() { super.onPause(); h.removeCallbacks(poll); }
+    @Override protected void onResume() { super.onResume(); resumed = true; if (Api.loggedIn()) refresh(); Updater.check(this, false); h.postDelayed(shotTick, 800); }
+    @Override protected void onPause() { super.onPause(); resumed = false; h.removeCallbacks(poll); h.removeCallbacks(shotTick); }
 
     private void toLogin() {
         startActivity(new Intent(this, LoginActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK));
@@ -231,6 +257,7 @@ public class MainActivity extends Activity {
 
     // ---------------- TAB 1: Máy của tôi ----------------
     void renderPhones() {
+        shots.clear();
         LinearLayout body = Ui.col(this, 14);
         if (status.optBoolean("maint", false)) {
             LinearLayout m = Ui.card(this);
@@ -275,6 +302,7 @@ public class MainActivity extends Activity {
         }
         for (int i = 0; i < phones.length(); i++) body.addView(phoneCard(phones.optJSONObject(i)), Ui.fill());
         page(body);
+        h.removeCallbacks(shotTick); h.postDelayed(shotTick, 300);
     }
 
     private View phoneCard(JSONObject p) {
@@ -318,9 +346,36 @@ public class MainActivity extends Activity {
                     + (se > 0 ? Ui.L(" · đến ", " · until ") + fdate(se) : Ui.L(" · theo hạn máy", " · until expiry")), 13, Ui.SKY, false), Ui.fill());
         }
 
+        boolean canCtl = "active".equals(st) && !lk && !status.optBoolean("maint", false);
+        if (canCtl) {                                    // màn hình trực tiếp (ảnh nhỏ, tự cập nhật) — bấm vào để điều khiển
+            final String pid = p.optString("id");
+            FrameLayout box = new FrameLayout(this);
+            box.setBackground(Ui.round(Color.rgb(2, 4, 12), 12, Color.argb(60, 120, 160, 255)));
+            ImageView iv = new ImageView(this);
+            iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            Bitmap old = lastShot.get(pid);
+            if (old != null) iv.setImageBitmap(old);
+            box.addView(iv, new FrameLayout.LayoutParams(-1, -1));
+            TextView lv = Ui.text(this, "● " + Ui.L("Trực tiếp", "Live"), 11, Color.WHITE, true);
+            lv.setBackground(Ui.round(Color.argb(140, 0, 0, 0), 6, 0));
+            lv.setPadding(Ui.dp(6), Ui.dp(1), Ui.dp(6), Ui.dp(1));
+            FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM | Gravity.START);
+            lp.setMargins(Ui.dp(6), 0, 0, Ui.dp(6));
+            box.addView(lv, lp);
+            if (old == null) {
+                TextView wt = Ui.muted(this, Ui.L("Đang lấy hình…", "Loading…"));
+                wt.setGravity(Gravity.CENTER);
+                box.addView(wt, new FrameLayout.LayoutParams(-1, -1));
+                iv.setTag(wt);
+            }
+            box.setOnClickListener(v -> startActivity(new Intent(this, ControlActivity.class).putExtra("id", pid)));
+            LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(Ui.dp(150), Ui.dp(266));
+            blp.gravity = Gravity.CENTER_HORIZONTAL;
+            c.addView(box, blp);
+            shots.put(pid, iv);
+        }
         LinearLayout acts = Ui.row(this, 8);
         Button ctl = Ui.button(this, "▶ " + Ui.L("Điều khiển", "Control"), Ui.PRIMARY);
-        boolean canCtl = "active".equals(st) && !lk && !status.optBoolean("maint", false);
         ctl.setEnabled(canCtl);
         ctl.setAlpha(canCtl ? 1f : .45f);
         ctl.setOnClickListener(v -> startActivity(new Intent(this, ControlActivity.class).putExtra("id", p.optString("id"))));

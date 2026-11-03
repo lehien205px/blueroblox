@@ -298,6 +298,12 @@ GPU_PORT = 5601               # adb của máy thử (console 5600)
 GPU_IMGS = {"9": "system-images;android-28;google_apis_playstore;x86", "10": "system-images;android-29;google_apis_playstore;x86",
             "11": "system-images;android-30;google_apis_playstore;x86_64", "12": "system-images;android-31;google_apis_playstore;x86_64"}
 
+def gpu_adb(cmd, timeout=20):
+    e = dict(os.environ); e["ANDROID_ADB_SERVER_PORT"] = "5038"
+    r = subprocess.run([os.path.join(HOME, "android-sdk", "platform-tools", "adb"), "-s", "emulator-5600", "shell", cmd],
+                       capture_output=True, text=True, timeout=timeout, env=e)
+    return (r.stdout or "") if r.returncode == 0 else ""
+
 def gpu_status():
     d = {"installed": os.path.isfile(GPU_SCRIPT) and os.path.isdir(os.path.join(HOME, "android-sdk", "emulator")), "running": False}
     pr = subprocess.run(["pgrep", "-f", "-o", "--", "-avd gputest"], capture_output=True, text=True)
@@ -309,8 +315,8 @@ def gpu_status():
             d["cpu"] = float(ps[0]); d["ram_gb"] = round(int(ps[1]) / 1048576, 1)
         except Exception: pass
         try:
-            r = shell(GPU_PORT, "getprop sys.boot_completed; getprop ro.build.version.release; getprop ro.product.cpu.abilist; dumpsys SurfaceFlinger | grep -m1 GLES:", 20)
-            ls = [l.strip() for l in out(r).splitlines()]
+            ls = [l.strip() for l in gpu_adb("getprop sys.boot_completed; getprop ro.build.version.release; getprop ro.product.cpu.abilist; dumpsys SurfaceFlinger | grep -m1 GLES:").splitlines()]
+            if ls and ls[0] not in ("0", "1", ""): ls = []        # máy chưa sẵn sàng / adb báo lỗi → bỏ qua
             d["booted"] = bool(ls and ls[0] == "1")
             if len(ls) > 1: d["android"] = ls[1]
             if len(ls) > 2: d["abi"] = ls[2]
@@ -822,9 +828,9 @@ class H(BaseHTTPRequestHandler):
                 def work(j):
                     if do == "stop": gpu_run(["stop"], timeout=120); return "Đã tắt máy thử."
                     if do == "chrome":
-                        shell(GPU_PORT, "am start -a android.intent.action.VIEW -d https://www.google.com com.android.chrome", 20)
+                        gpu_adb("am start -W -a android.intent.action.VIEW -d https://www.google.com com.android.chrome", 40)
                         time.sleep(15)
-                        alive = out(shell(GPU_PORT, "pidof com.android.chrome", 20)).strip()
+                        alive = gpu_adb("pidof com.android.chrome").strip()
                         return "✅ Chrome đang chạy." if alive else "❌ Chrome không chạy — xem màn hình máy thử."
                     if do == "android":
                         JOBS[j]["msg"] = f"Đang tắt máy cũ và tải Android {ver} (5–15 phút)…"

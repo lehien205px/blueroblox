@@ -23,6 +23,7 @@ LOG="$HOME/gpu-phone-test.log"
 export ANDROID_SDK_ROOT="$SDK" ANDROID_HOME="$SDK" ANDROID_AVD_HOME="$HOME/.android/avd"
 # adb riêng ở cổng 5038 — KHÔNG dùng chung adb (5037) của ws-scrcpy, tránh làm rớt hình máy khách
 export ANDROID_ADB_SERVER_PORT=5038 QT_QPA_PLATFORM=offscreen
+WS=wsscrcpy
 XD=":9"                      # màn hình ảo chạy trên GTX 1080 (không cần màn hình thật) — emulator cần nó để dùng GPU
 SM="$SDK/cmdline-tools/latest/bin/sdkmanager"; AM="$SDK/cmdline-tools/latest/bin/avdmanager"
 EMU="$SDK/emulator/emulator"; ADB="$SDK/platform-tools/adb"
@@ -99,6 +100,17 @@ start)
     if [ "$("$ADB" -s emulator-$PORT shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; then ok "Máy thử đang chạy rồi"; bash "$0" check; exit 0; fi
     warn "Có máy thử cũ bị kẹt → tắt hẳn rồi bật lại"; bash "$0" stop >/dev/null 2>&1
   fi
+  # Máy Android Google bật "xác nhận adb": máy chỉ tin khoá adb của máy chủ (~/.android/adbkey.pub) lúc khởi động.
+  # → dùng CHUNG khoá với trình điều khiển ws-scrcpy, để trang web xem/điều khiển được mà không cần bấm "Cho phép".
+  if docker exec $WS sh -c 'test -f ~/.android/adbkey && test -f ~/.android/adbkey.pub' 2>/dev/null; then
+    mkdir -p "$HOME/.android"
+    docker exec $WS sh -c 'cat ~/.android/adbkey' > "$HOME/.android/adbkey.ws" 2>/dev/null
+    docker exec $WS sh -c 'cat ~/.android/adbkey.pub' > "$HOME/.android/adbkey.pub.ws" 2>/dev/null
+    if [ -s "$HOME/.android/adbkey.ws" ] && ! cmp -s "$HOME/.android/adbkey.ws" "$HOME/.android/adbkey"; then
+      mv -f "$HOME/.android/adbkey.ws" "$HOME/.android/adbkey"; mv -f "$HOME/.android/adbkey.pub.ws" "$HOME/.android/adbkey.pub"
+      chmod 600 "$HOME/.android/adbkey"; "$ADB" kill-server >/dev/null 2>&1; ok "Dùng chung khoá adb với trình điều khiển"
+    else rm -f "$HOME/.android/adbkey.ws" "$HOME/.android/adbkey.pub.ws"; fi
+  fi
   echo "== Bật máy thử (đồ hoạ: $EG) =="
   DISPLAY=$XD setsid nohup "$EMU" -avd "$AVD" -port "$PORT" -no-window -gpu "$EG" -feature -Vulkan -no-audio -no-boot-anim -no-snapshot \
       -camera-back none -camera-front none -netdelay none -netspeed full > "$LOG" 2>&1 < /dev/null &
@@ -112,7 +124,7 @@ start)
   [ "$("$ADB" -s emulator-$PORT shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ] || { err "Chưa khởi động xong sau 4 phút — xem: tail -50 $LOG"; exit 1; }
   ok "Android đã khởi động"
   "$ADB" -s emulator-$PORT shell 'settings put global window_animation_scale 0; settings put global transition_animation_scale 0; settings put global animator_duration_scale 0; settings put global stay_on_while_plugged_in 7; svc power stayon true' >/dev/null 2>&1
-  docker exec wsscrcpy adb connect 127.0.0.1:$((PORT + 1)) >/dev/null 2>&1 && ok "Đã nối vào trình điều khiển: thiết bị 127.0.0.1:$((PORT + 1))"
+  docker exec $WS adb connect 127.0.0.1:$((PORT + 1)) >/dev/null 2>&1 && ok "Đã nối vào trình điều khiển: thiết bị 127.0.0.1:$((PORT + 1))"
   echo "   Xem màn hình: đăng nhập admin trên web → https://phone.blueroblox.shop/ → chọn 127.0.0.1:$((PORT + 1))"
   bash "$0" check ;;
 

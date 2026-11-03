@@ -8,6 +8,7 @@
 import base64, hashlib, hmac, http.client, ipaddress, json, os, re, secrets, shlex, shutil, socket
 import subprocess, sys, threading, time, urllib.error, urllib.parse, urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+SHOTS = {}          # (cổng, cỡ) → (lúc chụp, ảnh, loại) — ảnh màn hình nhỏ cho danh sách máy
 
 HOME = os.path.expanduser("~")
 CONF = os.path.join(HOME, "cloudphone.conf")
@@ -943,16 +944,32 @@ class H(BaseHTTPRequestHandler):
             shell(port, f"settings put system accelerometer_rotation 0; settings put system user_rotation {d}", 15)
             return self.send_json(200, {"ok": True})
 
-        if act == "shot":
-            r = adb(port, ["exec-out", "screencap", "-p"], 30)
-            if r.returncode or not r.stdout.startswith(b"\x89PNG"): return self.send_json(500, {"error": "Không chụp được màn hình."})
+        if act == "shot":          # ảnh màn hình; ?w=270 → ẢNH NHỎ cho "màn hình trực tiếp" trong danh sách máy (JPEG ~15KB, giữ 2 giây cho nhiều người xem)
+            try: w = max(0, min(720, int(q.get("w") or 0)))
+            except ValueError: w = 0
+            key = (int(port), w); c = SHOTS.get(key)
+            if c and time.time() - c[0] < 2: data, ctype = c[1], c[2]
+            else:
+                r = adb(port, ["exec-out", "screencap", "-p"], 30)
+                if r.returncode or not r.stdout.startswith(b"\x89PNG"): return self.send_json(500, {"error": "Không chụp được màn hình."})
+                data, ctype = r.stdout, "image/png"
+                if w:
+                    try:
+                        import io
+                        from PIL import Image
+                        im = Image.open(io.BytesIO(data)).convert("RGB")
+                        im = im.resize((w, max(1, round(im.height * w / im.width))))
+                        b = io.BytesIO(); im.save(b, "JPEG", quality=62); data, ctype = b.getvalue(), "image/jpeg"
+                    except Exception: pass         # chưa có Pillow → gửi ảnh gốc
+                SHOTS[key] = (time.time(), data, ctype)
+                if len(SHOTS) > 200: SHOTS.clear()
             self.send_response(200)
             self.cors()
-            self.send_header("Content-Type", "image/png")
+            self.send_header("Content-Type", ctype)
             self.send_header("Cache-Control", "no-store")
-            self.send_header("Content-Length", str(len(r.stdout)))
+            self.send_header("Content-Length", str(len(data)))
             self.end_headers()
-            return self.wfile.write(r.stdout)
+            return self.wfile.write(data)
 
         if act == "gsf":          # mã thiết bị Google (GSF ID) → khách đăng ký ở google.com/android/uncertified để đăng nhập Google được
             r = shell(port, "content query --uri content://com.google.android.gsf.gservices --where \"name='android_id'\"", 20)

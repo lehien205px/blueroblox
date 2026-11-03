@@ -7,6 +7,8 @@
 #   bash gpu-phone-test.sh xsetup    # màn hình ảo trên GTX 1080 (install tự gọi)
 #   bash gpu-phone-test.sh start     # bật máy thử (4 nhân, 4GB, 720x1280)
 #   bash gpu-phone-test.sh check     # xem máy có ĐANG DÙNG GTX 1080 không + CPU/RAM
+#   bash gpu-phone-test.sh report    # báo cáo đủ: GPU · game ARM · root · Play Store · hình · Chrome
+#   bash gpu-phone-test.sh root      # root bằng Magisk (giữ Play Store) · unroot = bỏ root
 #   bash gpu-phone-test.sh stop      # tắt máy thử
 #   bash gpu-phone-test.sh remove    # xoá sạch máy thử + SDK
 #  Xem màn hình: đăng nhập admin → https://phone.blueroblox.shop/ → thiết bị 127.0.0.1:5601
@@ -134,6 +136,32 @@ chrome)
   "$ADB" -s emulator-$PORT shell 'logcat -c; logcat -b crash -c; am start -W -a android.intent.action.VIEW -d https://www.google.com com.android.chrome >/dev/null 2>&1; sleep 15; pidof com.android.chrome >/dev/null && echo "✅ CHROME CHẠY ĐƯỢC" || echo "❌ CHROME VĂNG"; logcat -d -b crash | grep -m2 -E "Abort|FATAL"' | tr -d '\r'
   echo "   Đồ hoạ: $("$ADB" -s emulator-$PORT shell dumpsys SurfaceFlinger 2>/dev/null | grep -m1 'GLES:' | tr -d '\r')" ;;
 
+root)
+  # ROOT máy thử bằng Magisk (bản chính thức) — dùng công cụ rootAVD: vá ramdisk của bản Android đang dùng.
+  # Vá xong, MỌI máy dùng bản Android này đều có root. Giữ nguyên Play Store. Gỡ: bash $0 unroot
+  export ANDROID_SERIAL=emulator-$PORT PATH="$SDK/platform-tools:$PATH"
+  [ "$("$ADB" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ] || { err "Bật máy thử trước:  bash $0 start"; exit 1; }
+  SYS=$(grep "^image.sysdir.1=" "$ANDROID_AVD_HOME/$AVD.avd/config.ini" | cut -d= -f2 | sed 's|/*$||')
+  RD="$SDK/$SYS/ramdisk.img"; [ -f "$RD" ] || { err "Không thấy $RD"; exit 1; }
+  [ -f "$RD.goc" ] || cp "$RD" "$RD.goc" && ok "Đã lưu bản gốc: $RD.goc"
+  RA="$HOME/rootAVD"
+  if [ ! -f "$RA/rootAVD.sh" ]; then
+    echo "== Tải rootAVD =="
+    rm -rf "$RA" /tmp/rootavd.tgz; mkdir -p "$RA"
+    curl -fsSL -o /tmp/rootavd.tgz "https://gitlab.com/newbit/rootAVD/-/archive/master/rootAVD-master.tar.gz" \
+      && tar -xzf /tmp/rootavd.tgz -C "$RA" --strip-components=1 && ok "rootAVD" || { err "Không tải được rootAVD"; exit 1; }
+  fi
+  echo "== Vá root (Magisk) cho $SYS — khoảng 1–3 phút, máy thử sẽ tự tắt khi xong =="
+  ( cd "$RA" && ANDROID_HOME="$SDK" bash ./rootAVD.sh "$SYS/ramdisk.img" ) 2>&1 | tail -25
+  sleep 5; pgrep -f -- "-avd $AVD" >/dev/null && bash "$0" stop >/dev/null 2>&1
+  cmp -s "$RD" "$RD.goc" && { err "Ramdisk chưa được vá — gửi 25 dòng trên cho người hỗ trợ"; exit 1; }
+  ok "Đã vá root. Bật lại máy:  bash $0 start"
+  echo "   Sau khi bật: mở màn hình máy → app Magisk → nếu hỏi 'Cần cài đặt bổ sung' bấm OK (máy tự khởi động lại 1 lần)." ;;
+
+unroot)
+  SYS=$(grep "^image.sysdir.1=" "$ANDROID_AVD_HOME/$AVD.avd/config.ini" | cut -d= -f2 | sed 's|/*$||'); RD="$SDK/$SYS/ramdisk.img"
+  [ -f "$RD.goc" ] && { bash "$0" stop >/dev/null 2>&1; cp "$RD.goc" "$RD" && ok "Đã trả ramdisk gốc (bỏ root). Bật lại: bash $0 start"; } || err "Không có bản gốc để trả lại" ;;
+
 report)
   # BÁO CÁO 1 LẦN: GPU · game ARM · root · ảnh màn hình có bị đen · Chrome
   A() { "$ADB" -s emulator-$PORT "$@"; }
@@ -145,6 +173,7 @@ report)
   echo "$GL" | grep -qi "nvidia\|geforce" && ok "GPU:            GTX 1080" || err "GPU:            KHÔNG dùng GTX 1080 ($GL)"
   echo "$ABI" | grep -q arm64 && ok "Game ARM:       chạy được ($ABI)" || err "Game ARM:       KHÔNG ($ABI)"
   if A shell 'su -c id' 2>/dev/null | grep -q "uid=0"; then ok "Root (su):      CÓ"
+  elif A shell pm list packages 2>/dev/null | grep -q com.topjohnwu.magisk; then warn "Root:           Magisk đã cài — mở app Magisk, cho phép 'Shell' quyền root rồi chạy lại report"
   elif A root 2>&1 | grep -qi "cannot run as root\|production"; then err "Root:           KHÔNG (bản có Play Store bị khoá root)"
   else sleep 2; A wait-for-device; A shell id 2>/dev/null | grep -q "uid=0" && warn "Root:           chỉ có 'adb root' (chưa có su cho app)" || err "Root:           KHÔNG"; A unroot >/dev/null 2>&1; sleep 2; A wait-for-device; fi
   A shell pm list packages 2>/dev/null | grep -q com.android.vending && ok "Play Store:     CÓ" || err "Play Store:     KHÔNG"

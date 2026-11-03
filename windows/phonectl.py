@@ -94,6 +94,38 @@ class _Lock:            # khoá file: các lệnh memuc không chạy chồng nh
         try: os.close(self.fd); os.remove(self.p)
         except Exception: pass
 
+def _sb_patch(name, fields):
+    """Báo web (Supabase) khi cổng máy đổi — MEmu có thể đánh lại số máy khi xoá máy khác."""
+    try:
+        import urllib.request, urllib.parse
+        url = CONF["SUPABASE_URL"].rstrip("/") + "/rest/v1/cloud_phones?container=eq." + urllib.parse.quote(name)
+        k = CONF["SUPABASE_SERVICE_KEY"]
+        req = urllib.request.Request(url, data=json.dumps(fields).encode(), method="PATCH",
+                                     headers={"apikey": k, "Authorization": "Bearer " + k, "Content-Type": "application/json", "Prefer": "return=minimal"})
+        urllib.request.urlopen(req, timeout=15).read()
+    except Exception as e: print("   (không báo được web:", e, ")")
+
+def stream_url(port):
+    import urllib.parse
+    q = urllib.parse.quote; base = CONF.get("PUBLIC_BASE", "https://phone.blueroblox.shop").rstrip("/"); udid = f"127.0.0.1:{port}"
+    ws = base.replace("https://", "wss://") + "/?action=proxy-adb&remote=" + q("tcp:8886", safe="") + "&udid=" + q(udid, safe="")
+    return f"{base}/#!action=stream&udid={q(udid, safe='')}&player=webcodecs&ws={q(ws, safe='')}"
+
+def IDX(p, _v=None):
+    """Số máy MEmu THẬT của máy này — tìm theo TÊN mỗi lần (số máy trong MEmu có thể đổi). Đổi → cập nhật cổng + báo web."""
+    v = _v if _v is not None else vms()
+    hit = [i for i, x in v.items() if x["name"] == p["name"]]
+    if not hit: return None
+    i = hit[0]
+    if int(p.get("idx", -1)) != i or int(p.get("port", 0)) != port_of(i):
+        st = load(); q = rec(p["name"], st)
+        if q:
+            q["idx"], q["port"] = i, port_of(i); save(st)
+            print(f"   ↪ {p['name']}: MEmu đổi số máy → #{i}, cổng {port_of(i)}")
+            if p["name"].startswith("cp_"): _sb_patch(p["name"], {"port": port_of(i), "stream_url": stream_url(port_of(i))})
+        p["idx"], p["port"] = i, port_of(i)
+    return i
+
 def vms():
     """{index: {name, running}} theo memuc listvms (index,tên,cửa sổ,đang chạy,pid,dung lượng)."""
     out = {}
@@ -105,8 +137,9 @@ def vms():
 def is_running(name, p=None, _v=None):
     p = p or rec(name)
     if not p: return False
-    v = (_v if _v is not None else vms()).get(int(p["idx"]))
-    return bool(v and v["running"])
+    v = _v if _v is not None else vms()
+    i = IDX(p, v)
+    return i is not None and bool(v[i]["running"])
 
 def mem():
     class M(ctypes.Structure):
@@ -279,28 +312,33 @@ def cmd_create(a):
 def _need(name):
     st = load(); p = rec(name, st)
     if not p: print("Không có máy tên này."); sys.exit(1)
-    return st, p
+    if IDX(p) is None: print(f"LỖI: không thấy máy '{name}' trong MEmu (đã bị xoá tay?)."); sys.exit(4)
+    return load(), rec(name)
 
 def cmd_delete(a):
-    st, p = _need(a.name)
+    st = load(); p = rec(a.name, st)
+    if not p: print("Không có máy tên này."); sys.exit(1)
+    if IDX(p) is None:                     # máy đã không còn trong MEmu → chỉ xoá khỏi danh sách
+        st = load(); st["phones"] = [x for x in st["phones"] if x["name"] != a.name]; save(st)
+        print(f"🗑️  '{a.name}' không còn trong MEmu — đã bỏ khỏi danh sách."); return
     adb("disconnect", serial(p), timeout=15)
     with _Lock("memu"):
-        memuc("stop", "-i", p["idx"], timeout=120); time.sleep(3)
-        memuc("remove", "-i", p["idx"], timeout=600)
+        memuc("stop", "-i", IDX(p), timeout=120); time.sleep(3)
+        memuc("remove", "-i", IDX(p), timeout=600)
     st = load(); st["phones"] = [x for x in st["phones"] if x["name"] != a.name]; save(st)
     print(f"🗑️  Đã xoá máy '{a.name}' và toàn bộ dữ liệu.")
 
 def cmd_stop(a):
     st, p = _need(a.name); adb("disconnect", serial(p), timeout=15)
-    memuc("stop", "-i", p["idx"], timeout=120); print(f"⏸  Đã tạm dừng '{a.name}'.")
+    memuc("stop", "-i", IDX(p), timeout=120); print(f"⏸  Đã tạm dừng '{a.name}'.")
 
 def start_phone(p):
-    r = memuc("start", "-i", p["idx"], timeout=600); adb_connect(p["port"]); return r
+    r = memuc("start", "-i", IDX(p), timeout=600); adb_connect(p["port"]); return r
 def cmd_start(a):
     st, p = _need(a.name); start_phone(p); print("✅ Đã bật")
 def cmd_restart(a):
     st, p = _need(a.name); adb("disconnect", serial(p), timeout=15)
-    memuc("stop", "-i", p["idx"], timeout=120); time.sleep(3); start_phone(p); print("✅ Đã khởi động lại")
+    memuc("stop", "-i", IDX(p), timeout=120); time.sleep(3); start_phone(p); print("✅ Đã khởi động lại")
 
 def cmd_waitboot(a):
     st, p = _need(a.name)
@@ -319,8 +357,8 @@ def cmd_resize(a):
     ram = a.ram if a.ram > 0 else float(p["ram"]); cpu = a.cpu if a.cpu > 0 else float(p["cpu"])
     tot, av = mem()
     if ram > float(p["ram"]) and av - (ram - float(p["ram"])) < RESERVE: print("LỖI: RAM Windows không đủ để nâng."); sys.exit(4)
-    adb("disconnect", serial(p), timeout=15); memuc("stop", "-i", p["idx"], timeout=120); time.sleep(3)
-    configure(p["idx"], ram, cpu, p.get("res", "720x1280"), p.get("dpi"))
+    adb("disconnect", serial(p), timeout=15); memuc("stop", "-i", IDX(p), timeout=120); time.sleep(3)
+    configure(IDX(p), ram, cpu, p.get("res", "720x1280"), p.get("dpi"))
     start_phone(p); wait_boot(a.name, p["port"], apps=False)
     st = load(); q = rec(a.name, st); q["ram"], q["cpu"] = ram, cpu; save(st)
     print(f"⬆️ '{a.name}' → {ram:g}GB RAM · {cpu:g} nhân")
@@ -328,8 +366,8 @@ def cmd_resize(a):
 def cmd_reconfig(a):
     st, p = _need(a.name)
     res = a.res or p.get("res") or "720x1280"; fps = clamp_fps(a.fps or p.get("fps", 30)); dpi = auto_dpi(res)
-    adb("disconnect", serial(p), timeout=15); memuc("stop", "-i", p["idx"], timeout=120); time.sleep(3)
-    configure(p["idx"], p["ram"], p["cpu"], res, dpi); start_phone(p); ok = wait_boot(a.name, p["port"], apps=False)
+    adb("disconnect", serial(p), timeout=15); memuc("stop", "-i", IDX(p), timeout=120); time.sleep(3)
+    configure(IDX(p), p["ram"], p["cpu"], res, dpi); start_phone(p); ok = wait_boot(a.name, p["port"], apps=False)
     st = load(); q = rec(a.name, st); q["res"], q["fps"], q["dpi"] = res, fps, dpi; save(st)
     print(f"✅ '{a.name}' → {res} · {fps} FPS" + ("" if ok else " (đang kết nối lại)"))
 
@@ -361,7 +399,7 @@ def cmd_reap(a):
         if exp + datetime.timedelta(minutes=GRACE_MIN) < now():
             a.name = p["name"]; cmd_delete(a); n += 1
         elif exp < now() and is_running(p["name"], p):
-            memuc("stop", "-i", p["idx"], timeout=120); print(f"⏸  Hết hạn → tạm dừng '{p['name']}'")
+            memuc("stop", "-i", IDX(p), timeout=120); print(f"⏸  Hết hạn → tạm dừng '{p['name']}'")
     print(f"Xong. Đã xoá {n} máy.")
 
 def cmd_preinstall(a):
@@ -382,7 +420,7 @@ def cmd_rootfix(a):
         if not is_running(p["name"], p, v): print(f"ROOT_SKIP {p['name']}: máy đang tắt"); continue
         o = (ashell(p["name"], "command -v su").stdout or "")
         if "su" not in o:
-            memuc("setconfigex", "-i", p["idx"], "enable_su", 1, timeout=60)
+            memuc("setconfigex", "-i", IDX(p), "enable_su", 1, timeout=60)
             print(f"ROOT_WAIT {p['name']}: vừa bật root, khởi động lại máy để có hiệu lực")
         else: print(f"ROOT_OK {p['name']}: đã root — tool gọi su là chạy bằng quyền root")
 
@@ -395,7 +433,7 @@ def cmd_list(a):
     st = load(); v = vms()
     if not st["phones"]: print("(chưa có máy nào)"); return
     for p in st["phones"]:
-        print(f"{p['name']:<16} #{p['idx']:<3} cổng {p['port']:<6} {p['ram']}G/{p['cpu']}  hết hạn {fmt(parse_dt(p['expires']))}  {'chạy' if is_running(p['name'], p, v) else 'tắt'}")
+        i = IDX(p, v); print(f"{p['name']:<16} #{'?' if i is None else i:<3} cổng {p['port']:<6} {p['ram']}G/{p['cpu']}  hết hạn {fmt(parse_dt(p['expires']))}  {'chạy' if is_running(p['name'], p, v) else 'tắt'}")
 
 def cmd_noop(a): print("(bản Windows: không cần lệnh này)")
 def cmd_show(a): print(f"Hiện {hide_window(a.name, show=True)} cửa sổ của '{a.name}'.")

@@ -216,9 +216,9 @@ rootboot)
   # Áp dụng cho mọi máy dùng bản Android này. Dùng magiskboot (trong Magisk chính thức) chạy ngay trong máy thử.
   A() { "$ADB" -s emulator-$PORT "$@"; }
   [ "$(A shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ] || { err "Bật máy thử trước:  bash $0 start"; exit 1; }
-  A shell 'ls -la /system/bin/su' 2>/dev/null | grep -q magisk || { err "Bản này chưa có Magisk trong file khởi động — chạy:  bash $0 root"; exit 1; }
-
   SYS=$(grep "^image.sysdir.1=" "$ANDROID_AVD_HOME/$AVD.avd/config.ini" | cut -d= -f2 | sed 's|/*$||'); RD="$SDK/$SYS/ramdisk.img"
+
+  [ -f "$RD.magisk" ] || A shell 'ls -la /system/bin/su' 2>/dev/null | grep -q magisk || { err "Bản này chưa có Magisk trong file khởi động — chạy:  bash $0 root"; exit 1; }
   [ -f "$RD.magisk" ] || cp "$RD" "$RD.magisk"            # bản đã có Magisk (chưa gắn dịch vụ) — luôn làm lại từ bản này
   AB=$(A shell getprop ro.product.cpu.abi | tr -d '\r'); case "$AB" in x86_64) L=x86_64;; *) L=x86;; esac
   MZ="$HOME/rootAVD/Magisk.zip"; [ -f "$MZ" ] || { err "Không thấy $MZ (chạy: bash $0 root)"; exit 1; }

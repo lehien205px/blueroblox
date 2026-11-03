@@ -90,8 +90,8 @@ def cpu_real():
         d = json.load(open(CPU_NOW))
         return float(d["avg5"]) if time.time() - float(d.get("ts", 0)) < 600 else None
     except Exception: return None
-GPU_MAX = int(CONF.get("GPU_PHONES", "0") or 0)          # số máy GPU tối đa trên card (GTX 1080 8GB: ~8)
-GPU_MIN_VRAM = 700                                        # MB bộ nhớ card phải còn trống để thêm 1 máy
+GPU_MAX = int(CONF.get("GPU_PHONES", "0") or 0)          # 0 = tắt máy GPU; số lớn (999) = không giới hạn số máy, chỉ dừng khi card hết bộ nhớ
+GPU_MIN_VRAM = int(CONF.get("GPU_MIN_VRAM", "400") or 400)  # MB bộ nhớ card phải còn trống để thêm 1 máy (card thật sự đầy mới dừng)
 SDK = os.path.expanduser("~/android-sdk")
 AVD_HOME = os.path.expanduser("~/.android/avd")
 GPU_IMG = CONF.get("GPU_IMG", "system-images;android-30;google_apis_playstore;x86_64")
@@ -103,7 +103,7 @@ GPU_ONLY = {"9", "10"}          # redroid 9/10 không chạy được game/Chrom
 def gpu_img_ok(av):
     img = GPU_IMGS.get(av)
     return bool(img) and os.path.isdir(os.path.join(SDK, *img.split(";")))
-GPU_PORTS = range(5611, 5682, 2)                          # cổng adb máy GPU (console = cổng − 1); 5601 là máy thử
+GPU_PORTS = range(5611, 5698, 2)                          # cổng adb máy GPU (console = cổng − 1); 5601 là máy thử
 GPU_ENV = {**os.environ, "ANDROID_SDK_ROOT": SDK, "ANDROID_HOME": SDK, "ANDROID_AVD_HOME": AVD_HOME,
            "ANDROID_ADB_SERVER_PORT": "5038", "QT_QPA_PLATFORM": "offscreen", "DISPLAY": ":9"}
 

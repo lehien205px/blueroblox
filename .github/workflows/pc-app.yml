@@ -32,13 +32,33 @@ jobs:
         with:
           workspaces: "pc-app/src-tauri -> target"
 
-      - name: Build installer
+      - name: Check files
+        shell: pwsh
+        run: |
+          Get-ChildItem -Recurse pc-app | Where-Object { $_.FullName -notmatch 'node_modules|target' } | Select-Object -ExpandProperty FullName
+          foreach ($f in "pc-app/package.json","pc-app/icon.png","pc-app/dist/index.html","pc-app/src-tauri/Cargo.toml","pc-app/src-tauri/build.rs","pc-app/src-tauri/tauri.conf.json","pc-app/src-tauri/src/main.rs") {
+            if (-not (Test-Path $f)) { Write-Host "::error::THIEU FILE: $f"; exit 1 } }
+          node --version; npm --version; cargo --version
+
+      - name: Install Tauri CLI
         working-directory: pc-app
-        shell: bash
+        shell: pwsh
         run: |
           npm install --no-audit --no-fund
-          npx tauri icon icon.png
-          npx tauri build --bundles nsis --config "{\"version\":\"1.${{ github.run_number }}.0\"}"
+          if (-not (Test-Path node_modules/.bin/tauri.cmd)) { npm install --no-audit --no-fund --save-dev "@tauri-apps/cli@^2" "@tauri-apps/cli-win32-x64-msvc@^2" }
+          npm run tauri -- --version
+
+      - name: Make icons
+        working-directory: pc-app
+        shell: pwsh
+        run: npm run tauri -- icon icon.png
+
+      - name: Build installer
+        working-directory: pc-app
+        shell: pwsh
+        run: |
+          Set-Content -Encoding ascii ver.json '{"version":"1.${{ github.run_number }}.0"}'
+          npm run tauri -- build --bundles nsis --config ver.json
 
       - name: Find installer
         shell: bash

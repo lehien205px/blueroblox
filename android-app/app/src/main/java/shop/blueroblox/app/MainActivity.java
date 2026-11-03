@@ -405,7 +405,7 @@ public class MainActivity extends Activity {
         final int maxR = price.optInt("max_ram", 16), maxC = price.optInt("max_cpu", 8);
         final int[] nr = {R0}, nc = {C0};
         final long[] cost = {0};
-        final boolean gpu = p.optInt("port") >= 5600 && p.optInt("port") <= 5699;
+        final boolean gpu = p.optInt("port") >= 5600;          // máy GPU / máy MEmu (Windows): đổi cấu hình phải khởi động lại
         LinearLayout c = Ui.col(this, 12);
         c.addView(Ui.muted(this, Ui.L("Hiện tại: ", "Now: ") + R0 + "GB RAM · " + C0 + Ui.L(" nhân · ", " cores · ") + left(parseTime(p.optString("expires_at")))));
         TextView lr = Ui.text(this, "RAM", 14, Ui.FG, true); c.addView(lr);
@@ -690,7 +690,7 @@ public class MainActivity extends Activity {
         ac.addView(Ui.text(this, Ui.L("Phiên bản Android", "Android version"), 14, Ui.MUTED, true));
         Ui.Wrap aw = new Ui.Wrap(this, 8);
         for (String v : avs) {
-            TextView ch = Ui.chip(this, "Android " + v + ("12".equals(v) ? Ui.L("  ⭐ Khuyên dùng", "  ⭐ Best")
+            TextView ch = Ui.chip(this, "Android " + v + ("9".equals(v) ? Ui.L("  🎮 64-bit · chạy Roblox", "  🎮 64-bit · runs Roblox") : "12".equals(v) ? Ui.L("  ⭐ Khuyên dùng", "  ⭐ Best")
                     : "10".equals(v) ? Ui.L("  ⚡ GPU · app x86", "  ⚡ GPU · x86 apps") : ""), v.equals(sAnd));
             ch.setTag(v);
             ch.setOnClickListener(x -> {

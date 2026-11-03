@@ -358,6 +358,8 @@ setenforce 0 2>/dev/null; echo "selinux: $(getenforce)"
 mkdir -p /dev/cpbin; chmod 755 /dev/cpbin; chown 0:2000 /dev/cpbin; cp -f $D/cpsu /dev/cpbin/su; chown 0:0 /dev/cpbin/su; chmod 755 /dev/cpbin/su
 chcon u:object_r:system_file:s0 /dev/cpbin /dev/cpbin/su 2>/dev/null
 ours() { [ "$(/system/bin/su -v 2>/dev/null)" = "30.7:MAGISKSU" ]; }
+# bước early (trước khi hệ thống chạy): KHÔNG đụng /system/bin — Android 10 bị treo khởi động nếu gắn lớp ở đây
+if [ "$1" = early ]; then echo "early: chỉ mở SELinux + bật cpsud"; exit 0; fi
 # Magisk dựng lại /system/bin (tmpfs) sau bước early và đặt su của nó → thay thẳng file su trong đó bằng su của BlueRoblox
 if ! ours && [ -L /system/bin/su ]; then
   mount -o remount,rw /system/bin 2>/dev/null
@@ -367,7 +369,7 @@ fi
 if ! ours; then
   mount -t overlay cpbin -o lowerdir=/dev/cpbin:/system/bin,context=u:object_r:system_file:s0 /system/bin && echo "overlay /system/bin OK" || echo "overlay LỖI"
   # an toàn: nếu sh không chạy được qua lớp mới → gỡ ngay, không để hỏng máy
-  if ! /system/bin/sh -c true 2>/dev/null || [ "$(stat -c %a /system/bin)" != 755 ]; then umount -l /system/bin; echo "overlay bị gỡ (không an toàn)"; fi
+  if ! /system/bin/sh -c true 2>/dev/null || ! su -v >/dev/null 2>&1; then umount -l /system/bin; echo "overlay bị gỡ (không an toàn)"; fi
 fi
 ours && echo "su: CỦA BLUEROBLOX" || echo "su: CHƯA ĐÚNG ($(ls -la /system/bin/su 2>&1))"
 [ -S /dev/socket/cpsu ] && chmod 666 /dev/socket/cpsu

@@ -15,7 +15,7 @@ LOGS = os.path.join(B, "logs"); os.makedirs(LOGS, exist_ok=True)
 CONF = os.path.join(B, "cloudphone.conf")
 RAW = "https://raw.githubusercontent.com/lehien205px/blueroblox/main"
 NOWIN = 0x08000000
-ENV = dict(os.environ, PATH=os.path.join(B, "platform-tools") + os.pathsep + os.environ.get("PATH", ""), PYTHONIOENCODING="utf-8", PYTHONUTF8="1")
+ENV = dict(os.environ, PATH=os.path.join(B, "platform-tools") + os.pathsep + os.environ.get("PATH", ""), PYTHONIOENCODING="utf-8", PYTHONUTF8="1", PYTHONUNBUFFERED="1")
 
 # ---------- màu Cloud Blue ----------
 BG, CARD, LINE, FG, MUTED, BLUE, GOOD, BAD, WARN = "#0b1530", "#12204a", "#22356e", "#e8efff", "#93a4cf", "#3d8bff", "#2ecc71", "#ff5d6c", "#ffb547"
@@ -280,7 +280,11 @@ class App:
         try: os.remove(log)
         except OSError: pass
         exe = r'$c = (Get-Command cloudflared -ErrorAction SilentlyContinue).Source; if (-not $c) { $c = "C:\Program Files (x86)\cloudflared\cloudflared.exe" }'
-        run_admin(f"{exe}\n& $c service uninstall 2>$null\n& $c service install {token}\nStart-Sleep 3\nsc.exe start cloudflared\nStart-Sleep 2\nsc.exe query cloudflared", log)
+        run_admin(f"{exe}\n& $c service uninstall 2>$null\n& $c service install {token}\nStart-Sleep 3\n"
+                  + "Set-Content -Encoding ascii C:\\blue\\cloudflared.yml \"ingress:`n  - hostname: phone.blueroblox.shop`n    service: http://localhost:8010`n  - service: http_status:404\"\n"
+                  + "$k='HKLM:\\SYSTEM\\CurrentControlSet\\Services\\cloudflared'; $p=(Get-ItemProperty $k).ImagePath\n"
+                  + "if ($p -notmatch '--config') { Set-ItemProperty $k ImagePath ($p -replace ' tunnel run', ' tunnel --config C:\\blue\\cloudflared.yml run') }\n"
+                  + "Restart-Service cloudflared\nsc.exe start cloudflared\nStart-Sleep 2\nsc.exe query cloudflared", log)
         return self.tail(log, "Nối Cloudflare", 180, wait=wait)
 
     def cloudflare(self):

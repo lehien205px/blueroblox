@@ -38,7 +38,16 @@ def run(args, timeout=180, text=True):
                               encoding="utf-8" if text else None, errors="replace" if text else None)
     except subprocess.TimeoutExpired:
         return subprocess.CompletedProcess(args, 124, "", "timeout")
-def memuc(*a, timeout=300): return run([os.path.join(MEMU, "memuc.exe")] + list(a), timeout)
+def memuc(*a, timeout=300):
+    """memuc chỉ xử lý 1 lệnh một lúc (chạy chồng → "read failed: 233") → xếp hàng bằng khoá + thử lại."""
+    r = None
+    for i in range(4):
+        with _Lock("memuc", wait=max(120, timeout)):
+            r = run([os.path.join(MEMU, "memuc.exe")] + list(a), timeout)
+        o = (r.stdout or "") + (r.stderr or "")
+        if "read failed" not in o and "connect failed" not in o.lower(): return r
+        time.sleep(2 + 2 * i)
+    return r
 def adb(*a, timeout=60): return run([ADB] + list(a), timeout)
 
 # ---------- trạng thái ----------
@@ -58,17 +67,17 @@ def parse_dt(s):
 def fmt(dt): return dt.strftime("%d/%m/%Y %H:%M")
 def port_of(idx): return 21503 + 10 * int(idx)
 
-class _Lock:            # khoá file: 2 lệnh memuc create/remove không chạy chồng nhau
-    def __init__(self, name): self.p = os.path.join(HOME, "redroid", name + ".lock")
+class _Lock:            # khoá file: các lệnh memuc không chạy chồng nhau
+    def __init__(self, name, wait=600): self.p = os.path.join(HOME, "redroid", name + ".lock"); self.wait = wait
     def __enter__(self):
         os.makedirs(os.path.dirname(self.p), exist_ok=True)
-        for _ in range(600):
+        for _ in range(int(self.wait * 4)):
             try: self.fd = os.open(self.p, os.O_CREAT | os.O_EXCL | os.O_WRONLY); return self
             except FileExistsError:
                 try:
-                    if time.time() - os.path.getmtime(self.p) > 900: os.remove(self.p)
+                    if time.time() - os.path.getmtime(self.p) > 960: os.remove(self.p)
                 except Exception: pass
-                time.sleep(1)
+                time.sleep(0.25)
         raise RuntimeError("đợi khoá quá lâu")
     def __exit__(self, *a):
         try: os.close(self.fd); os.remove(self.p)
@@ -201,12 +210,14 @@ def cmd_create(a):
     tot, av = mem()
     if av - (a.ram + 1) < RESERVE:
         print(f"HẾT HÀNG: RAM Windows còn {av:.1f}GB, máy {a.ram:g}GB cần thêm {a.ram + 1:g}GB và chừa {RESERVE:g}GB."); sys.exit(2)
+    print(f"[1/4] Tạo máy Android 9 trên MEmu…", flush=True)
     with _Lock("memu"):
         before = set(vms())
         r = memuc("create", "96", timeout=900)                       # 96 = Android 9 64-bit
         m = re.search(r"index\D*(\d+)", r.stdout or "")
         idx = int(m.group(1)) if m else next(iter(sorted(set(vms()) - before)), None)
         if idx is None: print("LỖI tạo máy:", ((r.stdout or "") + (r.stderr or "")).strip()[-300:]); sys.exit(4)
+        print(f"[2/4] Đã tạo MEmu #{idx} → đặt tên, RAM, CPU, root…", flush=True)
         memuc("rename", "-i", idx, a.name, timeout=60)
         dpi = a.dpi or auto_dpi(a.res)
         configure(idx, a.ram, a.cpu, a.res, dpi)
@@ -214,7 +225,9 @@ def cmd_create(a):
     row = {"name": a.name, "idx": idx, "port": port, "ram": a.ram, "cpu": a.cpu, "res": a.res, "fps": clamp_fps(a.fps), "dpi": dpi,
            "android": "9", "kind": "memu", "created": fmt(now()), "expires": exp.isoformat()}
     st = load(); st["phones"].append(row); save(st)
+    print(f"[3/4] Bật máy…", flush=True)
     s = memuc("start", "-i", idx, timeout=600)
+    if not a.nowait: print(f"[4/4] Chờ Android khởi động (tối đa {BOOT_WAIT // 60} phút)…", flush=True)
     if s.returncode not in (0, None) and "SUCCESS" not in (s.stdout or "").upper():
         print("CẢNH BÁO bật máy:", (s.stdout or s.stderr or "").strip()[-200:])
     ok = True if a.nowait else wait_boot(a.name, port)

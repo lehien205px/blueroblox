@@ -127,7 +127,7 @@ class App:
         bar1 = tk.Frame(r, bg=BG); bar1.pack(fill="x", padx=14, pady=(8, 2))
         bar2 = tk.Frame(r, bg=BG); bar2.pack(fill="x", padx=14, pady=(2, 8))
         def btn(text, cmd, color=CARD, fg=FG):
-            bar = bar1 if len(bar1.winfo_children()) < 5 else bar2
+            bar = bar1 if len(bar1.winfo_children()) < 6 else bar2
             b = tk.Button(bar, text=text, command=cmd, bg=color, fg=fg, activebackground=BLUE, activeforeground="white", relief="flat",
                           font=("Segoe UI", 10, "bold"), padx=12, pady=7, cursor="hand2", bd=0)
             b.pack(side="left", padx=3); return b
@@ -140,6 +140,8 @@ class App:
         btn("🧪 Tạo máy thử", self.test_phone)
         btn("📋 Danh sách máy", lambda: self.job("Danh sách máy", [PY, "phonectl.py", "list"]))
         btn("♻ Làm mới máy khách", self.remake)
+        btn("⚡ Tối ưu Windows", self.optimize)
+        btn("🙈 Ẩn cửa sổ MEmu", lambda: self.job("Cho cửa sổ MEmu chạy ngầm", [PY, "phonectl.py", "hide"]))
         # nhật ký
         self.nb = ttk.Notebook(r); self.nb.pack(fill="both", expand=True, padx=14, pady=(0, 6))
         self.texts = {}
@@ -312,6 +314,28 @@ class App:
                                    "Nên báo khách trước. Làm từng máy một, có thể mất khá lâu."):
                 self.job("Làm mới máy khách", [PY, "run.py", "remake.py", "all"])
         self.job("Máy khách cần làm mới", [PY, "run.py", "remake.py", "list"], done=ask)
+
+    def optimize(self):
+        if not messagebox.askyesno("Tối ưu Windows", "Bật chế độ hiệu năng cao, không cho máy ngủ, cho Windows Defender bỏ qua thư mục MEmu/BlueRoblox "
+                                   "(đỡ giật ổ cứng), tắt quay màn hình nền của Xbox Game Bar?\nWindows sẽ hỏi quyền Admin."): return
+        log = os.path.join(LOGS, "optimize.log")
+        try: os.remove(log)
+        except OSError: pass
+        run_admin(r"""
+powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61 2>$null | Out-Null
+$u = (powercfg -list | Select-String 'Ultimate|Hiệu năng tối đa' | Select-Object -First 1)
+if ($u) { powercfg -setactive (($u -split '\s+')[3]) } else { powercfg -setactive SCHEME_MIN }
+powercfg /change standby-timeout-ac 0; powercfg /change hibernate-timeout-ac 0; powercfg /hibernate off
+Write-Host '[OK] Che do hieu nang cao, khong ngu'
+$M = @('C:\Program Files\Microvirt', 'D:\Program Files\Microvirt', 'C:\blue') | Where-Object { Test-Path $_ }
+foreach ($d in $M) { Add-MpPreference -ExclusionPath $d -ErrorAction SilentlyContinue }
+foreach ($x in 'MEmuHeadless.exe','MEmu.exe','MEmuConsole.exe','memuc.exe','adb.exe','node.exe') { Add-MpPreference -ExclusionProcess $x -ErrorAction SilentlyContinue }
+Write-Host '[OK] Defender bo qua MEmu + BlueRoblox'
+reg add HKCU\System\GameConfigStore /v GameDVR_Enabled /t REG_DWORD /d 0 /f | Out-Null
+reg add HKLM\SOFTWARE\Policies\Microsoft\Windows\GameDVR /v AllowGameDVR /t REG_DWORD /d 0 /f | Out-Null
+Write-Host '[OK] Tat Xbox Game DVR'
+""", log)
+        self.tail(log, "Tối ưu Windows", 300)
 
     # ================= TỰ ĐỘNG A→Z =================
     def _ui(self, fn, *a):

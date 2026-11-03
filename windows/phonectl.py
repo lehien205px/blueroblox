@@ -115,6 +115,32 @@ def mem():
     m = M(); m.l = ctypes.sizeof(M); ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(m))
     return m.total / 2**30, m.avail / 2**30
 
+HIDE = CONF.get("HIDE_WINDOWS", "1") == "1"      # 1 = cửa sổ MEmu của máy khách chạy ngầm (không hiện, không lên thanh taskbar)
+def hide_window(name, show=False):
+    """Đẩy cửa sổ MEmu ra ngoài màn hình + bỏ khỏi taskbar. KHÔNG thu nhỏ (thu nhỏ làm MEmu ngừng vẽ → web màn đen)."""
+    if not HIDE and not show: return 0
+    u = ctypes.windll.user32; found = []
+    PROC = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
+    def cb(h, _):
+        n = u.GetWindowTextLengthW(h)
+        if n:
+            b = ctypes.create_unicode_buffer(n + 1); u.GetWindowTextW(h, b, n + 1); t = b.value
+            if t == name or t.endswith(f"({name})") or t.endswith(f" {name}") or t == f"MEmu_{name}": found.append(h)
+        return True
+    u.EnumWindows(PROC(cb), 0)
+    GWL_EXSTYLE, WS_EX_TOOLWINDOW, WS_EX_APPWINDOW = -20, 0x80, 0x40000
+    for h in found:
+        ex = u.GetWindowLongW(h, GWL_EXSTYLE)
+        if show:
+            u.SetWindowLongW(h, GWL_EXSTYLE, (ex | WS_EX_APPWINDOW) & ~WS_EX_TOOLWINDOW); u.ShowWindow(h, 5)
+            u.SetWindowPos(h, 0, 100, 100, 0, 0, 0x0001 | 0x0004)
+        else:
+            u.ShowWindow(h, 0)                                                   # ẩn tạm để đổi kiểu cửa sổ
+            u.SetWindowLongW(h, GWL_EXSTYLE, (ex | WS_EX_TOOLWINDOW) & ~WS_EX_APPWINDOW)
+            u.SetWindowPos(h, 0, -32000, -32000, 0, 0, 0x0001 | 0x0004 | 0x0010)  # ra ngoài màn hình, giữ kích thước
+            u.ShowWindow(h, 4)                                                   # hiện lại (không lấy focus) → MEmu vẫn vẽ hình
+    return len(found)
+
 def serial(p): return f"127.0.0.1:{p['port']}"
 def adb_connect(port): return adb("connect", f"127.0.0.1:{port}", timeout=20)
 def ashell(name, script, port=None, timeout=60):
@@ -180,7 +206,9 @@ def clamp_fps(v):
 def configure(idx, ram, cpu, res, dpi):
     w, h = res.lower().split("x")
     for k, v in (("memory", int(float(ram) * 1024)), ("cpus", max(1, int(round(float(cpu))))), ("is_customed_resolution", 1),
-                 ("resolution_width", w), ("resolution_height", h), ("vbox_dpi", int(dpi or auto_dpi(res))), ("enable_su", 1)):
+                 ("resolution_width", w), ("resolution_height", h), ("vbox_dpi", int(dpi or auto_dpi(res))), ("enable_su", 1),
+                 ("graphics_render_mode", CONF.get("MEMU_RENDER", "1")),          # 1 = DirectX (nhẹ, ổn định hơn trên Windows)
+                 ("enable_audio", 0)):                                            # máy cloud không cần âm thanh → đỡ CPU
         memuc("setconfigex", "-i", idx, k, v, timeout=60)
 
 def booted(port):
@@ -194,6 +222,8 @@ def wait_boot(name, port, apps=True):
         if booted(port): ok = True; break
         time.sleep(3)
     if ok:
+        try: hide_window(name)
+        except Exception: pass
         tune(name, port); grant_perms(name)
         if apps: preinstall(name, port)
     return ok
@@ -232,6 +262,7 @@ def cmd_create(a):
         memuc("rename", "-i", idx, a.name, timeout=60)
         dpi = a.dpi or auto_dpi(a.res)
         configure(idx, a.ram, a.cpu, a.res, dpi)
+        memuc("setconfigex", "-i", idx, "fps", clamp_fps(a.fps), timeout=60)
     port = port_of(idx); exp = now() + datetime.timedelta(days=a.days)
     row = {"name": a.name, "idx": idx, "port": port, "ram": a.ram, "cpu": a.cpu, "res": a.res, "fps": clamp_fps(a.fps), "dpi": dpi,
            "android": "9", "kind": "memu", "created": fmt(now()), "expires": exp.isoformat()}
@@ -317,6 +348,11 @@ def cmd_connect_all(a):
         if serial(p) in online or not is_running(p["name"], p, v): continue
         adb_connect(p["port"]); n += 1; print("🔌 nối lại", p["name"], serial(p))
     if n == 0: print("Tất cả máy đã kết nối.")
+    if HIDE:
+        for p in st["phones"]:
+            if is_running(p["name"], p, v):
+                try: hide_window(p["name"])
+                except Exception: pass
 
 def cmd_reap(a):
     st = load(); n = 0
@@ -362,6 +398,12 @@ def cmd_list(a):
         print(f"{p['name']:<16} #{p['idx']:<3} cổng {p['port']:<6} {p['ram']}G/{p['cpu']}  hết hạn {fmt(parse_dt(p['expires']))}  {'chạy' if is_running(p['name'], p, v) else 'tắt'}")
 
 def cmd_noop(a): print("(bản Windows: không cần lệnh này)")
+def cmd_show(a): print(f"Hiện {hide_window(a.name, show=True)} cửa sổ của '{a.name}'.")
+def cmd_hide(a):
+    n = 0
+    for p in load()["phones"]:
+        if not a.name or p["name"] == a.name: n += hide_window(p["name"])
+    print(f"Đã cho {n} cửa sổ MEmu chạy ngầm.")
 
 def main():
     ap = argparse.ArgumentParser(); s = ap.add_subparsers(dest="c", required=True)
@@ -369,7 +411,7 @@ def main():
     c.add_argument("--days", type=int, default=7); c.add_argument("--res", default="720x1280"); c.add_argument("--dpi", type=int, default=0)
     c.add_argument("--fps", type=int, default=30); c.add_argument("--nowait", action="store_true"); c.add_argument("--android", default="9")
     c.add_argument("--nogpu", action="store_true"); c.set_defaults(f=cmd_create)
-    for nm, fn in (("delete", cmd_delete), ("stop", cmd_stop), ("start", cmd_start), ("restart", cmd_restart)):
+    for nm, fn in (("delete", cmd_delete), ("stop", cmd_stop), ("start", cmd_start), ("restart", cmd_restart), ("show", cmd_show)):
         x = s.add_parser(nm); x.add_argument("name"); x.set_defaults(f=fn)
     r = s.add_parser("renew"); r.add_argument("name"); r.add_argument("--days", type=int, default=7); r.set_defaults(f=cmd_renew)
     z = s.add_parser("resize"); z.add_argument("name"); z.add_argument("--ram", type=float, default=0); z.add_argument("--cpu", type=float, default=0); z.set_defaults(f=cmd_resize)
@@ -378,6 +420,7 @@ def main():
     lr = s.add_parser("liveres"); lr.add_argument("name"); lr.add_argument("--res", required=True); lr.set_defaults(f=cmd_liveres)
     pi = s.add_parser("preinstall"); pi.add_argument("name", nargs="?", default=""); pi.add_argument("--all", action="store_true"); pi.add_argument("--force", action="store_true"); pi.set_defaults(f=cmd_preinstall)
     rf = s.add_parser("rootfix"); rf.add_argument("name", nargs="?", default=""); rf.add_argument("--all", action="store_true"); rf.add_argument("--force", action="store_true"); rf.set_defaults(f=cmd_rootfix)
+    hd = s.add_parser("hide"); hd.add_argument("name", nargs="?", default=""); hd.set_defaults(f=cmd_hide)
     for nm, fn in (("connect-all", cmd_connect_all), ("reap", cmd_reap), ("perms", cmd_perms), ("capacity", cmd_capacity), ("list", cmd_list),
                    ("memfix", cmd_noop), ("boost", cmd_noop), ("gpuinfo", cmd_noop)):
         s.add_parser(nm).set_defaults(f=fn)

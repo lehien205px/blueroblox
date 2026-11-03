@@ -210,6 +210,127 @@ GS
     A shell input keyevent 3
     ok "Root OK: Shell + mọi app đã cài được cấp quyền root sẵn"
   else err "Chưa có root cho Shell"; fi ;;
+build32)
+  # Bộ root cho máy Android 32-bit (x86): biên dịch su + cpsud bản 32-bit ngay trên server (cần gcc-multilib)
+  S="$HOME/cloudphone-su"; W=$(mktemp -d); mkdir -p "$S"
+  command -v gcc >/dev/null && echo 'int main(){return 0;}' > $W/t.c && gcc -m32 -static $W/t.c -o $W/t 2>/dev/null \
+    || { echo "== Cài trình biên dịch 32-bit (cần mật khẩu sudo) =="; sudo apt-get install -y -qq gcc gcc-multilib >/dev/null || { err "Không cài được gcc-multilib"; exit 1; }; }
+  cat > $W/common.h <<'CPSRC_EOF'
+/* cloudphone-su: root kiểu "daemon" (như MagiskSU) — không sửa hệ thống, không đụng bộ dịch ARM.
+ * cpsud chạy bằng root trong máy; su (client) gửi lệnh + 3 luồng vào/ra qua unix socket → daemon chạy lệnh bằng root. */
+#define _GNU_SOURCE
+#include <stdio.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <errno.h>
+#include <signal.h>
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <sys/wait.h>
+#include <sys/stat.h>
+#define SOCK "/dev/socket/cpsu"
+#define MAXBUF (1 << 20)
+static int wr_all(int fd, const void *b, size_t n) { const char *p = b; while (n) { ssize_t k = write(fd, p, n); if (k < 0) { if (errno == EINTR) continue; return -1; } p += k; n -= k; } return 0; }
+static int rd_all(int fd, void *b, size_t n) { char *p = b; while (n) { ssize_t k = read(fd, p, n); if (k <= 0) { if (k < 0 && errno == EINTR) continue; return -1; } p += k; n -= k; } return 0; }
+CPSRC_EOF
+  cat > $W/cpsu-su.c <<'CPSRC_EOF'
+#include "common.h"
+static const char *SOCKP = SOCK;
+int main(int argc, char **argv) {
+  char *cmd = NULL; int i;
+  if (getenv("CPSU_SOCK")) SOCKP = getenv("CPSU_SOCK");
+  for (i = 1; i < argc; i++) {
+    const char *a = argv[i];
+    if (!strcmp(a, "-c") || !strcmp(a, "--command")) { if (i + 1 < argc) { cmd = argv[++i]; } }
+    else if (!strncmp(a, "--command=", 10)) cmd = (char *)a + 10;
+    else if (!strcmp(a, "-v") || !strcmp(a, "--version")) { puts("30.7:MAGISKSU"); return 0; }
+    else if (!strcmp(a, "-V")) { puts("30700"); return 0; }
+    else if (!strcmp(a, "-h") || !strcmp(a, "--help")) { puts("su [-c COMMAND] — cloudphone root"); return 0; }
+    else if (!strcmp(a, "-s") || !strcmp(a, "--shell") || !strcmp(a, "-t") || !strcmp(a, "--target") || !strcmp(a, "-Z") || !strcmp(a, "--context")) i++;
+    /* bỏ qua: - -l -p -m --mount-master --preserve-environment 0 root */
+  }
+  int s = socket(AF_UNIX, SOCK_STREAM, 0); struct sockaddr_un a = { .sun_family = AF_UNIX };
+  strncpy(a.sun_path, SOCKP, sizeof a.sun_path - 1);
+  if (connect(s, (struct sockaddr *)&a, sizeof a)) { fprintf(stderr, "su: permission denied (root service not running)\n"); return 1; }
+  /* gói dữ liệu */
+  extern char **environ; char cwd[4096]; if (!getcwd(cwd, sizeof cwd)) strcpy(cwd, "/");
+  char *args[3]; int ac = 0; args[ac++] = "sh"; if (cmd) { args[ac++] = "-c"; args[ac++] = cmd; }
+  size_t cap = 1 << 16, len = 0; char *buf = malloc(cap);
+  #define PUT(str) do { size_t k = strlen(str) + 1; while (len + k > cap) { cap *= 2; buf = realloc(buf, cap); } memcpy(buf + len, str, k); len += k; } while (0)
+  char num[32]; PUT(cwd); snprintf(num, sizeof num, "%d", ac); PUT(num); for (i = 0; i < ac; i++) PUT(args[i]);
+  int ec = 0; for (char **e = environ; *e; e++) ec++;
+  snprintf(num, sizeof num, "%d", ec); PUT(num); for (char **e = environ; *e; e++) PUT(*e);
+  if (len > MAXBUF) { fprintf(stderr, "su: environment too large\n"); return 1; }
+  uint32_t l32 = len; int fds[3] = { 0, 1, 2 };
+  char cbuf[CMSG_SPACE(sizeof fds)]; struct iovec io = { &l32, 4 }; struct msghdr m = {0};
+  m.msg_iov = &io; m.msg_iovlen = 1; m.msg_control = cbuf; m.msg_controllen = sizeof cbuf;
+  struct cmsghdr *c = CMSG_FIRSTHDR(&m); c->cmsg_level = SOL_SOCKET; c->cmsg_type = SCM_RIGHTS; c->cmsg_len = CMSG_LEN(sizeof fds);
+  memcpy(CMSG_DATA(c), fds, sizeof fds);
+  if (sendmsg(s, &m, 0) != 4 || wr_all(s, buf, len)) { fprintf(stderr, "su: failed\n"); return 1; }
+  int32_t code = 1; if (rd_all(s, &code, 4)) return 1;
+  return code;
+}
+CPSRC_EOF
+  cat > $W/cpsu-daemon.c <<'CPSRC_EOF'
+#include "common.h"
+/* Giao thức: client gửi 3 fd (SCM_RIGHTS) kèm 4 byte độ dài, rồi khối dữ liệu: cwd\0 argc\0 argv... envc\0 env...
+   Daemon trả về 4 byte mã thoát. */
+static int recv_fds(int s, int *fds, uint32_t *len) {
+  char cbuf[CMSG_SPACE(3 * sizeof(int))]; struct iovec io = { len, 4 }; struct msghdr m = {0};
+  m.msg_iov = &io; m.msg_iovlen = 1; m.msg_control = cbuf; m.msg_controllen = sizeof cbuf;
+  if (recvmsg(s, &m, MSG_WAITALL) != 4) return -1;
+  struct cmsghdr *c = CMSG_FIRSTHDR(&m);
+  if (!c || c->cmsg_type != SCM_RIGHTS || c->cmsg_len != CMSG_LEN(3 * sizeof(int))) return -1;
+  memcpy(fds, CMSG_DATA(c), 3 * sizeof(int)); return 0;
+}
+static void serve(int s) {
+  signal(SIGCHLD, SIG_DFL);
+  int fds[3]; uint32_t len;
+  if (recv_fds(s, fds, &len) || len > MAXBUF) _exit(1);
+  char *buf = malloc(len + 1); if (!buf || rd_all(s, buf, len)) _exit(1); buf[len] = 0;
+  char *p = buf, *end = buf + len; char *items[8192]; int n = 0;
+  while (p < end && n < 8191) { items[n++] = p; p += strlen(p) + 1; }
+  if (n < 2) _exit(1);
+  const char *cwd = items[0]; int argc = atoi(items[1]); if (argc < 1 || 2 + argc > n) _exit(1);
+  char **argv = calloc(argc + 1, sizeof(char *)); for (int i = 0; i < argc; i++) argv[i] = items[2 + i];
+  int envc = (2 + argc < n) ? atoi(items[2 + argc]) : 0; if (3 + argc + envc > n) envc = 0;
+  char **envp = calloc(envc + 4, sizeof(char *)); int e = 0;
+  for (int i = 0; i < envc; i++) envp[e++] = items[3 + argc + i];
+  pid_t pid = fork();
+  if (pid == 0) {
+    setsid();
+    dup2(fds[0], 0); dup2(fds[1], 1); dup2(fds[2], 2);
+    for (int i = 0; i < 3; i++) if (fds[i] > 2) close(fds[i]);
+    close(s);
+    if (chdir(cwd) != 0) { if (chdir("/") != 0) {} }
+    signal(SIGPIPE, SIG_DFL); signal(SIGCHLD, SIG_DFL);
+    execve("/system/bin/sh", argv, envp); _exit(127);
+  }
+  for (int i = 0; i < 3; i++) close(fds[i]);
+  int st = 0, code = 1;
+  if (pid > 0 && waitpid(pid, &st, 0) > 0) code = WIFEXITED(st) ? WEXITSTATUS(st) : 128 + WTERMSIG(st);
+  int32_t c = code; wr_all(s, &c, 4); _exit(0);
+}
+int main(int argc, char **argv) {
+  const char *path = argc > 1 ? argv[1] : SOCK;
+  signal(SIGPIPE, SIG_IGN); signal(SIGCHLD, SIG_IGN);
+  mkdir("/dev/socket", 0755);
+  int l = socket(AF_UNIX, SOCK_STREAM, 0); struct sockaddr_un a = { .sun_family = AF_UNIX };
+  strncpy(a.sun_path, path, sizeof a.sun_path - 1); unlink(path);
+  if (bind(l, (struct sockaddr *)&a, sizeof a) || listen(l, 64)) { perror("cpsud"); return 1; }
+  chmod(path, 0666);
+  if (argc <= 2) { if (fork() > 0) return 0; setsid(); }          /* chạy nền */
+  for (;;) {
+    int s = accept(l, NULL, NULL); if (s < 0) { if (errno == EINTR) continue; sleep(1); continue; }
+    pid_t p = fork(); if (p == 0) { close(l); serve(s); } close(s);
+  }
+}
+CPSRC_EOF
+  gcc -m32 -static -O2 -s -o "$S/su32" $W/cpsu-su.c && gcc -m32 -static -O2 -s -o "$S/cpsud32" $W/cpsu-daemon.c && ok "Đã có bộ root 32-bit: $S/su32, $S/cpsud32" || { err "Biên dịch lỗi"; exit 1; }
+  rm -rf $W ;;
+
 rootboot)
   # ROOT SÂU KHÔNG CẦN APP (giống máy redroid): su + cpsud của BlueRoblox gắn vào ramdisk, chạy quyền root ngay khi khởi động.
   # Mọi app/tool khách cài gọi "su" là có root, không hỏi, không cần app Magisk. Áp dụng cho mọi máy dùng bản Android này.
@@ -226,7 +347,8 @@ rootboot)
       || { err "Không có bộ root (cpsu-su.bin, cpsu-daemon.bin) — up 2 file đó lên GitHub"; exit 1; }
   fi
   AB=$(A shell getprop ro.product.cpu.abi | tr -d '\r'); case "$AB" in x86_64) L=x86_64;; *) L=x86;; esac
-  [ "$L" = x86_64 ] || warn "Máy $AB (32-bit): bộ root 64-bit có thể không chạy — sẽ báo ở cuối"
+  SU="$S/su"; SD="$S/cpsud"
+  if [ "$L" = x86 ]; then [ -s "$S/su32" ] && [ -s "$S/cpsud32" ] || bash "$0" build32 || exit 1; SU="$S/su32"; SD="$S/cpsud32"; fi
   MZ="$HOME/rootAVD/Magisk.zip"; unzip -p "$MZ" "lib/$L/libmagiskboot.so" > /tmp/cp-mb 2>/dev/null; [ -s /tmp/cp-mb ] || { err "Không lấy được magiskboot từ $MZ"; exit 1; }
   cat > /tmp/cproot.sh <<'GS'
 #!/system/bin/sh
@@ -267,7 +389,7 @@ on property:sys.boot_completed=1
     exec u:r:magisk:s0 root root -- /system/bin/sh ${MAGISKTMP}/cproot.sh late
 RC
   T=/data/local/tmp
-  for f in /tmp/cp-mb:mb "$RD.magisk":rd.img /tmp/cproot.sh:cproot.sh /tmp/cpgrant.rc:cpgrant.rc "$S/su":cpsu "$S/cpsud":cpsud; do
+  for f in /tmp/cp-mb:mb "$RD.magisk":rd.img /tmp/cproot.sh:cproot.sh /tmp/cpgrant.rc:cpgrant.rc "$SU":cpsu "$SD":cpsud; do
     A push "${f%%:*}" "$T/${f##*:}" >/dev/null 2>&1 || { err "Không chép được ${f%%:*}"; exit 1; }
   done
   OUT=$(A shell "cd $T && chmod 755 mb && rm -f rd.cpio rd.new && ./mb decompress rd.img rd.cpio 2>&1" | tr -d '\r')

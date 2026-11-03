@@ -65,6 +65,11 @@ public class ControlActivity extends Activity {
     private boolean full = false, gotVideo = false, landscapeDev = false;
     private int retries = 0;
     private SharedPreferences pref;
+    // Bàn phím tự bật: máy cloud mở bàn phím (bấm vào ô nhập) → hiện ô gõ + bàn phím điện thoại
+    private LinearLayout kbBar;
+    private EditText kbEdit;
+    private boolean kbOpen = false, kbBusy = false, resumed = false;
+    private int kbOff = 0;
 
     @SuppressLint({"SetJavaScriptEnabled", "AddJavascriptInterface"})
     @Override
@@ -135,6 +140,25 @@ public class ControlActivity extends Activity {
         stage.addView(fsExit, fp);
         root.addView(stage, new LinearLayout.LayoutParams(-1, 0, 1));
 
+        // Ô gõ chữ (hiện khi máy cloud đang chờ nhập chữ)
+        kbBar = Ui.row(this, 6);
+        kbBar.setBackgroundColor(Ui.BG);
+        kbBar.setPadding(Ui.dp(8), Ui.dp(6), Ui.dp(8), Ui.dp(6));
+        kbEdit = Ui.input(this, Ui.L("Gõ chữ vào máy… (có dấu được)", "Type into phone…"), InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+        kbEdit.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_SEND);
+        kbEdit.setOnEditorActionListener((v, a, e) -> { kbSend(true); return true; });
+        kbBar.addView(kbEdit, Ui.weight(1));
+        Button kbDel = Ui.button(this, "⌫", Ui.GHOST);
+        kbDel.setMinWidth(0);
+        kbDel.setOnClickListener(v -> { if (kbEdit.length() > 0) kbEdit.getText().delete(kbEdit.length() - 1, kbEdit.length()); else key("del", 67); });
+        kbBar.addView(kbDel, Ui.wrap());
+        Button kbGo = Ui.button(this, Ui.L("Gửi", "Send"), Ui.PRIMARY);
+        kbGo.setMinWidth(0);
+        kbGo.setOnClickListener(v -> kbSend(false));
+        kbBar.addView(kbGo, Ui.wrap());
+        kbBar.setVisibility(View.GONE);
+        root.addView(kbBar, Ui.fill());
+
         // Thanh nút Android
         navBar = Ui.row(this, 0);
         navBar.setBackgroundColor(Ui.BG);
@@ -176,6 +200,46 @@ public class ControlActivity extends Activity {
         });
         updQ();
         load();
+    }
+
+    @Override protected void onResume() { super.onResume(); resumed = true; h.removeCallbacks(kbPoll); h.postDelayed(kbPoll, 1500); }
+    @Override protected void onPause() { super.onPause(); resumed = false; h.removeCallbacks(kbPoll); }
+
+    /** Hỏi máy cloud mỗi ~1 giây: có đang chờ gõ chữ không → tự hiện / ẩn ô gõ + bàn phím điện thoại. */
+    private final Runnable kbPoll = new Runnable() {
+        @Override public void run() {
+            if (!resumed || id == null) return;
+            if (kbBusy || full) { h.postDelayed(this, 1200); return; }
+            kbBusy = true;
+            Api.bg(() -> Api.cp("GET", id + "/ime", null), j -> {
+                kbBusy = false;
+                boolean on = j.optBoolean("shown");
+                if (on) { kbOff = 0; if (!kbOpen) kbShow(true); }
+                else if (kbOpen && ++kbOff >= 2 && kbEdit.length() == 0) kbShow(false);
+                if (resumed) h.postDelayed(this, 1000);
+            }, m -> { kbBusy = false; if (resumed) h.postDelayed(this, 4000); });
+        }
+    };
+
+    private void kbShow(boolean on) {
+        kbOpen = on;
+        android.view.inputmethod.InputMethodManager im = (android.view.inputmethod.InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+        if (on) {
+            kbBar.setVisibility(View.VISIBLE);
+            kbEdit.requestFocus();
+            h.postDelayed(() -> { if (im != null) im.showSoftInput(kbEdit, 0); }, 120);
+        } else {
+            if (im != null) im.hideSoftInputFromWindow(kbEdit.getWindowToken(), 0);
+            kbEdit.clearFocus();
+            kbBar.setVisibility(View.GONE);
+        }
+    }
+
+    /** Gửi chữ đang gõ vào máy cloud (dán qua bộ nhớ copy → giữ được chữ có dấu). enter = bấm Enter sau khi dán. */
+    private void kbSend(boolean enter) {
+        String t = kbEdit.getText().toString();
+        if (!t.isEmpty()) { page("cpApp.paste(" + JSONObject.quote(t) + ")"); kbEdit.setText(""); }
+        if (enter) h.postDelayed(() -> key("enter", 66), t.isEmpty() ? 0 : 900);
     }
 
     @Override protected void onDestroy() {

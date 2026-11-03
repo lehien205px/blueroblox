@@ -13,7 +13,7 @@ B = os.path.dirname(os.path.abspath(__file__))
 PY = os.path.join(os.path.dirname(sys.executable), "python.exe") if sys.executable.lower().endswith("pythonw.exe") else sys.executable
 LOGS = os.path.join(B, "logs"); os.makedirs(LOGS, exist_ok=True)
 CONF = os.path.join(B, "cloudphone.conf")
-RAW = "https://api.github.com/repos/lehien205px/blueroblox/contents"
+RAW = "https://raw.githubusercontent.com/lehien205px/blueroblox/main"
 NOWIN = 0x08000000
 ENV = dict(os.environ, PATH=os.path.join(B, "platform-tools") + os.pathsep + os.environ.get("PATH", ""), PYTHONIOENCODING="utf-8", PYTHONUTF8="1", PYTHONUNBUFFERED="1")
 
@@ -261,7 +261,7 @@ class App:
         log = os.path.join(LOGS, "setup.log")
         try: os.remove(log)
         except OSError: pass
-        run_admin(f"Set-Location C:\\\ncurl.exe -fsSL -H \"Accept: application/vnd.github.raw\" -o C:\\blue\\setup.ps1 {RAW}/windows/setup.ps1\n& C:\\blue\\setup.ps1", log)
+        run_admin(f"Set-Location C:\\\ncurl.exe -fsSL -H \"Cache-Control: no-cache\" -o C:\\blue\\setup.ps1 \"{RAW}/windows/setup.ps1?t={int(time.time())}\"\n& C:\\blue\\setup.ps1", log)
         self.tail(log, "Cài đặt / Cập nhật")
 
     def set_key(self):
@@ -451,7 +451,7 @@ Write-Host '[OK] Tat Xbox Game DVR'
                 self.stop_all(); log = os.path.join(LOGS, "setup.log")
                 try: os.remove(log)
                 except OSError: pass
-                run_admin(f"Set-Location C:\\\ncurl.exe -fsSL -H \"Accept: application/vnd.github.raw\" -o C:\\blue\\setup.ps1 {RAW}/windows/setup.ps1\n& C:\\blue\\setup.ps1", log)
+                run_admin(f"Set-Location C:\\\ncurl.exe -fsSL -H \"Cache-Control: no-cache\" -o C:\\blue\\setup.ps1 \"{RAW}/windows/setup.ps1?t={int(time.time())}\"\n& C:\\blue\\setup.ps1", log)
                 self.tail(log, "Cài đặt", 3600, wait=True)
             ok = os.path.isfile(os.path.join(B, "ws-scrcpy", "dist", "index.js"))
             step("1/6 Cài đặt phần mềm", ok, "" if ok else "cài chưa xong — xem tab Việc đang làm")

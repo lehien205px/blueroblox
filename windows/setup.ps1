@@ -6,12 +6,16 @@
 # =====================================================================
 $ErrorActionPreference = "Stop"
 $B = "C:\blue"
-$RAW = "https://api.github.com/repos/lehien205px/blueroblox/contents"   # api.github.com: luôn bản mới nhất (raw.githubusercontent bị giữ bản cũ ~5 phút)
+$RAW = "https://raw.githubusercontent.com/lehien205px/blueroblox/main"   # thêm ?t=… để luôn lấy bản mới nhất (không bị giới hạn lượt như api.github.com)
 function Ok($m)  { Write-Host "  [OK] $m" -ForegroundColor Green }
 function Step($m){ Write-Host "`n== $m ==" -ForegroundColor Cyan }
 function Get($url, $out) {
-  if ($url -like "https://api.github.com/*") { & curl.exe -fsSL -H "Accept: application/vnd.github.raw" -H "Cache-Control: no-cache" -o $out $url }
-  else { & curl.exe -fsSL -o $out $url }
+  $u = $url
+  if ($url -like "https://raw.githubusercontent.com/*") { $u = $url + "?t=" + [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() }
+  & curl.exe -fsSL -H "Cache-Control: no-cache" -o $out $u
+  if ($LASTEXITCODE -ne 0 -and $url -like "https://raw.githubusercontent.com/*") {      # dự phòng: api.github.com
+    $api = $url -replace "https://raw.githubusercontent.com/lehien205px/blueroblox/main", "https://api.github.com/repos/lehien205px/blueroblox/contents"
+    & curl.exe -fsSL -H "Accept: application/vnd.github.raw" -o $out $api }
   if ($LASTEXITCODE -ne 0) { throw "Tải lỗi: $url" } }
 
 if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {

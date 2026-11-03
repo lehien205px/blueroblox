@@ -6,10 +6,13 @@
 # =====================================================================
 $ErrorActionPreference = "Stop"
 $B = "C:\blue"
-$RAW = "https://raw.githubusercontent.com/lehien205px/blueroblox/main"
+$RAW = "https://api.github.com/repos/lehien205px/blueroblox/contents"   # api.github.com: luôn bản mới nhất (raw.githubusercontent bị giữ bản cũ ~5 phút)
 function Ok($m)  { Write-Host "  [OK] $m" -ForegroundColor Green }
 function Step($m){ Write-Host "`n== $m ==" -ForegroundColor Cyan }
-function Get($url, $out) { & curl.exe -fsSL -o $out $url; if ($LASTEXITCODE -ne 0) { throw "Tải lỗi: $url" } }
+function Get($url, $out) {
+  if ($url -like "https://api.github.com/*") { & curl.exe -fsSL -H "Accept: application/vnd.github.raw" -H "Cache-Control: no-cache" -o $out $url }
+  else { & curl.exe -fsSL -o $out $url }
+  if ($LASTEXITCODE -ne 0) { throw "Tải lỗi: $url" } }
 
 if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
   Write-Host "Hay mo PowerShell bang Run as administrator." -ForegroundColor Red; exit 1 }

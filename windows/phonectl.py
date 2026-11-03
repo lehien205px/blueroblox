@@ -367,8 +367,9 @@ def cmd_create(a):
     if not re.match(r"^\d+x\d+$", a.res): print("LỖI: --res phải dạng 720x1280."); sys.exit(1)
     if not MEMU: print("LỖI: không thấy MEmu (memuc.exe)."); sys.exit(4)
     tot, av = mem()
-    if av - (a.ram + 1) < RESERVE:
-        print(f"HẾT HÀNG: RAM Windows còn {av:.1f}GB, máy {a.ram:g}GB cần thêm {a.ram + 1:g}GB và chừa {RESERVE:g}GB."); sys.exit(2)
+    need = min(float(a.ram), MAX_RAM)                     # MEmu chạy tối đa 16GB/máy → chỉ cần đủ RAM cho phần thật sự cấp
+    if av - (need + 1) < RESERVE:
+        print(f"HẾT HÀNG: RAM Windows còn {av:.1f}GB, máy {need:g}GB cần thêm {need + 1:g}GB và chừa {RESERVE:g}GB."); sys.exit(2)
     try: open(os.path.join(HOME, "redroid", f"creating_{os.getpid()}.flag"), "w").write(a.name)   # báo "đang tạo máy khách" → dựng máy sẵn nhường đường
     except OSError: pass
     sp = take_spare(a.name)

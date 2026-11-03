@@ -479,8 +479,9 @@ def gpu_play_fix(port):
     if not os.path.isfile(PLAY_APK): return
     r = _hadb(port, ["shell", "dumpsys package com.android.vending | grep -m1 codePath"], timeout=60)
     if "/data/app" in (r.stdout or ""): return           # đã được cập nhật rồi
-    _hadb(port, ["install", "-r", PLAY_APK], timeout=300)
-    _hadb(port, ["shell", "pm clear com.android.vending"], timeout=60)
+    r = _hadb(port, ["install", "-r", PLAY_APK], timeout=300)
+    if "Success" in (r.stdout or ""):                     # chỉ xoá dữ liệu CH Play khi vừa cập nhật thành công
+        _hadb(port, ["shell", "pm clear com.android.vending"], timeout=60)
 
 def wait_boot(name, port, apps=True):
     """Chờ Android khởi động xong rồi mới kết nối (kết nối sớm → màn đen).

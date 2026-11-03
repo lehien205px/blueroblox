@@ -276,7 +276,8 @@ def clone_icons(port):
     """Cài app BlueRoblox (có ô mở clone) vào máy — CHỈ cho người dùng chính, rồi bật đúng số biểu tượng Clone N + làm mới màn hình chính."""
     try:
         apk = os.path.join(HOME, "blueroblox-cloud.apk")
-        has = "CloneLaunch" in out(shell(port, f"dumpsys package {BR_PKG} | grep -m1 CloneLaunch", 20))
+        vc = re.search(r"versionCode=(\d+)", out(shell(port, f"dumpsys package {BR_PKG} | grep -m1 versionCode", 20)))
+        has = bool(vc and int(vc.group(1)) >= 19)                 # app từ v1.19 mới có biểu tượng Clone
         if not has:
             if not os.path.isfile(apk) or time.time() - os.path.getmtime(apk) > 600:
                 urllib.request.urlretrieve("https://blueroblox.shop/download/blueroblox-cloud.apk?t=" + str(int(time.time())), apk + ".part")
@@ -289,7 +290,7 @@ def clone_icons(port):
             shell(port, f"pm uninstall --user {u} {BR_PKG} >/dev/null 2>&1", 30)          # app BlueRoblox không nằm trong bản clone
             if any(l.startswith("package:") and l.split(":", 1)[1].strip() != BR_PKG
                    for l in out(shell(port, f"pm list packages -3 --user {u}", 20)).splitlines()): n += 1
-        cmds = "; ".join(f"pm {'enable' if i <= n else 'disable'} {BR_PKG}/.Clone{i} >/dev/null 2>&1" for i in range(1, 5))
+        cmds = "; ".join(f"pm {'enable' if i <= n else 'disable'} {BR_PKG}/.Clone{i} >/dev/null 2>&1 || su -c 'pm {'enable' if i <= n else 'disable'} {BR_PKG}/.Clone{i}' >/dev/null 2>&1" for i in range(1, 5))
         # màn hình chính MEmu chỉ quét app lúc mở → khởi động lại màn hình chính để hiện biểu tượng mới
         shell(port, cmds + "; L=$(cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.HOME | tail -n 1 | cut -d/ -f1); "
                     "[ -n \"$L\" ] && am force-stop $L; am start -a android.intent.action.MAIN -c android.intent.category.HOME >/dev/null 2>&1", 40)

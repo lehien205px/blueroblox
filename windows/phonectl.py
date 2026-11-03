@@ -379,9 +379,13 @@ def cmd_delete(a):
     st = load(); st["phones"] = [x for x in st["phones"] if x["name"] != a.name]; save(st)
     print(f"🗑️  Đã xoá máy '{a.name}' và toàn bộ dữ liệu.")
 
+def set_hold(name, on):
+    """hold = máy CỐ Ý tắt (admin khoá / hết hạn) → bộ tự bật lại không đụng vào. Tắt ngoài ý muốn (bấm Close trong MEmu, MEmu văng) → tự bật lại."""
+    st = load(); p = rec(name, st)
+    if p and bool(p.get("hold")) != on: p["hold"] = on; save(st)
 def cmd_stop(a):
     st, p = _need(a.name); adb("disconnect", serial(p), timeout=15)
-    memuc("stop", "-i", IDX(p), timeout=120); print(f"⏸  Đã tạm dừng '{a.name}'.")
+    memuc("stop", "-i", IDX(p), timeout=120); set_hold(a.name, True); print(f"⏸  Đã tạm dừng '{a.name}'.")
 
 def _start_failed(r): return "fail" in ((r.stdout or "") + (r.stderr or "")).lower() or r.returncode not in (0, None)
 def memu_unstick():
@@ -400,7 +404,9 @@ def memu_start(idx):
         r = memuc("start", "-i", idx, timeout=150)
     return r
 def start_phone(p):
-    r = memu_start(IDX(p)); adb_connect(p["port"]); return r
+    r = memu_start(IDX(p)); adb_connect(p["port"])
+    if not _start_failed(r): set_hold(p["name"], False)
+    return r
 def cmd_start(a):
     st, p = _need(a.name); r = start_phone(p)
     if _start_failed(r): print("❌ MEmu không bật được máy:", ((r.stdout or "") + (r.stderr or "")).strip()[-200:]); sys.exit(5)
@@ -511,10 +517,13 @@ def cmd_bootall(a):
     """Sau khi Windows khởi động lại: bật lần lượt mọi máy khách CÒN HẠN đang tắt → chờ Android lên → nối điều khiển."""
     st = load(); v = vms(); todo = []
     for p in st["phones"]:
-        if parse_dt(p["expires"]) < now(): continue
+        if parse_dt(p["expires"]) < now() or p.get("hold"): continue
         if IDX(p, v) is None: print(f"⚠ {p['name']}: không còn trong MEmu (bấm ♻ Làm mới máy khách)"); continue
-        if is_running(p["name"], p, v): adb_connect(p["port"]); print(f"✓ {p['name']}: đang chạy"); continue
+        if is_running(p["name"], p, v):
+            if not a.quiet: adb_connect(p["port"]); print(f"✓ {p['name']}: đang chạy")
+            continue
         todo.append(p)
+    if a.quiet and not todo: return
     print(f"Cần bật {len(todo)} máy khách…", flush=True); bad = 0
     for p in todo:
         print(f"▶ Bật {p['name']}…", flush=True)
@@ -591,7 +600,8 @@ def main():
     wp = s.add_parser("wallpaper"); wp.add_argument("name", nargs="?", default=""); wp.add_argument("--all", action="store_true"); wp.add_argument("--force", action="store_true"); wp.set_defaults(f=cmd_wallpaper)
     tp = s.add_parser("template"); tp.add_argument("name", nargs="?", default=""); tp.add_argument("--apply", action="store_true"); tp.set_defaults(f=cmd_template)
     hd = s.add_parser("hide"); hd.add_argument("name", nargs="?", default=""); hd.set_defaults(f=cmd_hide)
-    for nm, fn in (("bootall", cmd_bootall), ("connect-all", cmd_connect_all), ("reap", cmd_reap), ("perms", cmd_perms), ("capacity", cmd_capacity), ("list", cmd_list),
+    ba = s.add_parser("bootall"); ba.add_argument("--quiet", action="store_true"); ba.set_defaults(f=cmd_bootall)
+    for nm, fn in (("connect-all", cmd_connect_all), ("reap", cmd_reap), ("perms", cmd_perms), ("capacity", cmd_capacity), ("list", cmd_list),
                    ("memfix", cmd_noop), ("boost", cmd_noop), ("gpuinfo", cmd_noop)):
         s.add_parser(nm).set_defaults(f=fn)
     a = ap.parse_args(); a.f(a)

@@ -250,6 +250,18 @@ class App:
                                env=ENV, creationflags=NOWIN, timeout=180).stdout or ""
             k = r.count("nối lại")
             if k: self._fix(f"nối lại điều khiển {k} máy khách")
+        # ~1 phút: máy khách còn hạn mà đang TẮT ngoài ý muốn (bấm Close trong Multiple Instance Manager, MEmu văng…) → tự bật lại
+        if n % 15 == 7 and on("cloudphoned") and not getattr(self, "_bootjob", False):
+            def bj():
+                self._bootjob = True
+                try:
+                    r = subprocess.run([PY, "phonectl.py", "bootall", "--quiet"], cwd=B, capture_output=True, text=True, encoding="utf-8",
+                                       errors="replace", env=ENV, creationflags=NOWIN, timeout=1800).stdout or ""
+                    for ln in r.splitlines():
+                        if ln.strip() and ("▶" in ln or "✅" in ln or "✗" in ln or "⚠" in ln): self._fix(ln.strip())
+                except Exception as e: self.say("Tổng quan", f"🩺 tự bật máy lỗi: {e}")
+                finally: self._bootjob = False
+            threading.Thread(target=bj, daemon=True).start()
         # ~5 phút: ổ đĩa sắp đầy → cảnh báo
         if n % 75 == 40:
             import shutil

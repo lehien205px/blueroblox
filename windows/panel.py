@@ -269,9 +269,9 @@ class App:
                 self._fix("web không vào được → khởi động lại đường hầm Cloudflare")
                 subprocess.run(["sc", "stop", "cloudflared"], capture_output=True, creationflags=NOWIN); time.sleep(3)
                 subprocess.run(["sc", "start", "cloudflared"], capture_output=True, creationflags=NOWIN)
-        # ~2 phút: lệnh MEmu treo quá 4 phút → tắt; máy khách mất kết nối điều khiển → nối lại
-        if n % 30 == 15 and on("cloudphoned"):
-            ps = ("Get-CimInstance Win32_Process -Filter \"name='memuc.exe'\" | Where-Object { $_.CreationDate -lt (Get-Date).AddMinutes(-4) } | "
+        # ~1 phút: lệnh MEmu treo quá 3 phút → tắt; máy khách mất kết nối điều khiển → nối lại
+        if n % 15 == 5 and on("cloudphoned"):
+            ps = ("Get-CimInstance Win32_Process -Filter \"name='memuc.exe'\" | Where-Object { $_.CreationDate -lt (Get-Date).AddMinutes(-3) } | "
                   "ForEach-Object { Stop-Process -Id $_.ProcessId -Force; 'X' }")
             out = subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True, text=True, creationflags=NOWIN, timeout=60).stdout or ""
             if "X" in out: self._fix(f"tắt {out.count('X')} lệnh MEmu bị treo")

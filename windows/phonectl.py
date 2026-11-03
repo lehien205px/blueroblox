@@ -660,14 +660,17 @@ def cmd_pool(a):
         nm = f"spare_{int(time.time())}"
         if _creating_now(): return
         print(f"DUNG_SAN {nm}: tạo + khởi động + cài sẵn…", flush=True)
-        with _Lock("memu"):
+        with _Lock("memu", wait=5):                     # không chờ: đang có việc MEmu khác (máy khách) → để lần sau
             before = set(vms())
-            r = memuc("create", "96", timeout=240)
+            r = memuc("create", "96", timeout=180)
             m = re.search(r"index\D*(\d+)", r.stdout or "")
             idx = int(m.group(1)) if m else next(iter(sorted(set(vms()) - before)), None)
             if idx is None: print("LỖI dựng máy sẵn:", ((r.stdout or "") + (r.stderr or "")).strip()[-200:]); return
             memuc("rename", "-i", idx, nm, timeout=60)
-            configure(idx, 2, 2, "720x1280", auto_dpi("720x1280")); memuc("setconfigex", "-i", idx, "fps", 30, timeout=60); apply_template(idx)
+        # chỉnh cài đặt NGOÀI khoá "memu" → đơn máy khách chen vào được bất cứ lúc nào; có đơn khách → dừng, lần sau làm tiếp
+        if _creating_now(): print(f"LỖI {nm}: nhường đơn máy khách — dựng lại sau"); return
+        configure(idx, 2, 2, "720x1280", auto_dpi("720x1280")); memuc("setconfigex", "-i", idx, "fps", 30, timeout=60); apply_template(idx)
+        if _creating_now(): print(f"LỖI {nm}: nhường đơn máy khách — dựng lại sau"); return
         port = port_of(idx)
         if _start_failed(memu_start(idx)): print(f"LỖI {nm}: không bật được"); return
         ok = False; t0 = time.time()

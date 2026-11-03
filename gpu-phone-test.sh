@@ -237,6 +237,12 @@ setenforce 0 2>/dev/null; echo "selinux: $(getenforce)"
 mkdir -p /dev/cpbin; chmod 755 /dev/cpbin; chown 0:2000 /dev/cpbin; cp -f $D/cpsu /dev/cpbin/su; chown 0:0 /dev/cpbin/su; chmod 755 /dev/cpbin/su
 chcon u:object_r:system_file:s0 /dev/cpbin /dev/cpbin/su 2>/dev/null
 ours() { [ "$(/system/bin/su -v 2>/dev/null)" = "30.7:MAGISKSU" ]; }
+# Magisk dựng lại /system/bin (tmpfs) sau bước early và đặt su của nó → thay thẳng file su trong đó bằng su của BlueRoblox
+if ! ours && [ -L /system/bin/su ]; then
+  mount -o remount,rw /system/bin 2>/dev/null
+  rm -f /system/bin/su && cp /dev/cpbin/su /system/bin/su && chmod 755 /system/bin/su && chown 0:0 /system/bin/su
+  chcon u:object_r:system_file:s0 /system/bin/su 2>/dev/null; ours && echo "đã thay su của Magisk"
+fi
 if ! ours; then
   mount -t overlay cpbin -o lowerdir=/dev/cpbin:/system/bin,context=u:object_r:system_file:s0 /system/bin && echo "overlay /system/bin OK" || echo "overlay LỖI"
   # an toàn: nếu sh không chạy được qua lớp mới → gỡ ngay, không để hỏng máy

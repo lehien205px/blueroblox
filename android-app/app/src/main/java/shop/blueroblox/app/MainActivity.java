@@ -540,8 +540,8 @@ public class MainActivity extends Activity {
     void renderRent() {
         LinearLayout body = Ui.col(this, 14);
         body.addView(Ui.h1(this, Ui.L("Thuê điện thoại đám mây", "Rent a cloud phone")), Ui.fill());
-        body.addView(Ui.muted(this, Ui.L("Android 24/7 · cài game, treo acc · điều khiển ngay trong app. Máy mới tinh, có sẵn Play Store, Firefox, Brave.",
-                "Android 24/7 · games & idle farming · control in the app. Fresh device with Play Store, Firefox, Brave.")), Ui.fill());
+        body.addView(Ui.muted(this, Ui.L("Chọn gợi ý bên dưới là xong — hoặc tự chỉnh RAM, CPU, số ngày. Máy mới tinh, có Play Store.",
+                "Pick a preset below — or set RAM, CPU and days yourself. Fresh device with Play Store.")), Ui.fill());
 
         int minR = price.optInt("min_ram", 1), maxR = price.optInt("max_ram", 16), minC = price.optInt("min_cpu", 1), maxC = price.optInt("max_cpu", 8);
         final int mpu = maxPerUser(), left = mpu > 0 ? mpu - myLive() : 20;
@@ -564,9 +564,10 @@ public class MainActivity extends Activity {
         int minD = price.optInt("min_days", 1), maxD = price.optInt("max_days", 90), minF = price.optInt("min_fps", 10), maxF = price.optInt("max_fps", 120);
         sRam = clamp(sRam, minR, maxR); sCpu = clamp(sCpu, minC, maxC); sDays = clamp(sDays, minD, maxD); sFps = clamp(sFps, minF, maxF);
 
-        TextView total = Ui.text(this, "", 26, Ui.FG, true);
-        TextView calc = Ui.muted(this, "");
-        TextView err = Ui.text(this, "", 13.5f, Ui.BAD, false);
+        TextView total = Ui.text(this, "", 22, Ui.SKY, true);
+        TextView calc = Ui.text(this, "", 11.5f, Ui.MUTED, false);
+        calc.setMaxLines(2);
+        TextView err = Ui.text(this, "", 12.5f, Ui.BAD, false);
         Button buy = Ui.button(this, "", Ui.PRIMARY);
 
         Runnable upd = () -> {
@@ -582,6 +583,7 @@ public class MainActivity extends Activity {
             buy.setText(sFree ? Ui.L("🎁 Nhận máy miễn phí", "🎁 Get free phone") : bad.isEmpty() && bal < t ? Ui.L("Nạp tiền", "Top up") : Ui.L("Thuê ngay", "Rent now") + (sQty > 1 ? " " + sQty + Ui.L(" máy", " phones") : ""));
             buy.setEnabled(bad.isEmpty());
             buy.setAlpha(bad.isEmpty() ? 1f : .5f);
+            err.setVisibility(err.getText().length() == 0 ? View.GONE : View.VISIBLE);
         };
 
         // 🎁 Miễn phí ưu đãi (khi admin bật)
@@ -593,6 +595,23 @@ public class MainActivity extends Activity {
                     "Up to " + price.optInt("free_max_ram", 4) + "GB RAM · " + price.optInt("free_max_cpu", 4) + " cores · one free trial per account. Tap again to rent a paid phone instead.")));
             fch.setOnClickListener(v -> { sFree = !sFree; if (sFree) { sQty = 1; sRam = Math.min(sRam, price.optInt("free_max_ram", 4)); sCpu = Math.min(sCpu, price.optInt("free_max_cpu", 4)); } renderRent(); });
             body.addView(fc, Ui.fill());
+        }
+        // Gợi ý cấu hình — bấm 1 lần là điền RAM + CPU
+        if (!sFree) {
+            LinearLayout pc = Ui.card(this);
+            pc.addView(Ui.text(this, Ui.L("💡 Gợi ý cấu hình — bấm để chọn nhanh", "💡 Presets — tap to fill"), 14, Ui.MUTED, true));
+            Ui.Wrap pw = new Ui.Wrap(this, 8);
+            String[][] PRE = {{"💬", Ui.L("Treo app", "Idle apps"), "2", "2"}, {"🎮", Ui.L("Game nhẹ", "Light games"), "4", "2"},
+                    {"🟥", "Roblox", "4", "4"}, {"🔥", Ui.L("Game nặng", "Heavy games"), "8", "8"}};
+            for (String[] pr : PRE) {
+                final int pr0 = clamp(Integer.parseInt(pr[2]), minR, maxR), pc0 = clamp(Integer.parseInt(pr[3]), minC, maxC);
+                TextView ch = Ui.chip(this, pr[0] + " " + pr[1] + "\n" + pr0 + "GB · " + pc0 + Ui.L(" nhân", " cores"), sRam == pr0 && sCpu == pc0);
+                ch.setTextSize(13);
+                ch.setOnClickListener(v -> { sRam = pr0; sCpu = pc0; renderRent(); });
+                pw.addView(ch);
+            }
+            pc.addView(pw, Ui.fill());
+            body.addView(pc, Ui.fill());
         }
         // Phiên bản Android
         LinearLayout ac = Ui.col(this, 8);
@@ -609,13 +628,13 @@ public class MainActivity extends Activity {
             aw.addView(ch);
         }
         ac.addView(aw, Ui.fill());
-        body.addView(ac, Ui.fill());
+        body.addView(boxed(ac), Ui.fill());
 
-        body.addView(group(Ui.L("RAM", "RAM"), RAM, minR, maxR, "GB", v -> { sRam = v; upd.run(); }, () -> sRam), Ui.fill());
-        body.addView(group(Ui.L("CPU (nhân)", "CPU cores"), CPU, minC, maxC, "", v -> { sCpu = v; upd.run(); }, () -> sCpu), Ui.fill());
-        if (!sFree) body.addView(group(Ui.L("Số ngày", "Days"), DAYS, minD, maxD, Ui.L(" ngày", "d"), v -> { sDays = v; upd.run(); }, () -> sDays), Ui.fill());
-        if (!sFree && left > 1) body.addView(group(Ui.L("Số lượng máy", "Quantity"), QTY, 1, Math.min(20, left), Ui.L(" máy", ""), v -> { sQty = v; upd.run(); }, () -> sQty), Ui.fill());
-        body.addView(group("FPS", FPS, minF, maxF, "", v -> { sFps = v; upd.run(); }, () -> sFps), Ui.fill());
+        body.addView(boxed(group(Ui.L("RAM", "RAM"), RAM, minR, maxR, "GB", v -> { sRam = v; upd.run(); }, () -> sRam)), Ui.fill());
+        body.addView(boxed(group(Ui.L("CPU (nhân)", "CPU cores"), CPU, minC, maxC, "", v -> { sCpu = v; upd.run(); }, () -> sCpu)), Ui.fill());
+        if (!sFree) body.addView(boxed(group(Ui.L("Số ngày", "Days"), DAYS, minD, maxD, Ui.L(" ngày", "d"), v -> { sDays = v; upd.run(); }, () -> sDays)), Ui.fill());
+        if (!sFree && left > 1) body.addView(boxed(group(Ui.L("Số lượng máy", "Quantity"), QTY, 1, Math.min(20, left), Ui.L(" máy", ""), v -> { sQty = v; upd.run(); }, () -> sQty)), Ui.fill());
+        body.addView(boxed(group("FPS", FPS, minF, maxF, "", v -> { sFps = v; upd.run(); }, () -> sFps)), Ui.fill());
 
         // Độ phân giải
         LinearLayout rc = Ui.col(this, 8);
@@ -633,15 +652,23 @@ public class MainActivity extends Activity {
             rw.addView(ch);
         }
         rc.addView(rw, Ui.fill());
-        body.addView(rc, Ui.fill());
+        body.addView(boxed(rc), Ui.fill());
 
-        LinearLayout sum = Ui.card(this);
-        sum.addView(Ui.muted(this, Ui.L("Tổng thanh toán", "Total")));
-        sum.addView(total);
-        sum.addView(calc);
-        sum.addView(err);
-        sum.addView(buy, Ui.fill());
-        body.addView(sum, Ui.fill());
+        // Thanh thanh toán ghim dưới màn hình: luôn thấy tổng tiền + nút Thuê ngay
+        LinearLayout sum = Ui.col(this, 6);
+        sum.setPadding(Ui.dp(14), Ui.dp(10), Ui.dp(10), Ui.dp(10));
+        sum.setBackground(Ui.ringed(Ui.PANEL, 20));
+        sum.setElevation(Ui.dp(8));
+        sum.addView(err, Ui.fill());
+        LinearLayout sr = Ui.row(this, 10);
+        LinearLayout st = Ui.col(this, 0);
+        st.addView(Ui.text(this, Ui.L("Tổng thanh toán", "Total"), 12, Ui.MUTED, false));
+        st.addView(total);
+        st.addView(calc);
+        sr.addView(st, Ui.weight(1));
+        buy.setMinWidth(Ui.dp(132));
+        sr.addView(buy, Ui.wrap());
+        sum.addView(sr, Ui.fill());
 
         buy.setOnClickListener(v -> {
             double t = sFree ? 0 : ctv(perDay(sRam, sCpu) * sDays) * sQty;
@@ -652,7 +679,20 @@ public class MainActivity extends Activity {
                     Ui.L("Thanh toán", "Pay"), () -> order(buy));
         });
         upd.run();
+        body.setTag("rent");
         page(body);
+        body.setPadding(body.getPaddingLeft(), body.getPaddingTop(), body.getPaddingRight(), Ui.dp(150));
+        FrameLayout.LayoutParams blp = new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM);
+        blp.setMargins(Ui.dp(10), 0, Ui.dp(10), Ui.dp(8));
+        content.addView(sum, blp);
+    }
+
+    /** Bọc 1 nhóm lựa chọn vào thẻ viền neon cho gọn mắt. */
+    private View boxed(View v) {
+        LinearLayout c = Ui.card(this);
+        c.setPadding(Ui.dp(14), Ui.dp(12), Ui.dp(14), Ui.dp(14));
+        c.addView(v, Ui.fill());
+        return c;
     }
 
     private void order(Button buy) {

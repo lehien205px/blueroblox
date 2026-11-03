@@ -20,7 +20,7 @@ COOKIE = "cpauth"
 COOKIE_TTL = 12 * 3600
 MAX_CHUNK = 60 * 1024 * 1024            # Cloudflare giới hạn 100MB/lần gửi → chia nhỏ
 MAX_FILE = 4 * 1024 ** 3                # tối đa 4GB / file
-KEYS = {3: "Home", 4: "Back", 187: "Đa nhiệm", 24: "Tăng âm", 25: "Giảm âm", 164: "Tắt tiếng",
+KEYS = {3: "Home", 4: "Back", 66: "Enter", 67: "Xoá", 187: "Đa nhiệm", 24: "Tăng âm", 25: "Giảm âm", 164: "Tắt tiếng",
         26: "Nguồn", 82: "Menu", 279: "Dán", 278: "Copy", 277: "Cắt", 224: "Đánh thức", 223: "Ngủ", 220: "Giảm sáng", 221: "Tăng sáng"}
 UUID = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
 PKG = re.compile(r"^[A-Za-z0-9_]+(\.[A-Za-z0-9_]+)+$")
@@ -914,6 +914,10 @@ class H(BaseHTTPRequestHandler):
             if code not in KEYS: return self.send_json(400, {"error": "Phím không hợp lệ."})
             shell(port, f"input keyevent {code}", 15)
             return self.send_json(200, {"ok": True})
+
+        if act == "ime" and self.command == "GET":           # máy đang mở bàn phím (khách bấm vào ô nhập)? → app điện thoại tự bật bàn phím
+            o = out(shell(port, "dumpsys input_method | grep -m2 -E 'mInputShown|mShowRequested'", 10))
+            return self.send_json(200, {"shown": "mInputShown=true" in o or "mShowRequested=true" in o})
 
         if act == "text" and self.command == "POST":
             t = str(self.jbody().get("text") or "")[:2000]

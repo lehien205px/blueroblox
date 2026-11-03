@@ -5545,7 +5545,7 @@ function openHelp() {
   m.hidden = false;
 }
 function renderAppHelp() {
-  const inApp = /BlueRobloxApp\//.test(navigator.userAgent) || IS_STANDALONE;
+  const inApp = /BlueRobloxApp\//.test(navigator.userAgent) || IS_STANDALONE || !!window.__BR_PC;
   const v = APP_INFO && APP_INFO.version ? "v" + APP_INFO.version + (APP_INFO.size ? " · " + (APP_INFO.size / 1048576).toFixed(1) + "MB" : "") : "";
   const app = inApp ? "" : IS_IOS
     ? `<div class="appbig"><img class="cb-wh" src="${(document.querySelector('.cb-cloud img') || {}).src || '/apple-touch-icon.png'}" alt=""><div class="t"><b>📱 ${L("Dùng như app trên iPhone", "Use it like an app on iPhone")}</b><span>${L("Thêm BlueRoblox vào màn hình chính — mở toàn màn hình, thuê và điều khiển máy ngay trên iPhone.", "Add BlueRoblox to your Home Screen — full screen, rent and control phones on iPhone.")}</span></div><a class="btn" href="#" data-iosguide="1">${L("Xem cách cài", "How to install")}</a></div>`

@@ -4456,7 +4456,7 @@ function cpLinks(p) {
     if (hp.get("ws")) return { main: p.stream_url };
     const ws = (u.protocol === "https:" ? "wss:" : "ws:") + "//" + u.host + "/?action=proxy-adb&remote=" + encodeURIComponent("tcp:8886") + "&udid=" + encodeURIComponent(udid);
     const mk = pl => u.origin + "/#!action=stream&udid=" + encodeURIComponent(udid) + "&player=" + pl + "&ws=" + encodeURIComponent(ws);
-    return { main: mk("webcodecs"), alt: mk("broadway") };
+    return /:56\d\d$/.test(udid) ? { main: mk("tinyh264"), alt: mk("broadway") } : { main: mk("webcodecs"), alt: mk("broadway") };   // máy GPU: tinyh264
   } catch (e) { return { main: p.stream_url }; }
 }
 
@@ -4537,7 +4537,7 @@ document.addEventListener("click", e => {
 function cpAndChips() {
   const L0 = cpAndList().sort((a, b) => (a === "12" ? -1 : b === "12" ? 1 : 0));      // Android 12 chạy ổn nhất → ưu tiên, đứng đầu
   if (!L0.includes(cpSel.android)) cpSel.android = L0.includes("12") ? "12" : L0.includes("11") ? "11" : L0[0];
-  $("cp-and").innerHTML = L0.map(v => `<button type="button" data-and="${v}" class="${v === cpSel.android ? "on" : ""}">Android ${v}${v === "12" ? ` <small>⭐ ${L("Khuyên dùng", "Recommended")}</small>` : v !== "11" ? ` <small>${L("Mới", "New")}</small>` : ""}</button>`).join("");
+  $("cp-and").innerHTML = L0.map(v => `<button type="button" data-and="${v}" class="${v === cpSel.android ? "on" : ""}">Android ${v}${v === "12" ? ` <small>⭐ ${L("Khuyên dùng", "Recommended")}</small>` : v === "10" ? ` <small>⚡ GPU · ${L("app x86, không chạy game ARM", "x86 apps, no ARM games")}</small>` : v !== "11" ? ` <small>${L("Mới", "New")}</small>` : ""}</button>`).join("");
 }
 document.addEventListener("click", e => { const b = e.target.closest("[data-and]"); if (!b) return; cpSel.android = b.dataset.and; cpAndChips(); cpOrderUpd(); });
 async function openCpOrder(wantFree) {

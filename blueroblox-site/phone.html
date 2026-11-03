@@ -640,7 +640,9 @@ function resOf(p) { const m = /^(\d+)x(\d+)$/.exec(p && p.res || ""); return m ?
 function streamUrl(p, q, sid, raw) {
   const udid = "127.0.0.1:" + p.port, [w, h] = resOf(p);
   const B = baseOf(p), ws = "wss://" + new URL(B).host + "/?action=proxy-adb&remote=" + encodeURIComponent("tcp:8886") + "&udid=" + encodeURIComponent(udid) + "&cpv=" + PAGE_ID;
-  return B + "/?v=" + sid + "#!action=stream&udid=" + encodeURIComponent(udid) + "&player=" + player + "&ws=" + encodeURIComponent(ws)
+  // máy GPU (cổng 5600–5699): "Nhanh" dùng tinyh264 — webcodecs của Chrome có thể từ chối hình máy GPU (màn đen)
+  const pl = /^56\d\d$/.test(String(p.port)) && player === "webcodecs" ? "tinyh264" : player;
+  return B + "/?v=" + sid + "#!action=stream&udid=" + encodeURIComponent(udid) + "&player=" + pl + "&ws=" + encodeURIComponent(ws)
     + "&captureKeyboard=1&cpq=" + q + "&cpfps=" + (p.fps || 30) + "&cpw=" + w + "&cph=" + h + "&cpn=" + sid + (raw ? "&cpraw=1" : "");
 }
 const CONNS = new Set();

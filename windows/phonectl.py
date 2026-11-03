@@ -261,8 +261,33 @@ def configure(idx, ram, cpu, res, dpi):
     for k, v in (("memory", int(float(ram) * 1024)), ("cpus", max(1, int(round(float(cpu))))), ("is_customed_resolution", 1),
                  ("resolution_width", w), ("resolution_height", h), ("vbox_dpi", int(dpi or auto_dpi(res))), ("enable_su", 1),
                  ("graphics_render_mode", CONF.get("MEMU_RENDER", "1")),          # 1 = DirectX (nhẹ, ổn định hơn trên Windows)
+                 ("gmem_opt", CONF.get("MEMU_GMEM_OPT", "1")),                    # GPU memory optimization: BẬT (tắt thì nhiều game không chạy)
                  ("enable_audio", 0)):                                            # máy cloud không cần âm thanh → đỡ CPU
         memuc("setconfigex", "-i", idx, k, v, timeout=60)
+
+# ---------- MÁY MẪU: admin chỉnh tay 1 máy trong MEmu (GPU memory optimization, ASTC, chế độ vẽ…) → máy mới chép y cài đặt đó ----------
+TPL_KEYS = re.compile(r"gpu|astc|render|graphic|opt|turbo|vulkan|cache|vk_|egl|gles", re.I)
+TPL_SKIP = {"memory", "cpus", "fps", "enable_su", "resolution_width", "resolution_height", "vbox_dpi", "is_customed_resolution"}
+def memu_file(idx):
+    root = os.path.join(MEMU, "MemuHyperv VMs"); nm = "MEmu" if int(idx) == 0 else f"MEmu_{int(idx)}"
+    f = os.path.join(root, nm, nm + ".memu")
+    return f if os.path.isfile(f) else ""
+def memu_props(idx):
+    f = memu_file(idx)
+    if not f: return {}
+    t = open(f, encoding="utf-8", errors="replace").read()
+    return {m.group(1): m.group(2) for m in re.finditer(r'GuestProperty\s+name="([^"]+)"\s+value="([^"]*)"', t)}
+def template_props():
+    name = CONF.get("MEMU_TEMPLATE", "")
+    if not name: return {}
+    i = next((k for k, x in vms().items() if x["name"] == name), None)
+    if i is None: return {}
+    return {k: v for k, v in memu_props(i).items() if TPL_KEYS.search(k) and k not in TPL_SKIP}
+def apply_template(idx, quiet=False):
+    props = template_props()
+    for k, v in props.items(): memuc("setconfigex", "-i", idx, k, v, timeout=60)
+    if props and not quiet: print(f"   🧩 chép {len(props)} cài đặt từ máy mẫu '{CONF.get('MEMU_TEMPLATE')}'", flush=True)
+    return props
 
 def booted(port):
     r = adb("-s", f"127.0.0.1:{port}", "shell", "getprop sys.boot_completed", timeout=15)
@@ -318,6 +343,7 @@ def cmd_create(a):
         dpi = a.dpi or auto_dpi(a.res)
         configure(idx, a.ram, a.cpu, a.res, dpi)
         memuc("setconfigex", "-i", idx, "fps", clamp_fps(a.fps), timeout=60)
+        apply_template(idx)
     port = port_of(idx); exp = now() + datetime.timedelta(days=a.days)
     row = {"name": a.name, "idx": idx, "port": port, "ram": a.ram, "cpu": a.cpu, "res": a.res, "fps": clamp_fps(a.fps), "dpi": dpi,
            "android": "9", "kind": "memu", "created": fmt(now()), "expires": exp.isoformat()}
@@ -471,6 +497,24 @@ def cmd_wallpaper(a):
         if (a.all or p["name"] == a.name) and is_running(p["name"], p, v):
             adb_connect(p["port"]); set_wallpaper(p["name"], p["port"], force=a.force)
     print("Xong.")
+def cmd_template(a):
+    """template           : xem máy mẫu + các cài đặt sẽ chép
+       template TÊN       : đặt máy mẫu (tên máy trong Multiple Instance Manager)
+       template --apply   : chép cài đặt máy mẫu cho MỌI máy khách (có hiệu lực sau khi máy khởi động lại)"""
+    global CONF
+    if a.name:
+        if not any(x["name"] == a.name for x in vms().values()): print(f"LỖI: không thấy máy '{a.name}' trong MEmu."); sys.exit(1)
+        lines = [l for l in open(CONF_F, encoding="utf-8").read().splitlines() if not l.startswith("MEMU_TEMPLATE=")] if os.path.isfile(CONF_F) else []
+        open(CONF_F, "w", encoding="utf-8").write("\n".join(lines + [f"MEMU_TEMPLATE={a.name}"]) + "\n")
+        CONF = _conf()
+    props = template_props()
+    print(f"Máy mẫu: {CONF.get('MEMU_TEMPLATE') or '(chưa đặt)'} — {len(props)} cài đặt sẽ chép cho máy mới:")
+    for k, v in sorted(props.items()): print(f"   {k} = {v}")
+    if a.apply:
+        for p in load()["phones"]:
+            i = IDX(p)
+            if i is not None: apply_template(i, quiet=True); print(f"   ✓ {p['name']}")
+        print("Xong — máy khách nhận cài đặt mới sau lần khởi động lại kế tiếp.")
 def cmd_show(a): print(f"Hiện {hide_window(a.name, show=True)} cửa sổ của '{a.name}'.")
 def cmd_hide(a):
     n = 0
@@ -495,6 +539,7 @@ def main():
     rf = s.add_parser("rootfix"); rf.add_argument("name", nargs="?", default=""); rf.add_argument("--all", action="store_true"); rf.add_argument("--force", action="store_true"); rf.set_defaults(f=cmd_rootfix)
     rd = s.add_parser("render"); rd.add_argument("name"); rd.add_argument("mode", choices=["opengl", "directx"]); rd.set_defaults(f=cmd_render)
     wp = s.add_parser("wallpaper"); wp.add_argument("name", nargs="?", default=""); wp.add_argument("--all", action="store_true"); wp.add_argument("--force", action="store_true"); wp.set_defaults(f=cmd_wallpaper)
+    tp = s.add_parser("template"); tp.add_argument("name", nargs="?", default=""); tp.add_argument("--apply", action="store_true"); tp.set_defaults(f=cmd_template)
     hd = s.add_parser("hide"); hd.add_argument("name", nargs="?", default=""); hd.set_defaults(f=cmd_hide)
     for nm, fn in (("connect-all", cmd_connect_all), ("reap", cmd_reap), ("perms", cmd_perms), ("capacity", cmd_capacity), ("list", cmd_list),
                    ("memfix", cmd_noop), ("boost", cmd_noop), ("gpuinfo", cmd_noop)):

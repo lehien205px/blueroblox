@@ -113,7 +113,7 @@ public class ControlActivity extends Activity {
         veil = Ui.col(this, 12);
         veil.setGravity(Gravity.CENTER);
         veil.setPadding(Ui.dp(28), Ui.dp(28), Ui.dp(28), Ui.dp(28));
-        veil.setBackgroundColor(Color.argb(235, 6, 10, 28));
+        veil.setBackgroundColor(Ui.LIGHT ? Color.argb(242, 243, 247, 252) : Color.argb(238, 7, 18, 38));
         veilSpin = new ProgressBar(this);
         veil.addView(veilSpin, Ui.wrap());
         veilText = Ui.text(this, Ui.L("Đang kết nối máy…", "Connecting…"), 15, Ui.FG, false);
@@ -124,7 +124,7 @@ public class ControlActivity extends Activity {
         veilBtn.setVisibility(View.GONE);
         veil.addView(veilBtn, Ui.wrap());
         stage.addView(veil, new FrameLayout.LayoutParams(-1, -1));
-        fsExit = Ui.text(this, "⤡", 18, Ui.FG, true);
+        fsExit = Ui.text(this, "⤡", 18, Color.WHITE, true);
         fsExit.setGravity(Gravity.CENTER);
         fsExit.setBackground(Ui.round(Color.argb(140, 14, 22, 56), 99, Ui.LINE2));
         fsExit.setContentDescription(Ui.L("Thoát toàn màn hình", "Exit full screen"));
@@ -164,7 +164,7 @@ public class ControlActivity extends Activity {
         web.setWebViewClient(new WebViewClient() {
             @Override public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest r) {
                 String host = String.valueOf(r.getUrl().getHost());
-                return !(host.equals("blueroblox.shop") || host.equals("www.blueroblox.shop") || host.equals("phone.blueroblox.shop"));
+                return !(host.equals("blueroblox.shop") || host.equals("www.blueroblox.shop") || host.equals("phone.blueroblox.shop") || host.equals("fast.blueroblox.shop"));
             }
             @Override public void onReceivedError(WebView v, WebResourceRequest r, WebResourceError e) {
                 if (r.isForMainFrame()) fail(Ui.L("Không tải được trình điều khiển. Kiểm tra mạng rồi thử lại.", "Could not load the player. Check your network."));

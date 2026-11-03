@@ -4,6 +4,13 @@ import android.app.Activity;
 import android.app.Dialog;
 import android.content.Context;
 import android.content.res.ColorStateList;
+import android.content.res.Configuration;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.Paint;
+import android.graphics.Shader;
+import android.graphics.drawable.BitmapDrawable;
+import android.graphics.drawable.Drawable;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
@@ -17,6 +24,8 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowInsets;
+import android.view.WindowInsetsController;
+import android.widget.ImageView;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.FrameLayout;
@@ -28,26 +37,49 @@ import android.widget.Toast;
 import java.text.NumberFormat;
 import java.util.Locale;
 
-/** Màu, chữ, nút, thẻ… dùng chung cho mọi màn hình (giao diện tối, xanh dương như web). */
+/** Màu, chữ, nút, thẻ… dùng chung cho mọi màn hình.
+ *  Giao diện CLOUD BLUE (mệnh Thuỷ) giống web: 2 chế độ Sáng / Tối, nền chấm bong bóng, viền xanh neon. */
 public final class Ui {
-    public static final int BG = Color.rgb(6, 10, 28);
-    public static final int PANEL = Color.rgb(14, 22, 56);
-    public static final int PANEL2 = Color.rgb(22, 34, 79);
-    public static final int LINE = Color.argb(40, 143, 208, 255);
-    public static final int LINE2 = Color.argb(80, 143, 208, 255);
-    public static final int FG = Color.rgb(238, 243, 255);
-    public static final int MUTED = Color.rgb(151, 165, 207);
-    public static final int BLUE = Color.rgb(61, 123, 255);
-    public static final int SKY = Color.rgb(143, 208, 255);
-    public static final int OK = Color.rgb(60, 224, 176);
-    public static final int WAIT = Color.rgb(255, 200, 97);
-    public static final int BAD = Color.rgb(255, 107, 129);
+    public static int BG, PANEL, PANEL2, LINE, LINE2, FG, MUTED, BLUE, SKY, OK, WAIT, BAD, SUNK, RING, HINT;
+    public static boolean LIGHT;
+    static { apply(false); }
+
+    /** Đổi bảng màu. light = Thuỷ ngày (nền trắng bạc), ngược lại = Thuỷ đêm (xanh mực). */
+    public static void apply(boolean light) {
+        LIGHT = light;
+        if (light) {
+            BG = Color.rgb(243, 247, 252); PANEL = Color.rgb(255, 255, 255); PANEL2 = Color.rgb(238, 245, 255);
+            LINE = Color.argb(41, 43, 110, 240); LINE2 = Color.argb(77, 43, 110, 240);
+            FG = Color.rgb(10, 26, 58); MUTED = Color.rgb(74, 93, 130); BLUE = Color.rgb(43, 110, 240); SKY = Color.rgb(15, 63, 179);
+            OK = Color.rgb(14, 159, 116); WAIT = Color.rgb(178, 107, 0); BAD = Color.rgb(224, 53, 79);
+            SUNK = Color.rgb(238, 244, 252); RING = Color.argb(77, 70, 165, 255); HINT = Color.argb(150, 74, 93, 130);
+        } else {
+            BG = Color.rgb(7, 18, 38); PANEL = Color.rgb(13, 29, 61); PANEL2 = Color.rgb(16, 36, 74);
+            LINE = Color.argb(56, 90, 175, 255); LINE2 = Color.argb(92, 90, 175, 255);
+            FG = Color.rgb(232, 241, 255); MUTED = Color.rgb(159, 180, 216); BLUE = Color.rgb(61, 134, 255); SKY = Color.rgb(140, 196, 255);
+            OK = Color.rgb(60, 224, 176); WAIT = Color.rgb(255, 214, 102); BAD = Color.rgb(255, 107, 129);
+            SUNK = Color.rgb(6, 17, 42); RING = Color.argb(77, 90, 175, 255); HINT = Color.argb(150, 159, 180, 216);
+        }
+        bubbles = null;
+    }
+
+    /** Lưu lựa chọn Sáng/Tối (lần đầu: theo cài đặt của máy). */
+    public static void setLight(Context c, boolean light) {
+        c.getSharedPreferences("ui", Context.MODE_PRIVATE).edit().putString("theme", light ? "light" : "dark").apply();
+        apply(light);
+    }
 
     public static boolean vi() { return "vi".equals(Locale.getDefault().getLanguage()); }
     public static String L(String vi, String en) { return vi() ? vi : en; }
 
     private static float density = 3f;
-    public static void init(Context c) { density = c.getResources().getDisplayMetrics().density; Api.init(c); }
+    public static void init(Context c) {
+        density = c.getResources().getDisplayMetrics().density; Api.init(c);
+        String t = c.getSharedPreferences("ui", Context.MODE_PRIVATE).getString("theme", null);
+        boolean light = t != null ? "light".equals(t)
+                : (c.getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK) != Configuration.UI_MODE_NIGHT_YES;
+        apply(light);
+    }
     public static int dp(float v) { return Math.round(v * density); }
 
     public static String vnd(double v) {
@@ -65,6 +97,53 @@ public final class Ui {
 
     public static void ripple(View v, int fill, int radius, int stroke) {
         v.setBackground(new RippleDrawable(ColorStateList.valueOf(Color.argb(60, 143, 208, 255)), round(fill, radius, stroke), null));
+    }
+
+    /** Nút xanh bóng (chuyển màu từ trên xuống, như web). */
+    public static GradientDrawable gloss(int radius) {
+        GradientDrawable g = new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, new int[]{Color.rgb(92, 157, 255), Color.rgb(43, 110, 240)});
+        g.setCornerRadius(dp(radius));
+        return g;
+    }
+
+    public static void glossy(View v, int radius) {
+        v.setBackground(new RippleDrawable(ColorStateList.valueOf(Color.argb(70, 255, 255, 255)), gloss(radius), null));
+    }
+
+    /** Thẻ: nền trắng/mực + viền neon xanh 1.5dp, bo 20dp. */
+    public static GradientDrawable ringed(int fill, int radius) {
+        GradientDrawable g = round(fill, radius, 0);
+        g.setStroke(Math.max(2, dp(1.5f)), RING);
+        return g;
+    }
+
+    /** Nền "bảng bong bóng" như logo: chấm tròn nhỏ lặp lại, vẽ 1 lần, rất nhẹ. */
+    private static BitmapDrawable bubbles;
+    public static Drawable bubbles(Context c) {
+        if (bubbles == null) {
+            int s = Math.max(24, dp(30));
+            Bitmap b = Bitmap.createBitmap(s, s, Bitmap.Config.ARGB_8888);
+            Canvas cv = new Canvas(b);
+            cv.drawColor(BG);
+            Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+            float r = s * .23f;
+            p.setColor(LIGHT ? Color.argb(20, 12, 40, 100) : Color.argb(70, 0, 0, 0)); cv.drawCircle(s / 2f + 1, s / 2f + 2, r + 1, p);
+            p.setColor(LIGHT ? Color.WHITE : Color.argb(22, 120, 180, 255)); cv.drawCircle(s / 2f, s / 2f, r, p);
+            p.setColor(LIGHT ? Color.argb(230, 255, 255, 255) : Color.argb(26, 160, 205, 255)); cv.drawCircle(s / 2f - r * .3f, s / 2f - r * .32f, r * .32f, p);
+            bubbles = new BitmapDrawable(c.getResources(), b);
+            bubbles.setTileModeXY(Shader.TileMode.REPEAT, Shader.TileMode.REPEAT);
+        }
+        return bubbles.getConstantState().newDrawable(c.getResources());
+    }
+
+    /** Logo cá voi Cloud Blue (ảnh nét). */
+    public static ImageView whale(Context c, int heightDp) {
+        ImageView v = new ImageView(c);
+        v.setImageBitmap(Brand.whale());
+        v.setAdjustViewBounds(true);
+        v.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        v.setMaxHeight(dp(heightDp));
+        return v;
     }
 
     // ---------------- Chữ ----------------
@@ -103,9 +182,9 @@ public final class Ui {
         b.setMinHeight(dp(46));
         b.setMinimumHeight(dp(46));
         b.setPadding(dp(16), 0, dp(16), 0);
-        if (kind == PRIMARY) { b.setTextColor(Color.WHITE); ripple(b, BLUE, 12, 0); }
+        if (kind == PRIMARY) { b.setTextColor(Color.WHITE); glossy(b, 14); }
         else if (kind == DANGER) { b.setTextColor(BAD); ripple(b, Color.argb(20, 255, 107, 129), 12, Color.argb(110, 255, 107, 129)); }
-        else { b.setTextColor(FG); ripple(b, PANEL2, 12, LINE2); }
+        else { b.setTextColor(FG); ripple(b, PANEL, 14, RING); }
         return b;
     }
 
@@ -134,13 +213,13 @@ public final class Ui {
     public static EditText input(Context c, String hint, int type) {
         EditText e = new EditText(c);
         e.setHint(hint);
-        e.setHintTextColor(Color.argb(150, 151, 165, 207));
+        e.setHintTextColor(HINT);
         e.setTextColor(FG);
         e.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
         e.setInputType(type);
         e.setSingleLine(type != (InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE));
         e.setPadding(dp(14), dp(12), dp(14), dp(12));
-        e.setBackground(round(Color.rgb(9, 15, 40), 12, LINE2));
+        e.setBackground(round(SUNK, 14, LINE2));
         e.setMinHeight(dp(48));
         return e;
     }
@@ -176,7 +255,7 @@ public final class Ui {
     public static LinearLayout card(Context c) {
         LinearLayout l = col(c, 10);
         l.setPadding(dp(16), dp(16), dp(16), dp(16));
-        l.setBackground(round(PANEL, 18, LINE));
+        l.setBackground(ringed(PANEL, 20));
         return l;
     }
 
@@ -218,6 +297,16 @@ public final class Ui {
                 | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION);
         if (Build.VERSION.SDK_INT < 35) { w.setStatusBarColor(Color.TRANSPARENT); w.setNavigationBarColor(BG); }
         w.getDecorView().setBackgroundColor(BG);
+        // chữ/biểu tượng thanh trạng thái: tối khi nền sáng, sáng khi nền tối
+        if (Build.VERSION.SDK_INT >= 30) {
+            WindowInsetsController ic = w.getInsetsController();
+            int m = WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS | WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS;
+            if (ic != null) ic.setSystemBarsAppearance(LIGHT ? m : 0, m);
+        } else if (Build.VERSION.SDK_INT >= 23) {
+            View d = w.getDecorView(); int f = d.getSystemUiVisibility();
+            int m = View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR | (Build.VERSION.SDK_INT >= 26 ? View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR : 0);
+            d.setSystemUiVisibility(LIGHT ? (f | m) : (f & ~m));
+        }
     }
 
     // ---------------- Thông báo nhanh / hộp thoại ----------------
@@ -229,7 +318,7 @@ public final class Ui {
         d.requestWindowFeature(Window.FEATURE_NO_TITLE);
         LinearLayout box = col(a, 14);
         box.setPadding(dp(20), dp(10), dp(20), dp(20));
-        box.setBackground(round(PANEL, 22, LINE2));
+        box.setBackground(ringed(PANEL, 24));
         View grip = new View(a);
         grip.setBackground(round(LINE2, 99, 0));
         LinearLayout.LayoutParams gp = new LinearLayout.LayoutParams(dp(40), dp(4));
@@ -315,6 +404,6 @@ public final class Ui {
     public static void setChip(TextView t, boolean on) {
         t.setSelected(on);
         t.setTextColor(on ? Color.WHITE : FG);
-        ripple(t, on ? BLUE : PANEL2, 12, on ? BLUE : LINE2);
+        if (on) glossy(t, 12); else ripple(t, PANEL, 12, RING);
     }
 }

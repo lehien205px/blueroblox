@@ -20,6 +20,9 @@ import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
+import android.text.SpannableString;
+import android.text.Spanned;
+import android.text.style.ForegroundColorSpan;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -85,16 +88,28 @@ public class MainActivity extends Activity {
         Ui.edgeToEdge(this);
 
         LinearLayout root = Ui.col(this, 0);
-        root.setBackgroundColor(Ui.BG);
+        root.setBackground(Ui.bubbles(this));
 
-        // Đầu trang
+        // Đầu trang: cá voi Cloud Blue + tên + số dư + nút Sáng/Tối
         LinearLayout top = Ui.row(this, 10);
-        top.setPadding(Ui.dp(18), Ui.dp(12), Ui.dp(18), Ui.dp(10));
-        TextView brand = Ui.text(this, "BlueRoblox Cloud", 19, Ui.FG, true);
+        top.setPadding(Ui.dp(14), Ui.dp(10), Ui.dp(14), Ui.dp(10));
+        top.setBackground(Ui.round(Ui.LIGHT ? Color.argb(246, 243, 247, 252) : Color.argb(246, 7, 18, 38), 0, 0));
+        top.addView(Ui.whale(this, 34), new LinearLayout.LayoutParams(Ui.dp(50), Ui.dp(34)));
+        SpannableString bn = new SpannableString("BlueRoblox");
+        bn.setSpan(new ForegroundColorSpan(Ui.LIGHT ? Ui.BLUE : Color.rgb(90, 168, 255)), 0, 4, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        TextView brand = Ui.text(this, "", 19, Ui.FG, true);
+        brand.setText(bn);
+        brand.setSingleLine(true);
         top.addView(brand, Ui.weight(1));
         balTop = Ui.pill(this, "…", Ui.SKY);
         balTop.setOnClickListener(v -> openTopup());
         top.addView(balTop, Ui.wrap());
+        TextView th = Ui.text(this, Ui.LIGHT ? "🌙" : "☀️", 17, Ui.FG, false);
+        th.setGravity(Gravity.CENTER);
+        th.setContentDescription(Ui.L("Đổi chế độ Sáng / Tối", "Switch light / dark mode"));
+        Ui.ripple(th, Ui.PANEL, 99, Ui.RING);
+        th.setOnClickListener(v -> { Ui.setLight(this, !Ui.LIGHT); recreate(); });
+        top.addView(th, new LinearLayout.LayoutParams(Ui.dp(40), Ui.dp(40)));
         root.addView(top, Ui.fill());
 
         content = new FrameLayout(this);
@@ -102,7 +117,7 @@ public class MainActivity extends Activity {
 
         // Thanh điều hướng dưới
         LinearLayout bar = Ui.row(this, 0);
-        bar.setBackground(Ui.round(Ui.PANEL, 0, Ui.LINE));
+        bar.setBackground(Ui.ringed(Ui.PANEL, 0));
         bar.setPadding(Ui.dp(6), Ui.dp(4), Ui.dp(6), Ui.dp(4));
         String[][] items = {{"📱", Ui.L("Máy của tôi", "My phones")}, {"➕", Ui.L("Thuê máy", "Rent")}, {"👤", Ui.L("Tài khoản", "Account")}};
         for (int i = 0; i < 3; i++) {
@@ -167,7 +182,7 @@ public class MainActivity extends Activity {
         tab = t;
         for (int i = 0; i < 3; i++) {
             nav[i].setTextColor(i == t ? Ui.SKY : Ui.MUTED);
-            nav[i].setBackground(i == t ? Ui.round(Color.argb(34, 61, 123, 255), 14, 0) : null);
+            nav[i].setBackground(i == t ? Ui.round(Ui.LIGHT ? Color.argb(28, 43, 110, 240) : Color.argb(40, 90, 175, 255), 14, 0) : null);
         }
         if (t == 0) renderPhones(); else if (t == 1) renderRent(); else renderAccount();
     }

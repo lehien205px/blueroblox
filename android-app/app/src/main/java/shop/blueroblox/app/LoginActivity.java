@@ -35,9 +35,8 @@ public class LoginActivity extends Activity {
         root.setPadding(Ui.dp(24), Ui.dp(36), Ui.dp(24), Ui.dp(28));
         root.setGravity(Gravity.CENTER_HORIZONTAL);
 
-        ImageView logo = new ImageView(this);
-        logo.setImageResource(R.mipmap.ic_launcher);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(Ui.dp(84), Ui.dp(84));
+        ImageView logo = Ui.whale(this, 120);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(Ui.dp(176), Ui.dp(120));
         lp.gravity = Gravity.CENTER_HORIZONTAL;
         root.addView(logo, lp);
 
@@ -52,7 +51,7 @@ public class LoginActivity extends Activity {
         // Thanh chọn Đăng nhập / Đăng ký
         LinearLayout seg = Ui.row(this, 6);
         seg.setPadding(Ui.dp(4), Ui.dp(4), Ui.dp(4), Ui.dp(4));
-        seg.setBackground(Ui.round(Ui.PANEL, 14, Ui.LINE));
+        seg.setBackground(Ui.ringed(Ui.PANEL, 16));
         for (int i = 0; i < 2; i++) {
             final int m = i;
             tabs[i] = Ui.chip(this, i == 0 ? Ui.L("Đăng nhập", "Log in") : Ui.L("Đăng ký", "Sign up"), i == 0);
@@ -89,7 +88,7 @@ public class LoginActivity extends Activity {
         root.addView(policy, Ui.fill());
 
         ScrollView sv = Ui.scroll(this, root);
-        sv.setBackgroundColor(Ui.BG);
+        sv.setBackground(Ui.bubbles(this));
         Ui.insets(sv, true, true);
         setContentView(sv);
         setMode(0);

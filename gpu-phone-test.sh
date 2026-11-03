@@ -211,77 +211,67 @@ GS
     ok "Root OK: Shell + mọi app đã cài được cấp quyền root sẵn"
   else err "Chưa có root cho Shell"; fi ;;
 rootboot)
-  # ROOT TỰ ĐỘNG KHÔNG CẦN BẤM: gắn vào ramdisk (đã có Magisk) 1 dịch vụ chạy quyền root lúc khởi động,
-  # cứ 15 giây cấp sẵn quyền root cho Shell + MỌI app khách cài (tool/game không phải bấm "Cho phép").
-  # Áp dụng cho mọi máy dùng bản Android này. Dùng magiskboot (trong Magisk chính thức) chạy ngay trong máy thử.
+  # ROOT SÂU KHÔNG CẦN APP (giống máy redroid): su + cpsud của BlueRoblox gắn vào ramdisk, chạy quyền root ngay khi khởi động.
+  # Mọi app/tool khách cài gọi "su" là có root, không hỏi, không cần app Magisk. Áp dụng cho mọi máy dùng bản Android này.
+  # (Magisk trong ramdisk chỉ dùng làm "bệ phóng" để chạy dịch vụ lúc khởi động; su của BlueRoblox đè lên su của Magisk.)
   A() { "$ADB" -s emulator-$PORT "$@"; }
   [ "$(A shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ] || { err "Bật máy thử trước:  bash $0 start"; exit 1; }
   SYS=$(grep "^image.sysdir.1=" "$ANDROID_AVD_HOME/$AVD.avd/config.ini" | cut -d= -f2 | sed 's|/*$||'); RD="$SDK/$SYS/ramdisk.img"
-
   [ -f "$RD.magisk" ] || A shell 'ls -la /system/bin/su' 2>/dev/null | grep -q magisk || { err "Bản này chưa có Magisk trong file khởi động — chạy:  bash $0 root"; exit 1; }
-  [ -f "$RD.magisk" ] || cp "$RD" "$RD.magisk"            # bản đã có Magisk (chưa gắn dịch vụ) — luôn làm lại từ bản này
+  [ -f "$RD.magisk" ] || cp "$RD" "$RD.magisk"
+  S="$HOME/cloudphone-su"
+  if [ ! -s "$S/su" ] || [ ! -s "$S/cpsud" ]; then
+    mkdir -p "$S"; R="https://api.github.com/repos/lehien205px/blueroblox/contents"
+    curl -fsSL -H "Accept: application/vnd.github.raw" -o "$S/su" "$R/cpsu-su.bin" && curl -fsSL -H "Accept: application/vnd.github.raw" -o "$S/cpsud" "$R/cpsu-daemon.bin" \
+      || { err "Không có bộ root (cpsu-su.bin, cpsu-daemon.bin) — up 2 file đó lên GitHub"; exit 1; }
+  fi
   AB=$(A shell getprop ro.product.cpu.abi | tr -d '\r'); case "$AB" in x86_64) L=x86_64;; *) L=x86;; esac
-  MZ="$HOME/rootAVD/Magisk.zip"; [ -f "$MZ" ] || { err "Không thấy $MZ (chạy: bash $0 root)"; exit 1; }
-  unzip -p "$MZ" "lib/$L/libmagiskboot.so" > /tmp/cp-mb 2>/dev/null; [ -s /tmp/cp-mb ] || { err "Không lấy được magiskboot từ Magisk.zip"; exit 1; }
-  cat > /tmp/cpgrant.sh <<'GS'
+  [ "$L" = x86_64 ] || warn "Máy $AB (32-bit): bộ root 64-bit có thể không chạy — sẽ báo ở cuối"
+  MZ="$HOME/rootAVD/Magisk.zip"; unzip -p "$MZ" "lib/$L/libmagiskboot.so" > /tmp/cp-mb 2>/dev/null; [ -s /tmp/cp-mb ] || { err "Không lấy được magiskboot từ $MZ"; exit 1; }
+  cat > /tmp/cproot.sh <<'GS'
 #!/system/bin/sh
-# chạy quyền root ngay lúc khởi động (do init gọi), KHÔNG phụ thuộc app Magisk
-L=/data/local/tmp/cpgrant.log; exec >$L 2>&1; chmod 644 $L
-id; M="${0%/*}/magisk"; [ -x "$M" ] || M=/system/bin/magisk; [ -x "$M" ] || M=$(command -v magisk)
-ls -la "${0%/*}" | head -20
-for i in 1 2 3 4 5 6 7 8 9 10; do $M -v >/dev/null 2>&1 && break; sleep 3; done
-# Magisk chưa "cài đặt bổ sung" (máy mới) → tự làm: chép bộ Magisk vào /data/adb/magisk rồi bật daemon
-if ! $M -v >/dev/null 2>&1; then
-  mkdir -p /data/adb/magisk /data/adb/modules /data/adb/post-fs-data.d /data/adb/service.d
-  for f in magisk magisk32 magisk64 magiskinit magiskpolicy busybox; do [ -f "${0%/*}/$f" ] && cp -af "${0%/*}/$f" /data/adb/magisk/; done
-  chmod -R 755 /data/adb/magisk; $M --daemon; sleep 3
-fi
-echo "magisk: $($M -v 2>&1) / $($M -V 2>&1)"; cp -f /cache/magisk.log /data/local/tmp/magisk.log 2>/dev/null; chmod 644 /data/local/tmp/magisk.log 2>/dev/null
-while true; do
-  $M --sqlite "REPLACE INTO settings (key,value) VALUES('root_access',3)" >/dev/null 2>&1
-  for u in 2000 $(cmd package list packages -3 -U 2>/dev/null | sed -n 's/.*uid:\([0-9]*\).*/\1/p' | sort -u); do
-    $M --sqlite "REPLACE INTO policies (uid,policy,until,logging,notification) VALUES($u,2,0,0,0)" >/dev/null 2>&1
-  done
-  sleep 15
-done
+# $1 = early (post-fs-data) | late (đã khởi động xong). Chạy bằng root (init gọi).
+D=${0%/*}; L=/data/local/tmp/cproot.log
+[ "$1" = early ] && exec >$L 2>&1 || exec >>$L 2>&1; chmod 644 $L; echo "== $1 $(date)"; id
+setenforce 0 2>/dev/null; echo "selinux: $(getenforce)"
+mkdir -p /dev/cpbin; cp -f $D/cpsu /dev/cpbin/su; chown 0:0 /dev/cpbin/su; chmod 755 /dev/cpbin/su
+ours() { [ "$(/system/bin/su -v 2>/dev/null)" = "30.7:MAGISKSU" ]; }
+if ! ours; then mount -t overlay cpbin -o lowerdir=/dev/cpbin:/system/bin /system/bin && echo "overlay /system/bin OK" || echo "overlay LỖI"; fi
+ours && echo "su: CỦA BLUEROBLOX" || echo "su: CHƯA ĐÚNG ($(ls -la /system/bin/su 2>&1))"
+[ -S /dev/socket/cpsu ] && chmod 666 /dev/socket/cpsu
+echo "cpsud: $(pidof cpsud || echo chưa chạy)"
 GS
   cat > /tmp/cpgrant.rc <<'RC'
-service cpgrant /system/bin/sh ${MAGISKTMP}/cpgrant.sh
+service cpsud ${MAGISKTMP}/cpsud /dev/socket/cpsu fg
     user root
     group root
     seclabel u:r:magisk:s0
-    oneshot
-    disabled
+
+on post-fs-data
+    exec u:r:magisk:s0 root root -- /system/bin/sh ${MAGISKTMP}/cproot.sh early
+    start cpsud
 
 on property:sys.boot_completed=1
-    start cpgrant
+    start cpsud
+    exec u:r:magisk:s0 root root -- /system/bin/sh ${MAGISKTMP}/cproot.sh late
 RC
   T=/data/local/tmp
-  A push /tmp/cp-mb $T/mb >/dev/null && A push "$RD.magisk" $T/rd.img >/dev/null && A push /tmp/cpgrant.sh $T/cpgrant.sh >/dev/null && A push /tmp/cpgrant.rc $T/cpgrant.rc >/dev/null || { err "Không chép được file vào máy"; exit 1; }
-  OUT=$(A shell "cd $T && chmod 755 mb && rm -f rd.cpio rd.new && ./mb decompress rd.img rd.cpio 2>&1" | tr -d '\r'); echo "   $OUT" | head -3
+  for f in /tmp/cp-mb:mb "$RD.magisk":rd.img /tmp/cproot.sh:cproot.sh /tmp/cpgrant.rc:cpgrant.rc "$S/su":cpsu "$S/cpsud":cpsud; do
+    A push "${f%%:*}" "$T/${f##*:}" >/dev/null 2>&1 || { err "Không chép được ${f%%:*}"; exit 1; }
+  done
+  OUT=$(A shell "cd $T && chmod 755 mb && rm -f rd.cpio rd.new && ./mb decompress rd.img rd.cpio 2>&1" | tr -d '\r')
   FMT=$(echo "$OUT" | sed -n 's/.*\[\(.*\)\].*/\1/p' | head -1); [ -n "$FMT" ] || FMT=lz4_legacy
-  A shell "cd $T && (./mb cpio rd.cpio 'exists overlay.d/sbin' || ./mb cpio rd.cpio 'mkdir 0750 overlay.d' 'mkdir 0750 overlay.d/sbin') && ./mb cpio rd.cpio 'add 0644 overlay.d/cpgrant.rc cpgrant.rc' 'add 0755 overlay.d/sbin/cpgrant.sh cpgrant.sh' && ./mb compress=$FMT rd.cpio rd.new" 2>&1 | tr -d '\r' | tail -3
+  A shell "cd $T && (./mb cpio rd.cpio 'exists overlay.d/sbin' || ./mb cpio rd.cpio 'mkdir 0750 overlay.d' 'mkdir 0750 overlay.d/sbin') && ./mb cpio rd.cpio 'add 0644 overlay.d/cpgrant.rc cpgrant.rc' 'add 0755 overlay.d/sbin/cproot.sh cproot.sh' 'add 0755 overlay.d/sbin/cpsu cpsu' 'add 0755 overlay.d/sbin/cpsud cpsud' && ./mb compress=$FMT rd.cpio rd.new" >/dev/null 2>&1
   A pull $T/rd.new /tmp/cp-rd.new >/dev/null 2>&1 && [ -s /tmp/cp-rd.new ] || { err "Đóng gói ramdisk lỗi"; exit 1; }
-  cp /tmp/cp-rd.new "$RD" && ok "Đã gắn dịch vụ root tự động ($FMT) vào $SYS"
-  A shell "rm -f $T/mb $T/rd.img $T/rd.cpio $T/rd.new $T/cpgrant.sh $T/cpgrant.rc"
+  cp /tmp/cp-rd.new "$RD" && ok "Đã gắn bộ root sâu vào $SYS ($FMT)"
+  A shell "rm -f $T/mb $T/rd.img $T/rd.cpio $T/rd.new $T/cproot.sh $T/cpgrant.rc $T/cpsu $T/cpsud"
+  A uninstall com.topjohnwu.magisk >/dev/null 2>&1                # không cần app Magisk
+  echo "== Khởi động lại máy thử =="
   bash "$0" stop >/dev/null 2>&1; bash "$0" start >/dev/null 2>&1; sleep 20
-  # App Magisk phải là bản CHÍNH THỨC đúng phiên bản (Magisk kiểm tra chữ ký app; sai chữ ký → từ chối mọi quyền root)
-  MV=$(A shell 'magisk -v' 2>/dev/null | tr -d '\r' | cut -d: -f1)
-  [ -n "$MV" ] || MV=$(A shell 'cat /data/local/tmp/cpgrant.log' 2>/dev/null | tr -d '\r' | sed -n 's/^magisk: \([0-9.]*\):.*/\1/p' | head -1)
-  [ -n "$MV" ] || MV=25.2
-  IV=$(A shell dumpsys package com.topjohnwu.magisk 2>/dev/null | tr -d '\r' | sed -n 's/.*versionName=//p' | head -1)
-  if [ "$IV" != "$MV" ] || [ ! -f "$HOME/.cache/.magisk-official-$MV" ]; then
-    APK="$HOME/.cache/Magisk-v$MV.apk"; mkdir -p "$HOME/.cache"
-    [ -s "$APK" ] || curl -fsSL -o "$APK" "https://github.com/topjohnwu/Magisk/releases/download/v$MV/Magisk-v$MV.apk" || { err "Không tải được Magisk v$MV từ GitHub"; exit 1; }
-    A uninstall com.topjohnwu.magisk >/dev/null 2>&1; A install -r "$APK" >/dev/null 2>&1 && { ok "Đã cài app Magisk chính thức v$MV"; touch "$HOME/.cache/.magisk-official-$MV"; }
-    bash "$0" stop >/dev/null 2>&1; bash "$0" start >/dev/null 2>&1; sleep 25
-  fi
-  if A shell 'su -c id' 2>/dev/null | grep -q "uid=0"; then ok "ROOT TỰ ĐỘNG: CHẠY ✓ (Shell + mọi app có root, không cần bấm)"
-  else err "Root tự động chưa chạy. Thông tin dò lỗi:"
-    echo "   dịch vụ cpgrant: $(A shell getprop init.svc.cpgrant | tr -d '\r')"
-    A shell 'cat /data/local/tmp/cpgrant.log 2>/dev/null | head -8; echo ---; tail -15 /data/local/tmp/magisk.log 2>/dev/null' | tr -d '\r' | sed 's/^/   /'
-  fi ;;
-
+  if A shell 'su -c id' 2>/dev/null | grep -q "uid=0"; then
+    ok "ROOT SÂU: CHẠY ✓  ($(A shell 'su -c id' | tr -d '\r' | cut -c1-40))"
+    A shell 'su -c "mount -o remount,rw / 2>/dev/null; echo ok-root-write > /data/local/tmp/.rootw && cat /data/local/tmp/.rootw"' | tr -d '\r' | grep -q ok-root-write && ok "App gọi su chạy được lệnh root (ghi file hệ thống OK)"
+  else err "Root sâu chưa chạy. Nhật ký:"; A shell 'cat /data/local/tmp/cproot.log 2>/dev/null | tail -20' | tr -d '\r' | sed 's/^/   /'; fi ;;
 auto)
   # KIỂM TRA TẤT CẢ BẢN 1 LỆNH: với từng bản Android → tải, bật, root (Magisk), cấp root, báo cáo → bảng tổng kết
   VERS="${VERS:-11 12 10 9}"; SUM="$HOME/gpu-auto-ketqua.txt"; : > "$SUM"
@@ -311,8 +301,8 @@ report)
   echo "Android:        $V   ($(A shell getprop ro.build.type | tr -d '\r') · $(A shell getprop ro.product.name | tr -d '\r'))"
   echo "$GL" | grep -qi "nvidia\|geforce" && ok "GPU:            GTX 1080" || err "GPU:            KHÔNG dùng GTX 1080 ($GL)"
   echo "$ABI" | grep -q arm64 && ok "Game ARM:       chạy được ($ABI)" || err "Game ARM:       KHÔNG ($ABI)"
-  if A shell 'su -c id' 2>/dev/null | grep -q "uid=0"; then ok "Root (su):      CÓ"
-  elif A shell 'magisk -v' 2>/dev/null | grep -qi magisk; then warn "Root:           Magisk có trong máy nhưng chưa cấp quyền — chạy:  bash $0 rootboot"
+  if A shell 'su -c id' 2>/dev/null | grep -q "uid=0"; then ok "Root (su):      CÓ ($(A shell 'su -v' 2>/dev/null | tr -d '\r'))"
+  elif A shell 'magisk -v' 2>/dev/null | grep -qi magisk; then warn "Root:           chưa có — chạy:  bash $0 rootboot"
   elif A root 2>&1 | grep -qi "cannot run as root\|production"; then err "Root:           KHÔNG (bản có Play Store bị khoá root)"
   else sleep 2; A wait-for-device; A shell id 2>/dev/null | grep -q "uid=0" && warn "Root:           chỉ có 'adb root' (chưa có su cho app)" || err "Root:           KHÔNG"; A unroot >/dev/null 2>&1; sleep 2; A wait-for-device; fi
   A shell pm list packages 2>/dev/null | grep -q com.android.vending && ok "Play Store:     CÓ" || err "Play Store:     KHÔNG"

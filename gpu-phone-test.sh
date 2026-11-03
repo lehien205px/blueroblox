@@ -227,7 +227,9 @@ rootboot)
 #!/system/bin/sh
 # chạy quyền root ngay lúc khởi động (do init gọi), KHÔNG phụ thuộc app Magisk
 L=/data/local/tmp/cpgrant.log; exec >$L 2>&1; chmod 644 $L
-id; M=/system/bin/magisk; [ -x "$M" ] || M=$(command -v magisk)
+id; M="${0%/*}/magisk"; [ -x "$M" ] || M=/system/bin/magisk; [ -x "$M" ] || M=$(command -v magisk)
+ls -la "${0%/*}" | head -20
+for i in 1 2 3 4 5 6 7 8 9 10; do $M -v >/dev/null 2>&1 && break; sleep 3; done
 # Magisk chưa "cài đặt bổ sung" (máy mới) → tự làm: chép bộ Magisk vào /data/adb/magisk rồi bật daemon
 if ! $M -v >/dev/null 2>&1; then
   mkdir -p /data/adb/magisk /data/adb/modules /data/adb/post-fs-data.d /data/adb/service.d
@@ -265,10 +267,13 @@ RC
   bash "$0" stop >/dev/null 2>&1; bash "$0" start >/dev/null 2>&1; sleep 20
   # App Magisk phải là bản CHÍNH THỨC đúng phiên bản (Magisk kiểm tra chữ ký app; sai chữ ký → từ chối mọi quyền root)
   MV=$(A shell 'magisk -v' 2>/dev/null | tr -d '\r' | cut -d: -f1)
-  if [ -n "$MV" ] && grep -q "pkg: APK signature mismatch\|cannot find com.topjohnwu.magisk" <(A shell 'cat /data/local/tmp/magisk.log' 2>/dev/null) ; then
+  [ -n "$MV" ] || MV=$(A shell 'cat /data/local/tmp/cpgrant.log' 2>/dev/null | tr -d '\r' | sed -n 's/^magisk: \([0-9.]*\):.*/\1/p' | head -1)
+  [ -n "$MV" ] || MV=25.2
+  IV=$(A shell dumpsys package com.topjohnwu.magisk 2>/dev/null | tr -d '\r' | sed -n 's/.*versionName=//p' | head -1)
+  if [ "$IV" != "$MV" ] || [ ! -f "$HOME/.cache/.magisk-official-$MV" ]; then
     APK="$HOME/.cache/Magisk-v$MV.apk"; mkdir -p "$HOME/.cache"
     [ -s "$APK" ] || curl -fsSL -o "$APK" "https://github.com/topjohnwu/Magisk/releases/download/v$MV/Magisk-v$MV.apk" || { err "Không tải được Magisk v$MV từ GitHub"; exit 1; }
-    A uninstall com.topjohnwu.magisk >/dev/null 2>&1; A install -r "$APK" >/dev/null 2>&1 && ok "Đã cài app Magisk chính thức v$MV"
+    A uninstall com.topjohnwu.magisk >/dev/null 2>&1; A install -r "$APK" >/dev/null 2>&1 && { ok "Đã cài app Magisk chính thức v$MV"; touch "$HOME/.cache/.magisk-official-$MV"; }
     bash "$0" stop >/dev/null 2>&1; bash "$0" start >/dev/null 2>&1; sleep 25
   fi
   if A shell 'su -c id' 2>/dev/null | grep -q "uid=0"; then ok "ROOT TỰ ĐỘNG: CHẠY ✓ (Shell + mọi app có root, không cần bấm)"

@@ -13,7 +13,8 @@ function Get($url, $out) { & curl.exe -fsSL -o $out $url; if ($LASTEXITCODE -ne 
 
 if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
   Write-Host "Hay mo PowerShell bang Run as administrator." -ForegroundColor Red; exit 1 }
-New-Item -ItemType Directory -Force -Path $B, "$B\redroid", "$B\wstmp", "$B\apk-cai-san" | Out-Null
+New-Item -ItemType Directory -Force -Path $B, "$B\redroid", "$B\wstmp", "$B\apk-cai-san", "$B\logs" | Out-Null
+Set-Location $B
 $env:Path = [Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [Environment]::GetEnvironmentVariable("Path", "User")
 
 Step "1/7 Python"
@@ -55,6 +56,8 @@ if (-not (Test-Path "$B\ws-scrcpy\dist\index.js")) {
   Push-Location $src
   # bỏ các phần cần biên dịch C++ (shell, iOS) — không dùng tới
   & node -e "const f='package.json',d=JSON.parse(require('fs').readFileSync(f));delete d.optionalDependencies;delete d.scripts.postinstall;['node-pty','ios-device-lib','node-mjpeg-proxy'].forEach(k=>delete d.dependencies[k]);require('fs').writeFileSync(f,JSON.stringify(d,null,2))"
+  # chỉ dịch TypeScript, bỏ kiểm tra kiểu (các file iOS/shell không dùng tới làm báo lỗi)
+  (Get-Content webpack\ws-scrcpy.common.ts -Raw) -replace "\{ loader: 'ts-loader' \}", "{ loader: 'ts-loader', options: { transpileOnly: true } }" | Set-Content -Encoding utf8 webpack\ws-scrcpy.common.ts
   Set-Content -Encoding ascii build.config.override.json '{"INCLUDE_ADB_SHELL": false, "INCLUDE_APPL": false, "USE_QVH_SERVER": false, "USE_WDA_MJPEG_SERVER": false}'
   if (Test-Path package-lock.json) { Remove-Item package-lock.json }
   & npm.cmd install --ignore-scripts --no-audit --no-fund; if ($LASTEXITCODE -ne 0) { throw "npm install loi" }
@@ -72,7 +75,7 @@ netsh advfirewall firewall add rule name="BlueRoblox chan 8000" dir=in action=bl
 
 Step "6/7 Tai chuong trinh BlueRoblox"
 foreach ($f in "cloudphoned.py", "cpapi.py") { Get "$RAW/$f" "$B\$f" }
-foreach ($f in "phonectl.py", "run.py", "remake.py", "keep.bat", "start-blue.bat") { Get "$RAW/windows/$f" "$B\$f" }
+foreach ($f in "phonectl.py", "run.py", "remake.py", "keep.bat", "start-blue.bat", "panel.py") { Get "$RAW/windows/$f" "$B\$f" }
 if (-not (Test-Path "$B\cloudphone.conf")) {
 @"
 SUPABASE_URL=https://nprftgodswlpzomcttal.supabase.co
@@ -90,6 +93,9 @@ Ok "$B\cloudphone.conf"
 Step "7/7 Tu chay khi bat may"
 $lnk = "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\StartUp\BlueRoblox.lnk"
 $ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut($lnk)
-$s.TargetPath = "$B\start-blue.bat"; $s.WorkingDirectory = $B; $s.WindowStyle = 7; $s.Save()
+$PYW = "C:\Program Files\Python312\pythonw.exe"
+$s.TargetPath = $PYW; $s.Arguments = "`"$B\panel.py`" --auto"; $s.WorkingDirectory = $B; $s.Save()
+$d = $ws.CreateShortcut("$env:Public\Desktop\BlueRoblox.lnk"); $d.TargetPath = $PYW; $d.Arguments = "`"$B\panel.py`""; $d.WorkingDirectory = $B; $d.Save()
 Ok "Bat may Windows -> tu chay BlueRoblox"
-Write-Host "`nXONG phan cai dat. Lam tiep theo huong dan: dien SUPABASE_SERVICE_KEY, cai duong ham Cloudflare, chay start-blue.bat" -ForegroundColor Yellow
+Set-Location $B
+Write-Host "`nXONG phan cai dat. Mo bieu tuong BlueRoblox tren man hinh Desktop de dieu khien." -ForegroundColor Yellow

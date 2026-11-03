@@ -1,4 +1,4 @@
-// BlueRoblox Cloud — app máy tính Windows.
+// BlueRoblox Admin — app máy tính Windows CHỈ CHO ADMIN (không phát hành cho khách).
 // Mở thẳng web blueroblox.shop trong cửa sổ riêng (Edge WebView2): luôn là bản web mới nhất, không cần cập nhật app.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
@@ -31,7 +31,7 @@ fn main() {
     tauri::Builder::default()
         .setup(|app| {
             WebviewWindowBuilder::new(app, "main", WebviewUrl::External("https://blueroblox.shop/?app=pc".parse().unwrap()))
-                .title("BlueRoblox Cloud")
+                .title("BlueRoblox Admin")
                 .inner_size(1280.0, 820.0)
                 .min_inner_size(900.0, 600.0)
                 .center()

@@ -993,6 +993,22 @@ class H(BaseHTTPRequestHandler):
                 for l in out(shell(port, LU, 20)).splitlines():
                     if len(l.split()) == 2: shell(port, f"pm uninstall --user {l.split()[1]} {shlex.quote(pkg)}", 60)
                 return self.send_json(200, {"ok": True, "msg": "Đã bỏ các bản clone."})
+            if b.get("open"):                  # MỞ bản clone số i (màn hình chính của máy có thể không có tab Công việc)
+                try: i = max(1, int(b.get("open")))
+                except (TypeError, ValueError): i = 1
+                q = shlex.quote(pkg); us = []
+                for l in out(shell(port, LU, 20)).splitlines():
+                    if len(l.split()) != 2: continue
+                    nm, u = l.split()
+                    if f"package:{pkg}" in out(shell(port, f"pm list packages --user {u} {q}", 20)).split():
+                        us.append((int(re.sub(r"\D", "", nm) or 1), u))
+                us.sort()
+                if len(us) < i: return self.send_json(404, {"error": "Chưa có bản clone này — bấm Clone trước."})
+                u = us[i - 1][1]
+                o = out(shell(port, f"am start-user {u} >/dev/null 2>&1; C=$(cmd package resolve-activity --brief --user {u} {q} | tail -n 1); "
+                                    f"am start --user {u} -n \"$C\" 2>&1", 40))
+                if "Error" in o or "Exception" in o: return self.send_json(500, {"error": "Chưa mở được bản clone: " + o[-160:]})
+                return self.send_json(200, {"ok": True, "msg": f"Đã mở bản clone {i} của {pkg}."})
             memu_cap = None
             if int(port) >= 21500:          # máy MEmu (Windows): mỗi Roblox chạy song song cần ~3GB RAM + 2 nhân riêng
                 ram, cpu = float(p.get("ram") or 0), float(p.get("cpu") or 0)
@@ -1031,7 +1047,7 @@ class H(BaseHTTPRequestHandler):
                     if mc: raise RuntimeError(f"Đã có {done} bản clone. Máy cần KHỞI ĐỘNG LẠI 1 lần để mở thêm bản clone — bấm \"Khởi động lại\" rồi clone lại.")
                     raise RuntimeError(f"Đã có {done} bản clone — máy này chỉ cho tối đa {done} bản. Cần thêm acc thì thuê thêm máy và dùng Nhiều máy + Đồng bộ.")
                 if done < 1: raise RuntimeError("Chưa clone được: " + o[-150:])
-                return f"✅ Đã có {done} bản clone! Mở danh sách ứng dụng → tab Công việc (Work) → các app có biểu tượng cặp tài liệu nhỏ là bản clone."
+                return f"✅ Đã có {done} bản clone! Mở lại Clone tab → bấm ▶ Mở bản 1, 2… để chạy bản clone (hoặc tab Công việc/Work trong danh sách ứng dụng)."
             run_job(jid, work)
             return self.send_json(200, {"job": jid})
 

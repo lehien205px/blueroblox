@@ -331,22 +331,32 @@ def cmd_create(a):
     tot, av = mem()
     if av - (a.ram + 1) < RESERVE:
         print(f"HẾT HÀNG: RAM Windows còn {av:.1f}GB, máy {a.ram:g}GB cần thêm {a.ram + 1:g}GB và chừa {RESERVE:g}GB."); sys.exit(2)
-    print(f"[1/4] Tạo máy Android 9 trên MEmu…", flush=True)
-    with _Lock("memu"):
-        for oi, ox in sorted(vms().items(), reverse=True):   # máy trùng tên còn sót trong MEmu (lần tạo trước bị ngắt) → xoá trước
-            if ox["name"] == a.name:
-                print(f"   (xoá máy sót cùng tên #{oi})", flush=True); memuc("stop", "-i", oi, timeout=60); memuc("remove", "-i", oi, timeout=180)
-        before = set(vms())
-        r = memuc("create", "96", timeout=240)                       # 96 = Android 9 64-bit
-        m = re.search(r"index\D*(\d+)", r.stdout or "")
-        idx = int(m.group(1)) if m else next(iter(sorted(set(vms()) - before)), None)
-        if idx is None: print("LỖI tạo máy:", ((r.stdout or "") + (r.stderr or "")).strip()[-300:]); sys.exit(4)
-        print(f"[2/4] Đã tạo MEmu #{idx} → đặt tên, RAM, CPU, root…", flush=True)
-        memuc("rename", "-i", idx, a.name, timeout=60)
-        dpi = a.dpi or auto_dpi(a.res)
-        configure(idx, a.ram, a.cpu, a.res, dpi)
-        memuc("setconfigex", "-i", idx, "fps", clamp_fps(a.fps), timeout=60)
-        apply_template(idx)
+    sp = take_spare(a.name)
+    if sp is not None:
+        idx = sp
+        print(f"[1/4] ⚡ Dùng máy dựng sẵn (MEmu #{idx}) → đổi tên, RAM, CPU…", flush=True)
+        with _Lock("memu"):
+            dpi = a.dpi or auto_dpi(a.res)
+            configure(idx, a.ram, a.cpu, a.res, dpi)
+            memuc("setconfigex", "-i", idx, "fps", clamp_fps(a.fps), timeout=60)
+            apply_template(idx)
+    else:
+        print(f"[1/4] Tạo máy Android 9 trên MEmu…", flush=True)
+        with _Lock("memu"):
+            for oi, ox in sorted(vms().items(), reverse=True):   # máy trùng tên còn sót trong MEmu (lần tạo trước bị ngắt) → xoá trước
+                if ox["name"] == a.name:
+                    print(f"   (xoá máy sót cùng tên #{oi})", flush=True); memuc("stop", "-i", oi, timeout=60); memuc("remove", "-i", oi, timeout=180)
+            before = set(vms())
+            r = memuc("create", "96", timeout=240)                       # 96 = Android 9 64-bit
+            m = re.search(r"index\D*(\d+)", r.stdout or "")
+            idx = int(m.group(1)) if m else next(iter(sorted(set(vms()) - before)), None)
+            if idx is None: print("LỖI tạo máy:", ((r.stdout or "") + (r.stderr or "")).strip()[-300:]); sys.exit(4)
+            print(f"[2/4] Đã tạo MEmu #{idx} → đặt tên, RAM, CPU, root…", flush=True)
+            memuc("rename", "-i", idx, a.name, timeout=60)
+            dpi = a.dpi or auto_dpi(a.res)
+            configure(idx, a.ram, a.cpu, a.res, dpi)
+            memuc("setconfigex", "-i", idx, "fps", clamp_fps(a.fps), timeout=60)
+            apply_template(idx)
     port = port_of(idx); exp = now() + datetime.timedelta(days=a.days)
     row = {"name": a.name, "idx": idx, "port": port, "ram": a.ram, "cpu": a.cpu, "res": a.res, "fps": clamp_fps(a.fps), "dpi": dpi,
            "android": "9", "kind": "memu", "created": fmt(now()), "expires": exp.isoformat()}
@@ -577,7 +587,7 @@ def _cleanup(v=None, quiet=False, all_=False):
     gone = 0
     for i in sorted(v, reverse=True):          # xoá từ số lớn xuống → số máy còn lại ít bị đổi
         nm = v[i]["name"]
-        if nm == tpl or (nm in mine and not all_): continue
+        if nm == tpl or (nm in mine and not all_) or (nm.startswith("spare_") and not all_): continue
         if quiet and not nm.startswith("cp_"): continue     # tự động: chỉ dọn máy do BlueRoblox tạo (cp_…)
         print(f"XOA_THUA {nm} (MEmu #{i})", flush=True)
         if v[i]["running"]: memuc("stop", "-i", i, timeout=120); time.sleep(3)
@@ -588,6 +598,80 @@ def _cleanup(v=None, quiet=False, all_=False):
 def cmd_cleanup(a):
     if a.all and not a.yes: print("Thêm --yes để xác nhận XOÁ TẤT CẢ (kể cả máy khách)."); sys.exit(1)
     _cleanup(all_=a.all)
+
+# ---------- MÁY DỰNG SẴN: tạo + khởi động + ảnh nền + cài app TRƯỚC → khách mua là có máy sau ~1 phút ----------
+POOL_F = os.path.join(HOME, "redroid", "pool.json")
+POOL_SIZE = int(CONF.get("POOL_SIZE", "1") or 0)
+def _pl():
+    try: return json.load(open(POOL_F, encoding="utf-8"))
+    except Exception: return {"ready": []}
+def _ps(d):
+    os.makedirs(os.path.dirname(POOL_F), exist_ok=True); json.dump(d, open(POOL_F, "w", encoding="utf-8"))
+def take_spare(new_name):
+    """Lấy 1 máy dựng sẵn (đang tắt) → đổi tên thành máy khách. Trả về số máy MEmu, hoặc None nếu không có."""
+    if POOL_SIZE <= 0: return None
+    try:
+        with _Lock("poolstate", wait=20):
+            d = _pl(); v = vms()
+            while d["ready"]:
+                nm = d["ready"].pop(0)
+                i = next((k for k, x in v.items() if x["name"] == nm and not x["running"]), None)
+                if i is None: continue
+                memuc("rename", "-i", i, new_name, timeout=60)
+                for fn in os.listdir(os.path.join(HOME, "redroid")):          # app đã cài sẵn → khỏi cài lại
+                    if fn.startswith(f"pre_{nm}_"):
+                        try: os.replace(os.path.join(HOME, "redroid", fn), os.path.join(HOME, "redroid", fn.replace(f"pre_{nm}_", f"pre_{new_name}_", 1)))
+                        except OSError: pass
+                _ps(d); return i
+            _ps(d)
+    except Exception as e: print("   (không lấy được máy dựng sẵn:", e, ")")
+    return None
+def cmd_pool(a):
+    """Giữ sẵn POOL_SIZE máy dựng sẵn (đang tắt, không tốn RAM — chỉ ~1GB ổ cứng mỗi máy)."""
+    if POOL_SIZE <= 0: return
+    try: lk = _Lock("pool", wait=1); lk.__enter__()
+    except Exception: return                       # đang dựng máy khác
+    try:
+        d = _pl(); v = vms()
+        names = {x["name"] for x in v.values()}
+        d["ready"] = [n for n in d["ready"] if n in names]
+        for i, x in sorted(v.items(), reverse=True):                     # máy dựng dở (bị ngắt giữa chừng) → xoá
+            if x["name"].startswith("spare_") and x["name"] not in d["ready"]:
+                print(f"XOA_DO {x['name']}", flush=True)
+                if x["running"]: memuc("stop", "-i", i, timeout=120); time.sleep(3)
+                memuc("remove", "-i", i, timeout=180)
+        _ps(d)
+        if len(d["ready"]) >= POOL_SIZE: return
+        import shutil
+        if shutil.disk_usage(HOME).free / 2**30 < 20: print("Ổ cứng < 20GB trống — không dựng máy sẵn."); return
+        nm = f"spare_{int(time.time())}"
+        print(f"DUNG_SAN {nm}: tạo + khởi động + cài sẵn…", flush=True)
+        with _Lock("memu"):
+            before = set(vms())
+            r = memuc("create", "96", timeout=240)
+            m = re.search(r"index\D*(\d+)", r.stdout or "")
+            idx = int(m.group(1)) if m else next(iter(sorted(set(vms()) - before)), None)
+            if idx is None: print("LỖI dựng máy sẵn:", ((r.stdout or "") + (r.stderr or "")).strip()[-200:]); return
+            memuc("rename", "-i", idx, nm, timeout=60)
+            configure(idx, 2, 2, "720x1280", auto_dpi("720x1280")); memuc("setconfigex", "-i", idx, "fps", 30, timeout=60); apply_template(idx)
+        port = port_of(idx)
+        if _start_failed(memu_start(idx)): print(f"LỖI {nm}: không bật được"); return
+        ok = False; t0 = time.time()
+        while time.time() - t0 < BOOT_WAIT:
+            adb_connect(port)
+            if booted(port): ok = True; break
+            time.sleep(3)
+        if ok:
+            try: set_wallpaper(nm, port)
+            except Exception: pass
+            tune(nm, port); preinstall(nm, port)
+        adb("disconnect", f"127.0.0.1:{port}", timeout=15)
+        i2 = next((k for k, x in vms().items() if x["name"] == nm), None)
+        if i2 is not None: memuc("stop", "-i", i2, timeout=120)
+        if ok:
+            d = _pl(); d["ready"].append(nm); _ps(d); print(f"SAN_SANG {nm}: máy dựng sẵn đã xong ({len(d['ready'])}/{POOL_SIZE})")
+        else: print(f"LỖI {nm}: Android không lên — sẽ dựng lại lần sau")
+    finally: lk.__exit__()
 
 def cmd_noop(a): print("(bản Windows: không cần lệnh này)")
 def cmd_render(a):
@@ -649,6 +733,7 @@ def main():
     hd = s.add_parser("hide"); hd.add_argument("name", nargs="?", default=""); hd.set_defaults(f=cmd_hide)
     he = s.add_parser("heal"); he.add_argument("--orphans", action="store_true"); he.set_defaults(f=cmd_heal)
     cl = s.add_parser("cleanup"); cl.add_argument("--all", action="store_true"); cl.add_argument("--yes", action="store_true"); cl.set_defaults(f=cmd_cleanup)
+    s.add_parser("pool").set_defaults(f=cmd_pool)
     ba = s.add_parser("bootall"); ba.add_argument("--quiet", action="store_true"); ba.set_defaults(f=cmd_bootall)
     for nm, fn in (("connect-all", cmd_connect_all), ("reap", cmd_reap), ("perms", cmd_perms), ("capacity", cmd_capacity), ("list", cmd_list),
                    ("memfix", cmd_noop), ("boost", cmd_noop), ("gpuinfo", cmd_noop)):

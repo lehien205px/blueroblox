@@ -278,6 +278,19 @@ class App:
                 except Exception as e: self.say("Tổng quan", f"🩺 chống kẹt lỗi: {e}")
                 finally: self._healjob = False
             threading.Thread(target=hj, daemon=True).start()
+        # ~3 phút: giữ sẵn máy dựng trước (khách mua → có máy sau ~1 phút thay vì 4–5 phút)
+        if n % 45 == 30 and on("cloudphoned") and not getattr(self, "_pooljob", False):
+            def pj():
+                self._pooljob = True
+                try:
+                    r = subprocess.run([PY, "phonectl.py", "pool"], cwd=B, capture_output=True, text=True, encoding="utf-8",
+                                       errors="replace", env=ENV, creationflags=NOWIN, timeout=1500).stdout or ""
+                    for ln in r.splitlines():
+                        if ln.startswith(("DUNG_SAN", "SAN_SANG", "LỖI", "XOA_DO")):
+                            self.say("Tổng quan", "⚡ Máy dựng sẵn: " + ln.split(" ", 1)[-1] + f"  ({time.strftime('%H:%M:%S')})")
+                except Exception as e: self.say("Tổng quan", f"⚡ dựng máy sẵn lỗi: {e}")
+                finally: self._pooljob = False
+            threading.Thread(target=pj, daemon=True).start()
         # ~5 phút: ổ đĩa sắp đầy → cảnh báo
         if n % 75 == 40:
             import shutil

@@ -1276,6 +1276,14 @@ img.cb-wh{object-fit:contain;padding:8px 6px;border-radius:16px;background:linea
 .gpacts{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .gpver{display:inline-flex;gap:6px;align-items:center;margin-left:auto}.gpver select{width:auto}
 @media (max-width:600px){.gpver{margin-left:0;width:100%}.gpgrid>div.wide{grid-column:auto}}
+/* hộp Nâng RAM/CPU */
+.dlg.cpup{width:min(520px,100%)}
+.dlg.cpup label{margin-top:2px;font-weight:700;color:var(--fg)}
+.upchips{display:flex;flex-wrap:wrap;gap:8px}
+.upchips button{padding:9px 14px;border-radius:12px;border:0;background:var(--sunk,rgba(0,0,0,.2));color:var(--fg);font-weight:700;box-shadow:0 0 0 1.5px var(--line2)}
+.upchips button.on{background:linear-gradient(180deg,#5c9dff,#2b6ef0);color:#fff;box-shadow:none}
+.dlg.cpup .row2{display:grid;grid-template-columns:1fr 1.4fr;gap:10px}
+.vmi .acts{display:flex!important;flex-wrap:wrap;gap:8px}.vmi .acts .btn{flex:1 1 auto;min-width:max-content}
 
 </style>
 <script>/* chế độ Sáng/Tối: nhớ lựa chọn (br_theme), lần đầu theo máy khách */(function(){var t=null;try{t=localStorage.getItem("br_theme")}catch(e){}if(t!=="light"&&t!=="dark")t=matchMedia&&matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t;})();</script>
@@ -2753,12 +2761,14 @@ const DEF_SITE = {
 };
 const ST = k => (LANG === "en" && SITE[k + "_en"]) ? SITE[k + "_en"] : SITE[k];
 const ERR = {
+  PHONE_NOT_ACTIVE: "Máy phải đang chạy mới nâng cấp được.", FREE_NO_UPGRADE: "Máy miễn phí không nâng cấp được — thuê máy trả phí để nâng.", UPGRADE_PENDING: "Máy đang được nâng cấp, đợi khoảng 30 giây.", BAD_UPGRADE: "Cấu hình nâng cấp không hợp lệ.",
   INSUFFICIENT_BALANCE: "Số dư không đủ.", OUT_OF_STOCK: "Kho không còn đủ số lượng bạn chọn.", LOCKED: "Tài khoản đã bị khoá. Liên hệ hỗ trợ.",
   NOT_LOGGED_IN: "Hãy đăng nhập trước.", MIN_AMOUNT: "Số tiền thấp hơn mức nạp tối thiểu.", TOO_MANY: "Bạn có quá nhiều lệnh nạp đang chờ. Thử lại sau ít phút.",
   BAD_QTY: "Số lượng không hợp lệ.", EMPTY: "Hãy dán thông tin cần giao.", BAD_PLAN: "Gói thời gian này không còn bán. Chọn gói khác.", NO_PRODUCT: "Sản phẩm không còn tồn tại.", NOT_ADMIN: "Bạn không có quyền admin.", SELF: "Không thể tự khoá/xoá tài khoản của mình.",
   WEAK_PASS: "Mật khẩu mới phải ≥ 6 ký tự.", IS_ADMIN: "Không thể xoá tài khoản admin.", "duplicate key": "Tên đăng nhập hoặc email này đã có người dùng."
 };
 const ERR_EN = {
+  PHONE_NOT_ACTIVE: "The phone must be running to upgrade.", FREE_NO_UPGRADE: "Free phones can't be upgraded.", UPGRADE_PENDING: "Upgrade in progress, wait ~30 seconds.", BAD_UPGRADE: "Invalid upgrade.",
   INSUFFICIENT_BALANCE: "Not enough balance.", OUT_OF_STOCK: "Not enough stock for the quantity you chose.", LOCKED: "This account is locked. Contact support.",
   NOT_LOGGED_IN: "Please log in first.", MIN_AMOUNT: "Amount is below the minimum top-up.", TOO_MANY: "You have too many pending top-ups. Try again in a few minutes.",
   BAD_QTY: "Invalid quantity.", BAD_PLAN: "This rental plan is no longer available. Choose another.", NO_PRODUCT: "This product no longer exists.",
@@ -4486,6 +4496,7 @@ function renderCloud() {
         ${lk ? `<a class="btn sm" href="/phone.html?id=${encodeURIComponent(p.id)}" target="_blank" rel="noopener">▶ Điều khiển</a>`
            : `<button class="btn sm" disabled>${locked ? "🔒 Bị khoá" : p.status === "pending" ? "Đang tạo…" : p.status === "expired" ? "Đã tạm dừng" : "Chưa sẵn sàng"}</button>`}
         ${canRenew ? `<button class="btn ghost sm" data-cprenew="${p.id}">🔄 Gia hạn</button>` : ""}
+        ${canRenew && p.status === "active" ? (p.pending_ram || p.pending_cpu ? `<button class="btn ghost sm" disabled>⏳ ${L("Đang nâng cấp…", "Upgrading…")}</button>` : `<button class="btn ghost sm" data-cpup="${p.id}">⬆️ ${L("Nâng RAM/CPU", "Upgrade")}</button>`) : ""}
         ${lk ? `<button class="btn ghost sm" data-cproot="${p.id}" title="${L("Bật root (Magisk) để chạy tool cần root", "Enable root (Magisk) for root tools")}">🔓 ${L("Root máy", "Root")}</button>` : ""}
         ${p.shared ? `<button class="btn ghost sm" data-shleave="${p.share_id}">🚪 ${L("Rời máy", "Leave")}</button>` : `
         ${["active", "pending"].includes(p.status) && !locked ? `<button class="btn ghost sm" data-cpshare="${p.id}">👥 ${L("Chia sẻ", "Share")}</button>` : ""}
@@ -4617,6 +4628,7 @@ document.addEventListener("click", e => {
   }
   const rn = t.closest("[data-cprenew]"), rm = t.closest("[data-cprename]"), cc = t.closest("[data-cpcancel]");
   if (rn) cpRenew(rn.dataset.cprenew); else if (rm) cpRename(rm.dataset.cprename); else if (cc) cpCancel(cc.dataset.cpcancel);
+  const up = t.closest("[data-cpup]"); if (up) cpUpgrade(up.dataset.cpup);
   const sh = t.closest("[data-cpshare]"), lv = t.closest("[data-shleave]"), rv = t.closest("[data-shrevoke]"), cp = t.closest("[data-shcopy]");
   if (sh) cpShareOpen(sh.dataset.cpshare);
   else if (lv && confirm(L("Rời máy này? Bạn sẽ không điều khiển được nữa (chủ máy có thể chia sẻ lại).", "Leave this phone? You will lose access."))) cpShareRevoke(lv.dataset.shleave, true);
@@ -5753,6 +5765,42 @@ $("gpubox") && $("gpubox").addEventListener("click", async e => {
   } catch (er) { msg.textContent = "⚠ " + er.message; toast(er.message, 1); }
   gpuBusy = false; document.querySelectorAll("#gpubox [data-gpu]").forEach(x => x.disabled = false); gpuLoad();
 });
+
+/* ===== Khách tự NÂNG RAM / CPU cho máy đang chạy (SQL v19) — không khởi động lại, giữ dữ liệu ===== */
+async function cpUpgrade(id) {
+  const p = myCloud.find(x => x.id === id); if (!p) return;
+  const pr = await cpLoadPricing();
+  let m = $("cpupdlg");
+  if (!m) { m = document.createElement("div"); m.className = "modal"; m.id = "cpupdlg"; m.hidden = true; document.body.appendChild(m);
+    m.addEventListener("click", e => { if (e.target === m || e.target.closest("[data-upclose]")) m.hidden = true; }); }
+  const maxR = +pr.max_ram || 16, maxC = +pr.max_cpu || 8, R0 = +p.ram, C0 = +p.cpu;
+  const RAMS = [...new Set([2, 3, 4, 6, 8, 10, 12, 16, 24, 32, 48, 64, maxR])].filter(v => v > R0 && v <= maxR).sort((a, b) => a - b);
+  const CPUS = [...new Set([2, 3, 4, 6, 8, 10, 12, 16, 24, 32, maxC])].filter(v => v > C0 && v <= maxC).sort((a, b) => a - b);
+  let nr = R0, nc = C0;
+  const left = Math.max(0, (new Date(p.expires_at).getTime() - Date.now()) / 864e5);
+  const chips = (arr, cur, base, k, suf) => `<button type="button" class="${cur === base ? "on" : ""}" data-up${k}="${base}">${L("Giữ", "Keep")} ${base}${suf}</button>` + arr.map(v => `<button type="button" class="${cur === v ? "on" : ""}" data-up${k}="${v}">${v}${suf}</button>`).join("");
+  const draw = () => {
+    const raw = ((nr - R0) * (+pr.price_ram_gb_day || 0) + (nc - C0) * (+pr.price_cpu_day || 0)) * left;
+    const cost = Math.ceil(Math.round(raw) * (100 - ctvPct()) / 100), bal = +(profile && profile.balance) || 0, same = nr === R0 && nc === C0;
+    m.innerHTML = `<div class="dlg cpup" role="dialog" aria-modal="true"><h3>⬆️ ${L("Nâng cấp máy", "Upgrade phone")}</h3>
+      <div class="hint">📱 <b>${esc(p.name)}</b> · ${L("hiện tại", "now")} <b>${R0}GB RAM · ${C0} ${L("nhân", "cores")}</b> · ${L("còn", "")} ${left >= 1 ? Math.floor(left) + L(" ngày ", "d ") : ""}${Math.round((left % 1) * 24)}${L(" giờ", "h left")}</div>
+      <label>RAM</label><div class="upchips">${RAMS.length ? chips(RAMS, nr, R0, "r", "GB") : `<span class="hint">${L("Đã tối đa", "Already max")}</span>`}</div>
+      <label>CPU</label><div class="upchips">${CPUS.length ? chips(CPUS, nc, C0, "c", L(" nhân", " cores")) : `<span class="hint">${L("Đã tối đa", "Already max")}</span>`}</div>
+      <div class="sum"><span>${L("Trả thêm cho thời gian còn lại", "Pay for the remaining time")}</span><b>${vnd(cost)}</b></div>
+      <div class="hint">${L("Máy không khởi động lại, app và dữ liệu giữ nguyên — tài nguyên mới có trong khoảng 15–30 giây. Các lần gia hạn sau tính theo cấu hình mới.", "No restart, apps and data stay — new resources apply in ~15–30s. Future renewals use the new config.")}${!same && bal < cost ? `<br><b style="color:var(--bad)">${L("Số dư không đủ — cần nạp thêm ", "Not enough balance — top up ")}${vnd(cost - bal)}</b>` : ""}</div>
+      <div class="row2"><button class="btn ghost" type="button" data-upclose>${L("Đóng", "Close")}</button><button class="btn" type="button" id="up-go" ${same ? "disabled" : ""}>${!same && bal < cost ? L("Nạp tiền", "Top up") : L("Nâng cấp ngay", "Upgrade now")}</button></div></div>`;
+    m.querySelectorAll("[data-upr]").forEach(b => b.onclick = () => { nr = +b.dataset.upr; draw(); });
+    m.querySelectorAll("[data-upc]").forEach(b => b.onclick = () => { nc = +b.dataset.upc; draw(); });
+    $("up-go").onclick = async () => {
+      if (bal < cost) { m.hidden = true; try { openTopup(); } catch (e) {} return; }
+      $("up-go").disabled = true;
+      const { error } = await sb.rpc("cloudphone_upgrade", { p_id: id, p_ram: nr, p_cpu: nc });
+      if (error) { $("up-go").disabled = false; toast(/cloudphone_upgrade/.test(error.message || "") ? L("Chưa chạy file SQL cloud-phones-v19.sql.", "Server not updated yet.") : errMsg(error), 1); return; }
+      m.hidden = true; await loadProfile(); renderUser(); toast(L(`Đã nâng lên ${nr}GB · ${nc} nhân — máy nhận tài nguyên mới trong ~30 giây.`, `Upgraded to ${nr}GB · ${nc} cores — applies in ~30s.`)); openCloud();
+    };
+  };
+  draw(); m.hidden = false;
+}
 
 </script>
 </body>

@@ -306,8 +306,8 @@ class App:
                 except Exception as e: self.say("Tổng quan", f"🩺 chống kẹt lỗi: {e}")
                 finally: self._healjob = False
             threading.Thread(target=hj, daemon=True).start()
-        # ~3 phút: giữ sẵn máy dựng trước (khách mua → có máy sau ~1 phút thay vì 4–5 phút)
-        if n % 45 == 30 and on("cloudphoned") and not getattr(self, "_pooljob", False):
+        # ~1 phút: giữ sẵn máy dựng trước (khách mua → có máy sau ~1 phút thay vì 4–5 phút)
+        if n % 15 == 10 and on("cloudphoned") and not getattr(self, "_pooljob", False):
             def pj():
                 self._pooljob = True
                 try:

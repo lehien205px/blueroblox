@@ -603,7 +603,7 @@ def cmd_cleanup(a):
 
 # ---------- MÁY DỰNG SẴN: tạo + khởi động + ảnh nền + cài app TRƯỚC → khách mua là có máy sau ~1 phút ----------
 POOL_F = os.path.join(HOME, "redroid", "pool.json")
-POOL_SIZE = int(CONF.get("POOL_SIZE", "1") or 0)
+POOL_SIZE = int(CONF.get("POOL_SIZE", "2") or 0)          # giữ sẵn 2 máy dựng trước (đổi: POOL_SIZE=N trong cloudphone.conf, 0 = tắt)
 def _pl():
     try: return json.load(open(POOL_F, encoding="utf-8"))
     except Exception: return {"ready": []}

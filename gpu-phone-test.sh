@@ -9,6 +9,7 @@
 #   bash gpu-phone-test.sh check     # xem máy có ĐANG DÙNG GTX 1080 không + CPU/RAM
 #   bash gpu-phone-test.sh report    # báo cáo đủ: GPU · game ARM · root · Play Store · hình · Chrome
 #   bash gpu-phone-test.sh auto      # KIỂM TRA TẤT CẢ bản 9·10·11·12 một lệnh → bảng tổng kết (~40–60 phút)
+#   bash gpu-phone-test.sh viewtest  # thử phát hình như trình duyệt khách (tìm lỗi màn đen)
 #   bash gpu-phone-test.sh root      # root bằng Magisk (giữ Play Store) · unroot = bỏ root
 #   bash gpu-phone-test.sh stop      # tắt máy thử
 #   bash gpu-phone-test.sh remove    # xoá sạch máy thử + SDK
@@ -330,6 +331,48 @@ int main(int argc, char **argv) {
 CPSRC_EOF
   gcc -m32 -static -O2 -s -o "$S/su32" $W/cpsu-su.c && gcc -m32 -static -O2 -s -o "$S/cpsud32" $W/cpsu-daemon.c && ok "Đã có bộ root 32-bit: $S/su32, $S/cpsud32" || { err "Biên dịch lỗi"; exit 1; }
   rm -rf $W ;;
+
+viewtest)
+  # THỬ PHÁT HÌNH như trình duyệt khách (Chrome không giao diện, chạy trong docker): máy GPU vs 1 máy redroid, đủ 4 kiểu player
+  RED=$(docker exec $WS adb devices 2>/dev/null | awk '/^127.0.0.1:55[0-9][0-9]\tdevice/{print $1; exit}')
+  W="$HOME/.cache/viewtest"; mkdir -p "$W"
+  cat > "$W/vt.js" <<'VT_EOF'
+// Kiểm tra trình phát hình ws-scrcpy bằng Chrome không giao diện: máy GPU vs máy redroid, từng kiểu player
+const { chromium } = require('playwright'); const zlib = require('zlib');
+function bright(png) { // giải PNG (RGB/RGBA 8-bit) → độ sáng trung bình vùng giữa
+  let p = 8, w, h, ct, idat = [];
+  while (p < png.length) { const len = png.readUInt32BE(p), t = png.toString('ascii', p + 4, p + 8), d = png.slice(p + 8, p + 8 + len);
+    if (t === 'IHDR') { w = d.readUInt32BE(0); h = d.readUInt32BE(4); ct = d[9]; } else if (t === 'IDAT') idat.push(d); p += 12 + len; }
+  const bpp = ct === 6 ? 4 : 3, raw = zlib.inflateSync(Buffer.concat(idat)), stride = w * bpp, out = Buffer.alloc(h * stride); let prev = Buffer.alloc(stride);
+  for (let y = 0; y < h; y++) { const f = raw[y * (stride + 1)], line = raw.slice(y * (stride + 1) + 1, (y + 1) * (stride + 1)), cur = Buffer.alloc(stride);
+    for (let x = 0; x < stride; x++) { const a = x >= bpp ? cur[x - bpp] : 0, b = prev[x], c = x >= bpp ? prev[x - bpp] : 0; let v = line[x];
+      if (f === 1) v += a; else if (f === 2) v += b; else if (f === 3) v += (a + b) >> 1; else if (f === 4) { const pp = a + b - c, pa = Math.abs(pp - a), pb = Math.abs(pp - b), pc = Math.abs(pp - c); v += pa <= pb && pa <= pc ? a : pb <= pc ? b : c; }
+      cur[x] = v & 255; } cur.copy(out, y * stride); prev = cur; }
+  let s = 0, n = 0; for (let y = Math.floor(h * .2); y < h * .8; y += 7) for (let x = Math.floor(w * .3); x < w * .7; x += 7) { const i = y * stride + x * bpp; s += out[i] + out[i + 1] + out[i + 2]; n++; }
+  return Math.round(s / 3 / Math.max(1, n));
+}
+(async () => {
+  const devs = process.argv.slice(2), players = ['webcodecs', 'broadway', 'tinyh264', 'mse'];
+  const b = await chromium.launch({ args: ['--autoplay-policy=no-user-gesture-required', '--use-gl=swiftshader', '--enable-unsafe-swiftshader'] });
+  for (const u of devs) for (const pl of players) {
+    const p = await b.newPage({ viewport: { width: 900, height: 1000 } }); const logs = [];
+    p.on('console', m => { if (m.type() === 'error' || m.type() === 'warning') logs.push(m.type() + ': ' + m.text().slice(0, 160)); });
+    p.on('pageerror', e => logs.push('pageerror: ' + e.message.slice(0, 160)));
+    const ws = encodeURIComponent(`ws://127.0.0.1:8000/?action=proxy-adb&remote=${encodeURIComponent('tcp:8886')}&udid=${encodeURIComponent(u)}`);
+    try { await p.goto(`http://127.0.0.1:8000/#!action=stream&udid=${encodeURIComponent(u)}&player=${pl}&ws=${ws}`, { timeout: 20000 }); } catch (e) { logs.push('goto: ' + e.message.slice(0, 100)); }
+    await p.waitForTimeout(14000);
+    let br = -1; try { br = bright(await p.screenshot()); } catch (e) {}
+    const info = await p.evaluate(() => { const v = document.querySelector('video'), c = document.querySelector('canvas'); return v ? `video ${v.videoWidth}x${v.videoHeight}` : c ? `canvas ${c.width}x${c.height}` : 'không có khung hình'; }).catch(() => '?');
+    console.log(`${u.padEnd(16)} ${pl.padEnd(10)} sáng=${String(br).padStart(3)}  ${br > 12 ? 'CÓ HÌNH ✓' : 'ĐEN ✗'}  (${info})`);
+    [...new Set(logs)].slice(0, 4).forEach(l => console.log('      ' + l));
+    await p.close();
+  }
+  await b.close();
+})();
+VT_EOF
+  echo "== Thử phát hình (lần đầu tải Chrome ~1GB, vài phút) — máy GPU 127.0.0.1:$((PORT + 1)) và máy redroid ${RED:-không có} =="
+  docker run --rm --network host --ipc=host -v "$W:/w" -w /w mcr.microsoft.com/playwright:v1.47.0-jammy \
+    bash -c "npm init -y >/dev/null 2>&1; npm i --silent playwright@1.47.0 >/dev/null 2>&1; node vt.js 127.0.0.1:$((PORT + 1)) $RED" ;;
 
 rootboot)
   # ROOT SÂU KHÔNG CẦN APP (giống máy redroid): su + cpsud của BlueRoblox gắn vào ramdisk, chạy quyền root ngay khi khởi động.

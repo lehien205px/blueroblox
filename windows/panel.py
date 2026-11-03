@@ -141,6 +141,7 @@ class App:
         btn("📋 Danh sách máy", lambda: self.job("Danh sách máy", [PY, "phonectl.py", "list"]))
         btn("♻ Làm mới máy khách", self.remake)
         btn("⚡ Tối ưu Windows", self.optimize)
+        btn("🖼 Ảnh nền cho máy", lambda: self.job("Đặt ảnh nền BlueRoblox cho các máy đang chạy (máy chưa có)", [PY, "phonectl.py", "wallpaper", "--all"]))
         btn("🙈 Ẩn cửa sổ MEmu", lambda: self.job("Cho cửa sổ MEmu chạy ngầm", [PY, "phonectl.py", "hide"]))
         # nhật ký
         self.nb = ttk.Notebook(r); self.nb.pack(fill="both", expand=True, padx=14, pady=(0, 6))

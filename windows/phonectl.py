@@ -229,6 +229,26 @@ def grant_perms(name):
     except Exception: pass
     tune(name)
 
+WP = os.path.join(HOME, "wallpaper.png")
+def set_wallpaper(name, port, force=False):
+    """Ảnh nền BlueRoblox cho máy (1 lần/máy): chép thẳng vào file ảnh nền của Android (cần root) rồi khởi động lại giao diện ~30 giây."""
+    if CONF.get("WALLPAPER", "1") != "1" or not os.path.isfile(WP): return False
+    s_ = f"127.0.0.1:{port}"
+    if not force and "Y" in (adb("-s", s_, "shell", "[ -f /data/local/tmp/.br_wp ] && echo Y", timeout=15).stdout or ""): return False
+    adb("-s", s_, "push", WP, "/data/local/tmp/br_wp.png", timeout=120)
+    sc = ("D=/data/system/users/0; for f in wallpaper wallpaper_orig wallpaper_lock wallpaper_lock_orig; do "
+          "cp /data/local/tmp/br_wp.png $D/$f; chown system:system $D/$f; chmod 600 $D/$f; done; "
+          "rm -f $D/wallpaper_info.xml; restorecon $D/wallpaper* 2>/dev/null; touch /data/local/tmp/.br_wp; stop; sleep 2; start")
+    adb("-s", s_, "shell", "su -c '" + sc + "'", timeout=60)
+    print(f"   🖼 {name}: đã đặt ảnh nền BlueRoblox", flush=True)
+    time.sleep(8)
+    t0 = time.time()
+    while time.time() - t0 < 180:
+        adb_connect(port)
+        if booted(port): break
+        time.sleep(3)
+    return True
+
 def auto_dpi(res):
     w, h = (int(x) for x in res.split("x")); return max(160, min(640, round(min(w, h) / 2.25)))
 def clamp_fps(v):
@@ -255,6 +275,8 @@ def wait_boot(name, port, apps=True):
         if booted(port): ok = True; break
         time.sleep(3)
     if ok:
+        try: set_wallpaper(name, port)
+        except Exception as e: print("   (ảnh nền lỗi:", e, ")")
         try: hide_window(name)
         except Exception: pass
         tune(name, port); grant_perms(name)
@@ -443,6 +465,12 @@ def cmd_render(a):
     memuc("setconfigex", "-i", IDX(p), "graphics_render_mode", m, timeout=60)
     start_phone(p); ok = wait_boot(a.name, p["port"], apps=False)
     print(f"✅ '{a.name}' → vẽ bằng {a.mode.upper()}" + ("" if ok else " (đang kết nối lại)"))
+def cmd_wallpaper(a):
+    v = vms()
+    for p in load()["phones"]:
+        if (a.all or p["name"] == a.name) and is_running(p["name"], p, v):
+            adb_connect(p["port"]); set_wallpaper(p["name"], p["port"], force=a.force)
+    print("Xong.")
 def cmd_show(a): print(f"Hiện {hide_window(a.name, show=True)} cửa sổ của '{a.name}'.")
 def cmd_hide(a):
     n = 0
@@ -466,6 +494,7 @@ def main():
     pi = s.add_parser("preinstall"); pi.add_argument("name", nargs="?", default=""); pi.add_argument("--all", action="store_true"); pi.add_argument("--force", action="store_true"); pi.set_defaults(f=cmd_preinstall)
     rf = s.add_parser("rootfix"); rf.add_argument("name", nargs="?", default=""); rf.add_argument("--all", action="store_true"); rf.add_argument("--force", action="store_true"); rf.set_defaults(f=cmd_rootfix)
     rd = s.add_parser("render"); rd.add_argument("name"); rd.add_argument("mode", choices=["opengl", "directx"]); rd.set_defaults(f=cmd_render)
+    wp = s.add_parser("wallpaper"); wp.add_argument("name", nargs="?", default=""); wp.add_argument("--all", action="store_true"); wp.add_argument("--force", action="store_true"); wp.set_defaults(f=cmd_wallpaper)
     hd = s.add_parser("hide"); hd.add_argument("name", nargs="?", default=""); hd.set_defaults(f=cmd_hide)
     for nm, fn in (("connect-all", cmd_connect_all), ("reap", cmd_reap), ("perms", cmd_perms), ("capacity", cmd_capacity), ("list", cmd_list),
                    ("memfix", cmd_noop), ("boost", cmd_noop), ("gpuinfo", cmd_noop)):

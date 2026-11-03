@@ -75,7 +75,7 @@ netsh advfirewall firewall add rule name="BlueRoblox chan 8000" dir=in action=bl
 
 Step "6/7 Tai chuong trinh BlueRoblox"
 foreach ($f in "cloudphoned.py", "cpapi.py") { Get "$RAW/$f" "$B\$f" }
-foreach ($f in "phonectl.py", "run.py", "remake.py", "keep.bat", "start-blue.bat", "panel.py") { Get "$RAW/windows/$f" "$B\$f" }
+foreach ($f in "phonectl.py", "run.py", "remake.py", "keep.bat", "start-blue.bat", "panel.py", "wallpaper.png") { Get "$RAW/windows/$f" "$B\$f" }
 if (-not (Test-Path "$B\cloudphone.conf")) {
 @"
 SUPABASE_URL=https://nprftgodswlpzomcttal.supabase.co

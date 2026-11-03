@@ -979,7 +979,11 @@ def cmd_migrate(a):
     # 1) sao lưu từ máy cũ (máy cũ vẫn chạy)
     pkgs = [l.split(":", 1)[1].strip() for l in (ashell(a.name, "pm list packages -3").stdout or "").splitlines() if l.startswith("package:")]
     skip = {"com.topjohnwu.magisk"}
-    pkgs = [x for x in pkgs if x not in skip and PKG_RE.match(x)]
+    # Dịch vụ Google / CH Play: máy GPU đã có sẵn bản gốc → KHÔNG chép đè (chép đè làm "Google Play Store keeps stopping")
+    gsys = ("com.android.vending", "com.google.android.gms", "com.google.android.gsf", "com.google.android.gsf.login",
+            "com.google.android.syncadapters", "com.google.android.ext.services", "com.google.android.webview",
+            "com.android.chrome", "com.google.android.apps.", "org.microg.", "com.google.android.youtube")
+    pkgs = [x for x in pkgs if x not in skip and not x.startswith(gsys) and PKG_RE.match(x)]
     print(f"[1/4] Sao lưu {len(pkgs)} app từ {a.name}…")
     for pk in pkgs:
         d = os.path.join(W, pk); os.makedirs(d)

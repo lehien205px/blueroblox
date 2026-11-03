@@ -69,14 +69,83 @@ public class MainActivity extends Activity {
                 }, bmp -> { shotBusy.remove(id); if (bmp == null) return; lastShot.put(id, bmp);
                     for (ImageView iv : new ImageView[]{shots.get(id), gridShots.get(id)}) {
                         if (iv == null) continue;
-                        iv.setImageBitmap(bmp);
+                        showFrame(iv, bmp);
+                        if (iv == gridShots.get(id) && iv.getParent() instanceof View) {      // ô vừa khít hình: game ngang → ô ngang, không viền đen to
+                            View box = (View) iv.getParent(); int bw = box.getWidth();
+                            if (bw > 0 && bmp.getWidth() > 0) {
+                                int nh = bw * bmp.getHeight() / bmp.getWidth();
+                                android.view.ViewGroup.LayoutParams lp = box.getLayoutParams();
+                                if (lp != null && Math.abs(lp.height - nh) > 4) { lp.height = nh; box.setLayoutParams(lp); }
+                            }
+                        }
                         Object t = iv.getTag(); if (t instanceof View) { ((View) t).setVisibility(View.GONE); iv.setTag(null); }
                     } },
                    msg -> shotBusy.remove(id));
             }
-            h.postDelayed(this, 4000);
+            h.postDelayed(this, gridDlg != null ? 2000 : 4000);
         }
     };
+
+    /** Đổi hình MƯỢT: hình mới hiện dần đè lên hình cũ (không giật/nháy). */
+    private void showFrame(ImageView iv, Bitmap bmp) {
+        android.graphics.drawable.Drawable cur = iv.getDrawable();
+        android.graphics.drawable.Drawable nw = new android.graphics.drawable.BitmapDrawable(getResources(), bmp);
+        if (cur == null) { iv.setImageDrawable(nw); return; }
+        if (cur instanceof android.graphics.drawable.TransitionDrawable) cur = ((android.graphics.drawable.TransitionDrawable) cur).getDrawable(1);
+        android.graphics.drawable.TransitionDrawable td = new android.graphics.drawable.TransitionDrawable(new android.graphics.drawable.Drawable[]{cur, nw});
+        td.setCrossFadeEnabled(true);
+        iv.setImageDrawable(td);
+        td.startTransition(220);
+    }
+
+    // ---------------- XEM LỚN 1 MÁY: hình to, cập nhật nhanh (~2–3 hình/giây) — xem acc chạy mượt, bấm Điều khiển để vào máy ----------------
+    private Dialog bigDlg = null;
+    void openBig(JSONObject p) {
+        final String pid = p.optString("id");
+        LinearLayout root = Ui.col(this, 10);
+        root.setBackgroundColor(Color.BLACK);
+        root.setPadding(Ui.dp(10), Ui.dp(12), Ui.dp(10), Ui.dp(12));
+        LinearLayout top = Ui.row(this, 10);
+        TextView title = Ui.text(this, p.optString("name", "Máy"), 16, Color.WHITE, true);
+        top.addView(title, Ui.weight(1));
+        TextView live = Ui.text(this, "● " + Ui.L("Trực tiếp", "Live"), 12, Ui.OK, true);
+        top.addView(live, Ui.wrap());
+        TextView close = Ui.pill(this, "✕ " + Ui.L("Đóng", "Close"), Ui.SKY);
+        top.addView(close, Ui.wrap());
+        root.addView(top, Ui.fill());
+        final ImageView big = new ImageView(this);
+        big.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        Bitmap old = lastShot.get(pid);
+        if (old != null) big.setImageBitmap(old);
+        root.addView(big, new LinearLayout.LayoutParams(-1, 0, 1f));
+        Button ctl = Ui.button(this, "▶ " + Ui.L("Điều khiển máy này", "Control this phone"), Ui.PRIMARY);
+        root.addView(ctl, Ui.fill());
+        final Dialog d = new Dialog(this, android.R.style.Theme_Black_NoTitleBar_Fullscreen);
+        d.setContentView(root);
+        final boolean[] on = {true}, busy = {false};
+        final Runnable[] tick = new Runnable[1];
+        tick[0] = () -> {
+            if (!on[0] || !resumed) return;
+            if (!busy[0]) {
+                busy[0] = true;
+                final long t0 = System.currentTimeMillis();
+                Api.bg(() -> {
+                    byte[] b = Api.cpBytes(java.net.URLEncoder.encode(pid, "UTF-8") + "/shot?w=540");
+                    return BitmapFactory.decodeByteArray(b, 0, b.length);
+                }, bmp -> {
+                    busy[0] = false;
+                    if (bmp != null && on[0]) { showFrame(big, bmp); lastShot.put(pid, bmp); }
+                    if (on[0]) h.postDelayed(tick[0], Math.max(0, 400 - (System.currentTimeMillis() - t0)));
+                }, m -> { busy[0] = false; if (on[0]) h.postDelayed(tick[0], 1500); });
+            }
+        };
+        close.setOnClickListener(v -> d.dismiss());
+        ctl.setOnClickListener(v -> { d.dismiss(); startActivity(new Intent(this, ControlActivity.class).putExtra("id", pid)); });
+        d.setOnDismissListener(x -> { on[0] = false; h.removeCallbacks(tick[0]); if (bigDlg == d) bigDlg = null; });
+        bigDlg = d;
+        d.show();
+        h.post(tick[0]);
+    }
 
     JSONArray phones = new JSONArray();
     JSONObject prof = new JSONObject(), price = new JSONObject(), status = new JSONObject();
@@ -340,7 +409,7 @@ public class MainActivity extends Activity {
         LinearLayout tt = Ui.col(this, 2);
         tt.addView(Ui.h2(this, Ui.L("Tất cả máy (", "All phones (") + phones.length() + ")"));
         tt.addView(Ui.muted(this, "● " + run + Ui.L(" đang chạy", " running") + (pause > 0 ? " · ⏸ " + pause + Ui.L(" tạm dừng", " paused") : "")
-                + (other > 0 ? " · " + other + Ui.L(" khác", " other") : "") + Ui.L(" · tự cập nhật ~4 giây", " · live ~4s")));
+                + (other > 0 ? " · " + other + Ui.L(" khác", " other") : "") + Ui.L(" · bấm ô: xem lớn · giữ: điều khiển", " · tap: zoom · hold: control")));
         top.addView(tt, Ui.weight(1));
         TextView close = Ui.pill(this, "✕ " + Ui.L("Đóng", "Close"), Ui.SKY);
         top.addView(close, Ui.wrap());
@@ -375,22 +444,24 @@ public class MainActivity extends Activity {
             dlp.setMargins(0, Ui.dp(4), Ui.dp(6), 0);
             box.addView(dot, dlp);
             if (live) {
-                box.setOnClickListener(v -> startActivity(new Intent(this, ControlActivity.class).putExtra("id", pid)));
+                box.setOnClickListener(v -> openBig(p));                 // bấm: xem lớn, hình chạy mượt
+                box.setOnLongClickListener(v -> { startActivity(new Intent(this, ControlActivity.class).putExtra("id", pid)); return true; });   // giữ: vào điều khiển
                 gridShots.put(pid, iv);
             }
-            cell.addView(box, new LinearLayout.LayoutParams(cellW, cellH));
+            cell.addView(box, new LinearLayout.LayoutParams(-1, cellH));
             TextView nm = Ui.text(this, p.optString("name", "Máy"), 12, Ui.FG, true);
             nm.setSingleLine(true); nm.setEllipsize(android.text.TextUtils.TruncateAt.END);
-            cell.addView(nm, new LinearLayout.LayoutParams(cellW, -2));
+            cell.addView(nm, Ui.fill());
             long exp = parseTime(p.optString("expires_at"));
             if (exp > 0) {
                 long remain = exp - System.currentTimeMillis();
                 TextView ex = Ui.text(this, "⏱ " + left(exp), 11, remain < 86400000L ? Ui.WAIT : Ui.MUTED, false);
                 ex.setSingleLine(true);
-                cell.addView(ex, new LinearLayout.LayoutParams(cellW, -2));
+                cell.addView(ex, Ui.fill());
             }
-            row.addView(cell, new LinearLayout.LayoutParams(cellW, -2));
+            row.addView(cell, new LinearLayout.LayoutParams(0, -2, 1f));
         }
+        if (row != null) for (int k = phones.length() % cols; k > 0 && k < cols; k++) row.addView(new View(this), new LinearLayout.LayoutParams(0, 1, 1f));   // ô trống cho hàng cuối thẳng cột
         ScrollView sv = new ScrollView(this);
         sv.addView(grid);
         root.addView(sv, new LinearLayout.LayoutParams(-1, 0, 1f));

@@ -275,6 +275,9 @@ public class ControlActivity extends Activity {
                 {"📦", Ui.L("Cài APK", "Install APK"), (Runnable) this::pickApk},
                 {"🔗", Ui.L("Cài từ link", "From link"), (Runnable) this::fromLink},
                 {"▦", Ui.L("Ứng dụng", "Apps"), (Runnable) this::apps},
+                {"🧬", "Clone tab", (Runnable) this::cloneTab},
+                {"📍", Ui.L("Vị trí GPS", "GPS"), (Runnable) this::gps},
+                {"🔓", Ui.L("Root máy", "Root"), (Runnable) this::root},
                 {"✨", Ui.L("Chất lượng", "Quality"), (Runnable) this::pickQuality},
                 {"⛶", Ui.L("Toàn màn", "Full screen"), (Runnable) () -> setFull(true)},
                 {"📱", Ui.L("Đổi máy", "Switch"), (Runnable) this::switchPhone},
@@ -453,6 +456,102 @@ public class ControlActivity extends Activity {
             }
             Ui.sheet(this, Ui.L("Ứng dụng trên máy", "Apps on phone"), c).show();
         }, m -> Ui.toast(this, m));
+    }
+
+
+    // ---------------- Clone tab: chạy thêm bản Roblox / app khác để đăng nhập acc khác ----------------
+    private void cloneTab() {
+        Dialog[] pd = progress(Ui.L("Đang tải danh sách app…", "Loading apps…"));
+        Api.bg(() -> new JSONObject[]{Api.cp("GET", id + "/apps", null), Api.cp("GET", id + "/clone", null)}, js -> {
+            pd[0].dismiss();
+            JSONArray a = js[0].optJSONArray("apps");
+            JSONObject cnt = js[1].optJSONObject("counts");
+            int mx = js[1].optInt("max", 4);
+            LinearLayout c = Ui.col(this, 10);
+            final Dialog[] d = new Dialog[1];
+            c.addView(Ui.muted(this, Ui.L("Tạo thêm bản của app (VD Roblox) để đăng nhập acc khác, chạy song song bản chính. Bản clone hiện thành biểu tượng \"Clone 1, 2…\" trên màn hình chính của máy, hoặc bấm ▶ ở đây.",
+                    "Make extra copies of an app (e.g. Roblox) for other accounts. Clones show as \"Clone 1, 2…\" icons on the phone's home screen, or tap ▶ here.")));
+            if (a == null || a.length() == 0) c.addView(Ui.muted(this, Ui.L("Chưa có app nào. Cài app (VD Roblox từ CH Play) trước.", "No apps yet. Install one first (e.g. Roblox).")));
+            else for (int i = 0; i < a.length(); i++) {
+                String pkg = a.optString(i);
+                int k = cnt != null ? cnt.optInt(pkg, 0) : 0;
+                LinearLayout card = Ui.card(this);
+                TextView n = Ui.text(this, (k > 0 ? "🧬 " : "") + pkg + (k > 0 ? Ui.L("  ·  " + k + " bản clone", "  ·  " + k + " clone(s)") : ""), 13, Ui.FG, k > 0);
+                n.setSingleLine(true); n.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
+                card.addView(n, Ui.fill());
+                Ui.Wrap w = new Ui.Wrap(this, 6);
+                for (int x = 1; x <= k; x++) {
+                    final int ci = x;
+                    Button op = Ui.button(this, "▶ " + Ui.L("Mở ", "Open ") + ci, Ui.PRIMARY);
+                    op.setMinWidth(0);
+                    op.setOnClickListener(v -> { try { cpPost("clone", new JSONObject().put("pkg", pkg).put("open", ci), Ui.L("Đang mở bản clone ", "Opening clone ") + ci + "…"); if (d[0] != null) d[0].dismiss(); } catch (Exception ignored) { } });
+                    w.addView(op);
+                }
+                Button add = Ui.button(this, k > 0 ? Ui.L("+ Thêm 1 bản", "+ 1 more") : "Clone", Ui.GHOST);
+                add.setMinWidth(0);
+                add.setOnClickListener(v -> {
+                    if (d[0] != null) d[0].dismiss();
+                    Dialog[] p2 = progress(Ui.L("Đang tạo bản clone (~20 giây)…", "Creating clone (~20s)…"));
+                    Api.bg(() -> {
+                        JSONObject j = Api.cp("POST", id + "/clone", new JSONObject().put("pkg", pkg).put("n", Math.min(mx, k + 1)));
+                        return waitJob(j.optString("job"), p2);
+                    }, msg -> { p2[0].dismiss(); Ui.toast(this, msg); }, m -> { p2[0].dismiss(); Ui.toast(this, m); });
+                });
+                w.addView(add);
+                if (k > 0) {
+                    Button rm = Ui.button(this, Ui.L("Bỏ clone", "Remove"), Ui.DANGER);
+                    rm.setMinWidth(0);
+                    rm.setOnClickListener(v -> Ui.confirm(this, Ui.L("Bỏ tất cả bản clone?", "Remove all clones?"),
+                            Ui.L("Acc đăng nhập trong các bản clone sẽ bị xoá.", "Accounts signed in to the clones will be removed."), Ui.L("Bỏ clone", "Remove"), () -> {
+                                try { cpPost("clone", new JSONObject().put("pkg", pkg).put("remove", true), Ui.L("Đã bỏ bản clone.", "Clones removed.")); if (d[0] != null) d[0].dismiss(); } catch (Exception ignored) { }
+                            }));
+                    w.addView(rm);
+                }
+                card.addView(w, Ui.fill());
+                c.addView(card, Ui.fill());
+            }
+            android.widget.ScrollView sv = new android.widget.ScrollView(this);
+            sv.addView(c);
+            d[0] = Ui.sheet(this, "🧬 Clone tab", sv);
+            d[0].show();
+        }, m -> { pd[0].dismiss(); Ui.toast(this, m); });
+    }
+
+    // ---------------- Vị trí GPS giả ----------------
+    private void gps() {
+        String last = getSharedPreferences("cp", MODE_PRIVATE).getString("gps_" + id, "");
+        LinearLayout c = Ui.col(this, 10);
+        c.addView(Ui.muted(this, Ui.L("Nhập toạ độ dạng: vĩ độ, kinh độ (lấy trên Google Maps: giữ tay vào 1 điểm → copy số). VD Hà Nội: 21.0285, 105.8542",
+                "Enter: latitude, longitude (from Google Maps). E.g. 21.0285, 105.8542")));
+        EditText e = Ui.input(this, "21.0285, 105.8542", InputType.TYPE_CLASS_TEXT);
+        e.setText(last);
+        c.addView(e, Ui.fill());
+        LinearLayout r = Ui.row(this, 10);
+        Button off = Ui.button(this, Ui.L("Tắt vị trí giả", "Turn off"), Ui.GHOST);
+        Button ok = Ui.button(this, Ui.L("Đặt vị trí", "Set location"), Ui.PRIMARY);
+        r.addView(off, Ui.weight(1)); r.addView(ok, Ui.weight(1));
+        c.addView(r, Ui.fill());
+        Dialog d = Ui.sheet(this, "📍 " + Ui.L("Vị trí GPS", "GPS location"), c);
+        ok.setOnClickListener(v -> {
+            java.util.regex.Matcher m = java.util.regex.Pattern.compile("(-?\\d+(?:\\.\\d+)?)\\s*[,; ]\\s*(-?\\d+(?:\\.\\d+)?)").matcher(e.getText().toString());
+            if (!m.find()) { Ui.toast(this, Ui.L("Nhập dạng: 21.0285, 105.8542", "Format: 21.0285, 105.8542")); return; }
+            try {
+                getSharedPreferences("cp", MODE_PRIVATE).edit().putString("gps_" + id, m.group(1) + ", " + m.group(2)).apply();
+                cpPost("gps", new JSONObject().put("lat", Double.parseDouble(m.group(1))).put("lng", Double.parseDouble(m.group(2))), Ui.L("Đã đặt vị trí. Mở lại app cần vị trí.", "Location set."));
+            } catch (Exception ignored) { }
+            d.dismiss();
+        });
+        off.setOnClickListener(v -> { try { cpPost("gps", new JSONObject().put("off", true), Ui.L("Đã tắt vị trí giả.", "Mock location off.")); } catch (Exception ignored) { } d.dismiss(); });
+        d.show();
+    }
+
+    // ---------------- Root máy ----------------
+    private void root() {
+        Dialog[] pd = progress(Ui.L("Đang kiểm tra / bật root…", "Checking root…"));
+        Api.bg(() -> {
+            JSONObject j = Api.cp("POST", id + "/root", new JSONObject());
+            return waitJob(j.optString("job"), pd);
+        }, msg -> { pd[0].dismiss(); Ui.toast(this, msg); }, m -> { pd[0].dismiss(); Ui.toast(this, m); });
     }
 
     // ---------------- Cài APK / gửi file từ điện thoại ----------------

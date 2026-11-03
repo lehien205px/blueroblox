@@ -81,8 +81,12 @@ def free_port(port):
             subprocess.run(["taskkill", "/PID", pid, "/T", "/F"], capture_output=True, creationflags=NOWIN)
     return len(pids)
 def adb_pid():
-    out = subprocess.run(["tasklist", "/FI", "IMAGENAME eq adb.exe", "/FO", "CSV", "/NH"], capture_output=True, text=True, creationflags=NOWIN).stdout or ""
-    m = re.search(r'"adb\.exe","(\d+)"', out); return m.group(1) if m else ""
+    """PID của adb SERVER (tiến trình đang nghe cổng 5037) — KHÔNG phải các lệnh adb chạy thoáng qua
+       (bản trước lấy nhầm lệnh adb tạm → tưởng adb khởi động lại → bật lại trình phát hình liên tục → web giật/đứt)."""
+    out = subprocess.run(["netstat", "-ano", "-p", "TCP"], capture_output=True, text=True, creationflags=NOWIN).stdout or ""
+    for ln in out.splitlines():
+        if "LISTENING" in ln and re.search(r"127\.0\.0\.1:5037\s", ln): return ln.split()[-1]
+    return ""
 
 class Svc:
     def __init__(self, name, ui):
@@ -438,10 +442,11 @@ Write-Host '[OK] Khong ngu, khong tat man hinh'
             ws = self.svcs["ws-scrcpy"]
             if ws.alive() and n % 5 == 2:          # adb bị tắt/bật lại → ws-scrcpy mất theo dõi máy → web đen màn → tự bật lại ws-scrcpy
                 ap = adb_pid()
-                if ap and getattr(self, "adb_seen", "") and ap != self.adb_seen:
+                if ap and getattr(self, "adb_seen", "") and ap != self.adb_seen and ap == getattr(self, "_adb_new", ""):
                     self.say("ws-scrcpy", "♻ adb vừa khởi động lại → bật lại trình phát hình"); self.adb_seen = ap
                     threading.Thread(target=lambda: (ws.stop(), time.sleep(2), ws.start()), daemon=True).start()
                 elif ap and not getattr(self, "adb_seen", ""): self.adb_seen = ap
+                self._adb_new = ap
             if n % 150 == 5 and c.get("FAST_BASE") and c.get("CF_DNS_TOKEN"): self.fast_dns(quiet=True)   # ~10 phút: IP nhà mạng đổi → cập nhật
             n += 1; time.sleep(4)
 

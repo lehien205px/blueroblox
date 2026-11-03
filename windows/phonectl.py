@@ -67,15 +67,26 @@ def parse_dt(s):
 def fmt(dt): return dt.strftime("%d/%m/%Y %H:%M")
 def port_of(idx): return 21503 + 10 * int(idx)
 
-class _Lock:            # khoá file: các lệnh memuc không chạy chồng nhau
+def _pid_alive(pid):
+    try:
+        h = ctypes.windll.kernel32.OpenProcess(0x1000, False, int(pid))      # PROCESS_QUERY_LIMITED_INFORMATION
+        if not h: return False
+        code = ctypes.c_ulong(); ctypes.windll.kernel32.GetExitCodeProcess(h, ctypes.byref(code)); ctypes.windll.kernel32.CloseHandle(h)
+        return code.value == 259                                              # STILL_ACTIVE
+    except Exception: return True
+
+class _Lock:            # khoá file: các lệnh memuc không chạy chồng nhau. Khoá của chương trình đã tắt → tự gỡ.
     def __init__(self, name, wait=600): self.p = os.path.join(HOME, "redroid", name + ".lock"); self.wait = wait
     def __enter__(self):
         os.makedirs(os.path.dirname(self.p), exist_ok=True)
         for _ in range(int(self.wait * 4)):
-            try: self.fd = os.open(self.p, os.O_CREAT | os.O_EXCL | os.O_WRONLY); return self
+            try:
+                self.fd = os.open(self.p, os.O_CREAT | os.O_EXCL | os.O_WRONLY); os.write(self.fd, str(os.getpid()).encode()); return self
             except FileExistsError:
                 try:
-                    if time.time() - os.path.getmtime(self.p) > 960: os.remove(self.p)
+                    pid = open(self.p).read().strip()
+                    if (pid.isdigit() and not _pid_alive(pid)) or (not pid and time.time() - os.path.getmtime(self.p) > 30) \
+                            or time.time() - os.path.getmtime(self.p) > 960: os.remove(self.p)
                 except Exception: pass
                 time.sleep(0.25)
         raise RuntimeError("đợi khoá quá lâu")

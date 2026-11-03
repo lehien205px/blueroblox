@@ -101,7 +101,8 @@ Step "7/7 Tu chay khi bat may"
 $lnk = "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\StartUp\BlueRoblox.lnk"
 $ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut($lnk)
 $PYW = "C:\Program Files\Python312\pythonw.exe"
-$s.TargetPath = $PYW; $s.Arguments = "`"$B\panel.py`" --auto"; $s.WorkingDirectory = $B; $s.Save()
+if (Get-ScheduledTask -TaskName "BlueRoblox" -ErrorAction SilentlyContinue) { Remove-Item $lnk -ErrorAction SilentlyContinue }   # đã có tự chạy quyền Admin (nút 🔑)
+else { $s.TargetPath = $PYW; $s.Arguments = "`"$B\panel.py`" --auto"; $s.WorkingDirectory = $B; $s.Save() }
 $d = $ws.CreateShortcut("$env:Public\Desktop\BlueRoblox.lnk"); $d.TargetPath = $PYW; $d.Arguments = "`"$B\panel.py`""; $d.WorkingDirectory = $B; $d.Save()
 Ok "Bat may Windows -> tu chay BlueRoblox"
 Set-Location $B

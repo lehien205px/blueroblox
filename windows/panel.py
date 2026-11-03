@@ -58,10 +58,12 @@ def is_admin():
     try: return bool(ctypes.windll.shell32.IsUserAnAdmin())
     except Exception: return False
 
-def run_admin(ps_cmd, log):
-    """Chạy lệnh PowerShell bằng quyền Administrator (Windows hỏi 1 lần); mọi dòng chữ ghi ra file nhật ký (UTF-8)."""
+def run_admin(ps_cmd, log, secret=False):
+    """Chạy lệnh PowerShell bằng quyền Administrator (Windows hỏi 1 lần); mọi dòng chữ ghi ra file nhật ký (UTF-8).
+       secret=True: file lệnh tự xoá ngay khi PowerShell đã đọc xong (có mật khẩu bên trong)."""
     ps1 = os.path.join(LOGS, "_admin_job.ps1")
     body = ("$ErrorActionPreference = 'Continue'\n"
+            + ("Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue\n" if secret else "") +
             f"$LOG = '{log}'\n"
             "& {\n" + ps_cmd + "\n} *>&1 | ForEach-Object { $s = ($_ | Out-String).TrimEnd(); "
             "[IO.File]::AppendAllText($LOG, $s + [Environment]::NewLine, [Text.Encoding]::UTF8); $s }\n"
@@ -165,6 +167,7 @@ class App:
         btn("🛣 Đường thẳng (ít trễ)", self.fast_setup)
         btn("🖼 Ảnh nền cho máy", lambda: self.job("Đặt ảnh nền BlueRoblox cho các máy đang chạy (máy chưa có)", [PY, "phonectl.py", "wallpaper", "--all"]))
         btn("⏻ Thoát hẳn", self.quit_all, "#3a2030", "#ffb3bb")
+        btn("🔑 Tự đăng nhập + tự chạy", self.autologon, "#2a2350", "#d9ccff")
         btn("🙈 Ẩn cửa sổ MEmu", lambda: self.job("Cho cửa sổ MEmu chạy ngầm", [PY, "phonectl.py", "hide"]))
         # nhật ký
         self.nb = ttk.Notebook(r); self.nb.pack(fill="both", expand=True, padx=14, pady=(0, 6))
@@ -211,6 +214,106 @@ class App:
             self.banner.configure(text=f"⏳ Đang tự khởi động A→Z… ({good}/{len(self.NAMES)} đèn xanh) — {self.boot_step}", bg=WARN, fg="#1a1300")
         else:
             self.banner.configure(text=f"⚠ {good}/{len(self.NAMES)} đèn xanh — lỗi: {', '.join(bad) or 'đang kiểm tra'}", bg=BAD, fg="white")
+
+    # ================= TỰ QUÉT + TỰ SỬA (chạy ngầm, mỗi 4 giây) =================
+    def _fix(self, what): self.say("Tổng quan", f"🩺 Tự sửa: {what}  ({time.strftime('%H:%M:%S')})")
+    def _bad(self, k, cond):
+        """Đếm số lần lỗi liên tiếp của mục k."""
+        f = self.__dict__.setdefault("_fails", {}); f[k] = f.get(k, 0) + 1 if cond else 0; return f[k]
+    def _restart_svc(self, name):
+        sv = self.svcs[name]
+        threading.Thread(target=lambda: (sv.stop(), time.sleep(2), sv.start()), daemon=True).start()
+    def _heal(self, n, c):
+        if self.booting: return
+        on = lambda name: self.svcs[name].want
+        # trình phát hình / cổng bảo vệ không mở cổng ~16 giây → bật lại (tự tắt bản cũ giữ cổng)
+        if on("ws-scrcpy") and self._bad("ws", not port_open(8000)) == 4: self._fix("trình phát hình :8000 không chạy → bật lại"); self._restart_svc("ws-scrcpy")
+        if on("cpapi") and self._bad("api", not port_open(8010)) == 4: self._fix("cổng bảo vệ :8010 không chạy → bật lại"); self._restart_svc("cpapi")
+        if on("cloudphoned") and self._bad("daemon", not self.svcs["cloudphoned"].alive()) == 6: self._fix("nhận đơn bị tắt → bật lại"); self._restart_svc("cloudphoned")
+        if n % 3 == 0 and on("cpapi"):
+            q = subprocess.run(["sc", "query", "cloudflared"], capture_output=True, text=True, creationflags=NOWIN).stdout or ""
+            if "SERVICE_NAME" in q and self._bad("cf", "RUNNING" not in q) == 2:
+                self._fix("đường hầm Cloudflare tắt → bật lại"); subprocess.run(["sc", "start", "cloudflared"], capture_output=True, creationflags=NOWIN)
+            # web 5xx/không vào được 3 lần liền trong khi máy mình vẫn chạy → khởi động lại đường hầm
+            web_bad = self.lights and not self.state.get("web", True)
+            if self._bad("web", web_bad and port_open(8010)) == 3:
+                self._fix("web không vào được → khởi động lại đường hầm Cloudflare")
+                subprocess.run(["sc", "stop", "cloudflared"], capture_output=True, creationflags=NOWIN); time.sleep(3)
+                subprocess.run(["sc", "start", "cloudflared"], capture_output=True, creationflags=NOWIN)
+        # ~2 phút: lệnh MEmu treo quá 4 phút → tắt; máy khách mất kết nối điều khiển → nối lại
+        if n % 30 == 15 and on("cloudphoned"):
+            ps = ("Get-CimInstance Win32_Process -Filter \"name='memuc.exe'\" | Where-Object { $_.CreationDate -lt (Get-Date).AddMinutes(-4) } | "
+                  "ForEach-Object { Stop-Process -Id $_.ProcessId -Force; 'X' }")
+            out = subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True, text=True, creationflags=NOWIN, timeout=60).stdout or ""
+            if "X" in out: self._fix(f"tắt {out.count('X')} lệnh MEmu bị treo")
+            r = subprocess.run([PY, "phonectl.py", "connect-all"], cwd=B, capture_output=True, text=True, encoding="utf-8", errors="replace",
+                               env=ENV, creationflags=NOWIN, timeout=180).stdout or ""
+            k = r.count("nối lại")
+            if k: self._fix(f"nối lại điều khiển {k} máy khách")
+        # ~5 phút: ổ đĩa sắp đầy → cảnh báo
+        if n % 75 == 40:
+            import shutil
+            free = shutil.disk_usage("C:\\").free / 2**30
+            if free < 15: self.say("Tổng quan", f"⚠ Ổ C: chỉ còn {free:.0f} GB trống — máy mới có thể không tạo được. Xoá bớt máy hết hạn / file rác.")
+
+    # ================= TỰ ĐĂNG NHẬP WINDOWS + TỰ CHẠY QUYỀN ADMIN =================
+    def autologon(self):
+        user = os.environ.get("USERNAME", ""); dom = os.environ.get("USERDOMAIN", "") or os.environ.get("COMPUTERNAME", "")
+        if not messagebox.askyesno("Tự đăng nhập + tự chạy",
+                f"Bật 3 thứ để mất điện / khởi động lại là TỰ chạy lại hết, không cần ai bấm:\n\n"
+                f"1) Windows tự đăng nhập tài khoản '{user}' (không dừng ở màn hình mật khẩu)\n"
+                f"2) Bảng BlueRoblox tự mở bằng quyền Admin khi đăng nhập (tự sửa được cả đường hầm Cloudflare)\n"
+                f"3) Máy không tự ngủ / tắt màn hình\n\nWindows sẽ hỏi quyền Admin. Tiếp tục?"): return
+        pw = simpledialog.askstring("Mật khẩu Windows",
+                f"Nhập mật khẩu đăng nhập Windows của tài khoản '{user}'.\n"
+                "(Để trống nếu tài khoản không có mật khẩu.)\n"
+                "Mật khẩu được Windows cất trong vùng bảo mật (LSA) — giống như netplwiz — không ghi ra file, không gửi đi đâu.",
+                show="•", parent=self.root)
+        if pw is None: return
+        esc = lambda x: x.replace("'", "''")
+        log = os.path.join(LOGS, "autologon.log")
+        try: os.remove(log)
+        except OSError: pass
+        lsa = r"""
+Add-Type -TypeDefinition @'
+using System; using System.Runtime.InteropServices;
+public class BRLsa {
+  [StructLayout(LayoutKind.Sequential)] public struct U { public ushort L; public ushort M; public IntPtr B; }
+  [StructLayout(LayoutKind.Sequential)] public struct A { public int Len; public IntPtr R; public IntPtr N; public uint At; public IntPtr S; public IntPtr Q; }
+  [DllImport("advapi32.dll")] static extern uint LsaOpenPolicy(IntPtr s, ref A a, int acc, out IntPtr h);
+  [DllImport("advapi32.dll")] static extern uint LsaStorePrivateData(IntPtr h, ref U k, ref U d);
+  [DllImport("advapi32.dll")] static extern uint LsaClose(IntPtr h);
+  static U Mk(string s) { var u = new U(); u.B = Marshal.StringToHGlobalUni(s); u.L = (ushort)(s.Length * 2); u.M = (ushort)(u.L + 2); return u; }
+  public static uint Store(string key, string val) {
+    var a = new A(); IntPtr h; uint r = LsaOpenPolicy(IntPtr.Zero, ref a, 0x00000020 | 0x00000004, out h); if (r != 0) return r;
+    var k = Mk(key); var d = Mk(val); r = LsaStorePrivateData(h, ref k, ref d); LsaClose(h); return r; }
+}
+'@
+"""
+        cmd = (lsa + rf"""
+$U = '{esc(user)}'; $D = '{esc(dom)}'; $P = '{esc(pw)}'
+$W = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon'
+Set-ItemProperty $W AutoAdminLogon '1'; Set-ItemProperty $W DefaultUserName $U; Set-ItemProperty $W DefaultDomainName $D
+Remove-ItemProperty $W DefaultPassword -ErrorAction SilentlyContinue
+Remove-ItemProperty $W AutoLogonCount -ErrorAction SilentlyContinue
+$r = [BRLsa]::Store('DefaultPassword', $P); $P = $null
+if ($r -eq 0) {{ Write-Host '[OK] Windows tu dang nhap tai khoan' $U }} else {{ Write-Host 'LOI luu mat khau (ma' $r ')' }}
+New-Item 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\PasswordLess\Device' -Force | Out-Null
+Set-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\PasswordLess\Device' DevicePasswordLessBuildVersion 0 -Type DWord
+Write-Host '[OK] Tat bat buoc Windows Hello'
+$a = New-ScheduledTaskAction -Execute 'C:\Program Files\Python312\pythonw.exe' -Argument '"C:\blue\panel.py" --auto' -WorkingDirectory 'C:\blue'
+$t = New-ScheduledTaskTrigger -AtLogOn -User "$D\$U"
+$pr = New-ScheduledTaskPrincipal -UserId "$D\$U" -LogonType Interactive -RunLevel Highest
+$st = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -MultipleInstances IgnoreNew
+Register-ScheduledTask -TaskName 'BlueRoblox' -Action $a -Trigger $t -Principal $pr -Settings $st -Force | Out-Null
+Remove-Item "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\StartUp\BlueRoblox.lnk" -ErrorAction SilentlyContinue
+Write-Host '[OK] Bang BlueRoblox tu mo bang quyen Admin khi dang nhap'
+powercfg /change standby-timeout-ac 0; powercfg /change hibernate-timeout-ac 0; powercfg /change monitor-timeout-ac 0
+Write-Host '[OK] Khong ngu, khong tat man hinh'
+""")
+        pw = None
+        run_admin(cmd, log, secret=True)
+        self.tail(log, "Tự đăng nhập + tự chạy", 180)
 
     # ================= TỰ BẬT A→Z KHI WINDOWS KHỞI ĐỘNG LẠI =================
     boot_step = ""
@@ -284,6 +387,8 @@ class App:
                     L(0, self.light, "web", False, "không vào được")
             L(0, self.adm.configure, {"text": "🛡 Đang chạy quyền Admin" if is_admin() else "Quyền thường (nút ①③ sẽ hỏi quyền Admin)",
                                       "fg": GOOD if is_admin() else MUTED})
+            try: self._heal(n, c)
+            except Exception as e: self.say("Tổng quan", f"🩺 tự quét lỗi: {e}")
             ws = self.svcs["ws-scrcpy"]
             if ws.alive() and n % 5 == 2:          # adb bị tắt/bật lại → ws-scrcpy mất theo dõi máy → web đen màn → tự bật lại ws-scrcpy
                 ap = adb_pid()

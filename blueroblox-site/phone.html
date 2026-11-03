@@ -292,6 +292,52 @@ html[data-theme=light] .dlg,html[data-theme=light] .sheetbg.open,html[data-theme
 html[data-theme=light] .drop div{background:rgba(255,255,255,.9)}
 html[data-theme=light] .veil{background:#0b1a36;color:#e8f1ff}
 html[data-theme=light] .veil b,html[data-theme=light] .veil span{color:#e8f1ff}html[data-theme=light] .veil a{color:#8cc4ff}
+
+/* ===== Thanh trên gọn gàng (Cloud Blue): trái = máy · giữa = thông tin · phải = công cụ ===== */
+html[data-theme] .top{gap:10px;padding:0 12px}
+.top>.home{order:0}.top>.devwrap{order:1}.top>.meta{order:2;flex:1 1 auto}.top>#viewseg{order:3}.top>.langsw{order:4}.top>.right{order:5;margin-left:0}
+html[data-theme] .home{width:34px;height:34px;justify-content:center;border-radius:10px;background:var(--panel);box-shadow:0 0 0 1.5px var(--line2);flex:none}
+html[data-theme] .home span{display:none}
+html[data-theme] .home:hover{background:var(--panel2)}
+html[data-theme] .dev{border-radius:12px;background:var(--panel);border:0;box-shadow:0 0 0 1.5px var(--line2);padding:7px 12px}
+html[data-theme] .seg{border:0;border-radius:12px;background:var(--panel);box-shadow:0 0 0 1.5px var(--line2);padding:2px;gap:2px}
+html[data-theme] .seg button{border-radius:9px;padding:6px 10px}
+html[data-theme] .seg span{font-size:12px}
+/* thông tin máy: 1 dòng, chữ gọn, hạn dùng thành chip màu */
+.meta{gap:8px}
+.meta .spec{font-size:13px}
+#left:not(:empty){display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:999px;font-size:12.5px;font-weight:700;color:var(--warnc,#ffd666);background:color-mix(in srgb,var(--warnc,#ffd666) 12%,transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--warnc,#ffd666) 40%,transparent)}
+#left:not(:empty)::before{content:"⏳"}
+/* số liệu kỹ thuật (độ phân giải, mạng…) → chỉ hiện khi rê chuột vào trạng thái */
+.info{display:none!important}
+.state{max-width:170px;padding:6px 10px;border-radius:999px;background:var(--panel);box-shadow:0 0 0 1.5px var(--line2);cursor:help}
+#statetxt{overflow:hidden;text-overflow:ellipsis}
+/* ngôn ngữ: chỉ cờ + VI/EN */
+html[data-theme] .langsw button{padding:5px 9px;font-size:12.5px;gap:5px}
+.langsw .ln{display:none}.langsw .ls{display:inline!important}
+.adminlink{font-size:12px;opacity:.85}
+/* máy tính: đã có ô "App Android" ở cột công cụ → bỏ nút tải app trên thanh cho đỡ chật */
+@media (min-width:861px){ .top .getapp{display:none!important} }
+@media (max-width:1500px){ .meta .spec{display:none} }
+@media (max-width:1250px){ .adminlink{display:none} }
+@media (max-width:860px){
+  html[data-theme] .top{gap:6px;padding:0 8px}
+  .langsw .ls{display:none!important}
+  html[data-theme] .langsw button{padding:4px 6px}
+  .top>.devwrap{flex:1 1 0;min-width:0}.dev{max-width:100%;width:100%}
+  .top>#viewseg,.top>.langsw,.top>.right{flex:none}
+  .top>.meta{flex:0 1 auto}
+  #left:not(:empty){padding:3px 8px;font-size:11.5px}
+  #left:not(:empty)::before{content:""}
+  .state{padding:6px;max-width:none}.state span{display:none}
+  .getapp .gs{display:none!important}.getapp{padding:7px 9px}
+  html[data-theme] .home{width:32px;height:32px}
+}
+@media (max-width:480px){ .top>.langsw{display:none} #v-sync{display:none!important} }
+@media (max-width:1050px){ #viewseg button span{display:none!important} }
+/* cột công cụ: ô tải app gọn hơn */
+.appcta{padding:10px 12px}
+.appcta span{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 </style>
 <script>(function(){var t=null;try{t=localStorage.getItem("br_theme")}catch(e){}if(t!=="light"&&t!=="dark")t=matchMedia&&matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t;var m=document.querySelector('meta[name=theme-color]');if(m)m.content=t==="light"?"#f3f7fc":"#071226";})();</script>
 </head>
@@ -1574,6 +1620,12 @@ function onKmPick(d) {
   store.set(kmKey(), JSON.stringify(m)); store.set(kmKey() + "_on", "1"); applyTools(main); toast(L("Đã gán. Bấm vào màn hình máy 1 lần rồi dùng phím.", "Mapped. Click the phone screen once, then use the key.")); kmDlg();
 }
 document.addEventListener("click", e => { const d = e.target.closest("[data-kmdel]"); if (!d) return; const m = kmLoad(); delete m[d.dataset.kmdel]; store.set(kmKey(), JSON.stringify(m)); applyTools(main); kmDlg(); });
+</script>
+<script>
+/* số liệu kỹ thuật → hiện khi rê chuột/giữ vào ô trạng thái */
+(function(){var i=document.getElementById("info"),st=document.getElementById("state"),tx=document.getElementById("statetxt");if(!i||!st)return;
+ function u(){var a=(tx&&tx.textContent||"").trim(),b=(i.textContent||"").trim();st.title=a+(b?"\n"+b:"");}
+ new MutationObserver(u).observe(i,{childList:true,characterData:true,subtree:true});if(tx)new MutationObserver(u).observe(tx,{childList:true,characterData:true,subtree:true});u();})();
 </script>
 </body>
 </html>

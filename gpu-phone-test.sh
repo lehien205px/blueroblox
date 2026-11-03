@@ -216,7 +216,10 @@ rootboot)
   # Áp dụng cho mọi máy dùng bản Android này. Dùng magiskboot (trong Magisk chính thức) chạy ngay trong máy thử.
   A() { "$ADB" -s emulator-$PORT "$@"; }
   [ "$(A shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ] || { err "Bật máy thử trước:  bash $0 start"; exit 1; }
-  A shell pm list packages 2>/dev/null | grep -q com.topjohnwu.magisk || { err "Bản này chưa có Magisk — chạy:  bash $0 root"; exit 1; }
+  A shell 'magisk -v' 2>/dev/null | grep -qi magisk || { err "Bản này chưa có Magisk trong file khởi động — chạy:  bash $0 root"; A shell 'magisk -v; ls -la /system/bin/su' 2>&1 | head -3; exit 1; }
+  if ! A shell pm list packages 2>/dev/null | grep -q com.topjohnwu.magisk; then          # app Magisk bị mất khi tạo lại máy → cài lại
+    cp "$HOME/rootAVD/Magisk.zip" /tmp/cp-magisk.apk 2>/dev/null && A install -r /tmp/cp-magisk.apk >/dev/null 2>&1 && ok "Đã cài lại app Magisk"
+  fi
   SYS=$(grep "^image.sysdir.1=" "$ANDROID_AVD_HOME/$AVD.avd/config.ini" | cut -d= -f2 | sed 's|/*$||'); RD="$SDK/$SYS/ramdisk.img"
   [ -f "$RD.magisk" ] || cp "$RD" "$RD.magisk"            # bản đã có Magisk (chưa gắn dịch vụ) — luôn làm lại từ bản này
   AB=$(A shell getprop ro.product.cpu.abi | tr -d '\r'); case "$AB" in x86_64) L=x86_64;; *) L=x86;; esac
@@ -286,7 +289,7 @@ report)
   echo "$GL" | grep -qi "nvidia\|geforce" && ok "GPU:            GTX 1080" || err "GPU:            KHÔNG dùng GTX 1080 ($GL)"
   echo "$ABI" | grep -q arm64 && ok "Game ARM:       chạy được ($ABI)" || err "Game ARM:       KHÔNG ($ABI)"
   if A shell 'su -c id' 2>/dev/null | grep -q "uid=0"; then ok "Root (su):      CÓ"
-  elif A shell pm list packages 2>/dev/null | grep -q com.topjohnwu.magisk; then warn "Root:           Magisk đã cài — chạy:  bash $0 rootgrant  (tự bấm Cho phép)"
+  elif A shell 'magisk -v' 2>/dev/null | grep -qi magisk; then warn "Root:           Magisk có trong máy nhưng chưa cấp quyền — chạy:  bash $0 rootboot"
   elif A root 2>&1 | grep -qi "cannot run as root\|production"; then err "Root:           KHÔNG (bản có Play Store bị khoá root)"
   else sleep 2; A wait-for-device; A shell id 2>/dev/null | grep -q "uid=0" && warn "Root:           chỉ có 'adb root' (chưa có su cho app)" || err "Root:           KHÔNG"; A unroot >/dev/null 2>&1; sleep 2; A wait-for-device; fi
   A shell pm list packages 2>/dev/null | grep -q com.android.vending && ok "Play Store:     CÓ" || err "Play Store:     KHÔNG"

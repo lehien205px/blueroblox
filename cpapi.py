@@ -944,23 +944,40 @@ class H(BaseHTTPRequestHandler):
             shell(port, f"settings put system accelerometer_rotation 0; settings put system user_rotation {d}", 15)
             return self.send_json(200, {"ok": True})
 
-        if act == "shot":          # ảnh màn hình; ?w=270 → ẢNH NHỎ cho "màn hình trực tiếp" trong danh sách máy (JPEG ~15KB, giữ 2 giây cho nhiều người xem)
+        if act == "shot":          # ảnh màn hình; ?w=270 → ẢNH NHỎ (JPEG) cho "màn hình trực tiếp" / "xem tất cả máy"
             try: w = max(0, min(720, int(q.get("w") or 0)))
             except ValueError: w = 0
             key = (int(port), w); c = SHOTS.get(key)
-            if c and time.time() - c[0] < 2: data, ctype = c[1], c[2]
+            ttl = 0.4 if w > 300 else 1.5                          # ảnh to (xem lớn) cập nhật nhanh hơn
+            if c and time.time() - c[0] < ttl: data, ctype = c[1], c[2]
             else:
-                r = adb(port, ["exec-out", "screencap", "-p"], 30)
-                if r.returncode or not r.stdout.startswith(b"\x89PNG"): return self.send_json(500, {"error": "Không chụp được màn hình."})
-                data, ctype = r.stdout, "image/png"
+                data, ctype = None, "image/png"
                 if w:
-                    try:
+                    try:                                            # NHANH: ảnh thô (không nén PNG trong máy ảo) → thu nhỏ + JPEG trên Windows
                         import io
                         from PIL import Image
-                        im = Image.open(io.BytesIO(data)).convert("RGB")
-                        im = im.resize((w, max(1, round(im.height * w / im.width))))
-                        b = io.BytesIO(); im.save(b, "JPEG", quality=62); data, ctype = b.getvalue(), "image/jpeg"
-                    except Exception: pass         # chưa có Pillow → gửi ảnh gốc
+                        r = adb(port, ["exec-out", "screencap"], 20)
+                        raw = r.stdout or b""
+                        if not r.returncode and len(raw) > 16:
+                            W, H = int.from_bytes(raw[0:4], "little"), int.from_bytes(raw[4:8], "little")
+                            n = W * H * 4
+                            if 0 < W <= 4096 and 0 < H <= 4096 and len(raw) >= n + 12:
+                                im = Image.frombuffer("RGBA", (W, H), raw[len(raw) - n:], "raw", "RGBA", 0, 1).convert("RGB")
+                                im = im.resize((w, max(1, round(H * w / W))), Image.BILINEAR)
+                                b = io.BytesIO(); im.save(b, "JPEG", quality=65); data, ctype = b.getvalue(), "image/jpeg"
+                    except Exception: data = None
+                if data is None:
+                    r = adb(port, ["exec-out", "screencap", "-p"], 30)
+                    if r.returncode or not r.stdout.startswith(b"\x89PNG"): return self.send_json(500, {"error": "Không chụp được màn hình."})
+                    data, ctype = r.stdout, "image/png"
+                    if w:
+                        try:
+                            import io
+                            from PIL import Image
+                            im = Image.open(io.BytesIO(data)).convert("RGB")
+                            im = im.resize((w, max(1, round(im.height * w / im.width))))
+                            b = io.BytesIO(); im.save(b, "JPEG", quality=62); data, ctype = b.getvalue(), "image/jpeg"
+                        except Exception: pass
                 SHOTS[key] = (time.time(), data, ctype)
                 if len(SHOTS) > 200: SHOTS.clear()
             self.send_response(200)

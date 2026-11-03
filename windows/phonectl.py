@@ -290,8 +290,12 @@ def clamp_fps(v):
     except Exception: v = 30
     return min(max(v, 10), 120)
 
+MAX_RAM = float(CONF.get("MEMU_MAX_RAM", "16") or 16)     # MEmu KHÔNG khởi động được máy > 16GB (báo "The computer memory is low")
+MAX_CPU = int(float(CONF.get("MEMU_MAX_CPU", "16") or 16))
 def configure(idx, ram, cpu, res, dpi):
     w, h = res.lower().split("x")
+    if float(ram) > MAX_RAM: print(f"   (gói {float(ram):g}GB → MEmu chỉ chạy tối đa {MAX_RAM:g}GB/máy, đặt {MAX_RAM:g}GB)", flush=True)
+    ram = min(float(ram), MAX_RAM); cpu = min(float(cpu), MAX_CPU)
     for k, v in (("memory", int(float(ram) * 1024)), ("cpus", max(1, int(round(float(cpu))))), ("is_customed_resolution", 1),
                  ("resolution_width", w), ("resolution_height", h), ("vbox_dpi", int(dpi or auto_dpi(res))), ("enable_su", 1),
                  ("graphics_render_mode", CONF.get("MEMU_RENDER", "1")),          # 1 = DirectX (nhẹ, ổn định hơn trên Windows)

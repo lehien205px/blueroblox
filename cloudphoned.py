@@ -41,10 +41,35 @@ def mine(row):
     n = row.get("node")
     return n == NODE_ID or (not n and PRIMARY)
 
+WIN = os.name == "nt"                       # máy chủ Windows (MEmu)
+def _f(k, d):
+    try: return float(CFG.get(k, d))
+    except (TypeError, ValueError): return float(d)
+MEMU_MAX_RAM, MEMU_MAX_CPU = _f("MEMU_MAX_RAM", 16), _f("MEMU_MAX_CPU", 16)
+WIN_RESERVE = _f("WIN_RAM_RESERVE", 4)
+def want(row):
+    """RAM/CPU THẬT sẽ cấp cho đơn: Windows/MEmu tối đa 16GB · 16 nhân mỗi máy (gói to hơn vẫn nhận, chạy mức tối đa)."""
+    r, c = float(row.get("ram") or 0), float(row.get("cpu") or 0)
+    return (min(r, MEMU_MAX_RAM), min(c, MEMU_MAX_CPU)) if WIN else (r, c)
+def win_caps(st):
+    """Windows: sức chứa theo RAM TRỐNG THẬT (máy ảo đang chạy đã trừ sẵn) chứ không cộng dồn cấu hình;
+       CPU dùng chung (72 luồng) → chỉ ngừng khi CPU thật đã nóng. Trả (đã cấp RAM, đã cấp CPU, trần RAM, trần CPU)."""
+    a_r = sum(min(float(p.get("ram", 0)), MEMU_MAX_RAM) for p in st); a_c = sum(min(float(p.get("cpu", 0)), MEMU_MAX_CPU) for p in st)
+    t_r, av_r = meminfo(); cpu_t = os.cpu_count() or 1
+    c_r = a_r + max(0.0, av_r - WIN_RESERVE)
+    c_c = a_c + cpu_t * CPU_OVER
+    if (cpu_avg5() or 0) >= CPU_BUSY: c_c = a_c
+    if t_r and 100 * (1 - av_r / t_r) >= RAM_BUSY: c_r = a_r
+    if disk_full(): c_r = a_r
+    return a_r, a_c, c_r, c_c
+
 def local_load():
     """(phần trăm đã cấp, còn RAM, còn CPU) của server này theo ngưỡng LIMIT_PCT."""
     try: st = json.load(open(PHONES_JSON)).get("phones", [])
     except Exception: st = []
+    if WIN:
+        a_r, a_c, c_r, c_c = win_caps(st)
+        return max(a_r / max(c_r, 1), (cpu_avg5() or 0) / 100), c_r - a_r, c_c - a_c
     ram_t = meminfo()[0]; cpu_t = os.cpu_count() or 1
     a_r = sum(float(p.get("ram", 0)) for p in st); a_c = sum(float(p.get("cpu", 0)) for p in st)
     c_r, c_c = ram_t * LIMIT_PCT / 100 * RAM_OVER, cpu_t * CPU_OVER
@@ -77,7 +102,8 @@ def claim(row):
     if n: return n == NODE_ID                       # đã có server nhận rồi
     if not node_enabled(): return False
     load, fr, fc = local_load(); age = age_s(row)
-    if float(row["ram"]) > fr + 0.01 or float(row["cpu"]) > fc + 0.01:
+    wr, wc = want(row)
+    if wr > fr + 0.01 or wc > fc + 0.01:
         if age > 90 and PRIMARY:                    # không server nào nhận nổi sau 90 giây → hoàn tiền
             refund(row, "Máy chủ đã đầy, chưa tạo được máy"); notify("⚠️ <b>Đơn ĐT đám mây bị hoàn tiền</b> vì mọi máy chủ đều đã đầy.")
         return False
@@ -338,6 +364,7 @@ def heartbeat():
     if ram_busy: c_ram = a_ram                          # RAM thật ≥ 85% → báo hết chỗ
     disk_busy = disk_full()
     if disk_busy: c_ram = a_ram                         # ổ cứng ≥ 90% → báo hết chỗ
+    if WIN: a_ram, a_cpu, c_ram, c_cpu = win_caps(st)   # Windows: sức chứa theo RAM trống thật, CPU dùng chung
     metrics = {"cpu_pct": cp_now, "cpu_avg5": avg5, "cpu_over": CPU_OVER, "cpu_busy_pct": CPU_BUSY, "cpu_busy": busy, "ram_over": RAM_OVER, "ram_pct": ram_pct, "ram_busy_pct": RAM_BUSY, "ram_busy": ram_busy, "disk_busy": disk_busy, "disk_busy_pct": DISK_BUSY, "load": [round(x, 2) for x in os.getloadavg()], "cpu_temp": cpu_temp(),
                "ram_used": round(ram_t - ram_avail, 1), "gpus": gpus(), "disk_data": disk(DATA_ROOT), "disk_root": disk("/"),
                "running": running, "uptime_h": up_h, "base": BASE, "primary": PRIMARY}

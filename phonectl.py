@@ -472,6 +472,16 @@ def cmd_preinstall(a):
                 adb_connect(p["port"])
             preinstall(p["name"], p["port"], a.force); grant_perms(p["name"])
 
+PLAY_APK = os.path.expanduser("~/apk-gpu/Phonesky.apk")
+def gpu_play_fix(port):
+    """CH Play gốc của bản Android 11 quá cũ → mở là văng ("Google Play Store keeps stopping").
+    Có ~/apk-gpu/Phonesky.apk (CH Play mới hơn, lấy từ máy GPU Android 12) → cập nhật ngay khi máy vừa bật."""
+    if not os.path.isfile(PLAY_APK): return
+    r = _hadb(port, ["shell", "dumpsys package com.android.vending | grep -m1 codePath"], timeout=60)
+    if "/data/app" in (r.stdout or ""): return           # đã được cập nhật rồi
+    _hadb(port, ["install", "-r", PLAY_APK], timeout=300)
+    _hadb(port, ["shell", "pm clear com.android.vending"], timeout=60)
+
 def wait_boot(name, port, apps=True):
     """Chờ Android khởi động xong rồi mới kết nối (kết nối sớm → màn đen).
     apps=False: không chờ cài app sẵn (chương trình nền cài ngay sau, khách dùng máy được sớm hơn)."""
@@ -482,6 +492,9 @@ def wait_boot(name, port, apps=True):
         if (r.stdout or "").strip() == "1": break
         time.sleep(2)
     tune(name)
+    if gpu:
+        try: gpu_play_fix(port)
+        except Exception: pass
     if not is_gpu(rec(name)):
         try: su_install(name)                      # máy vừa bật lại → bật lại root daemon
         except Exception: pass

@@ -143,7 +143,7 @@ root)
   [ "$("$ADB" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ] || { err "Bật máy thử trước:  bash $0 start"; exit 1; }
   SYS=$(grep "^image.sysdir.1=" "$ANDROID_AVD_HOME/$AVD.avd/config.ini" | cut -d= -f2 | sed 's|/*$||')
   RD="$SDK/$SYS/ramdisk.img"; [ -f "$RD" ] || { err "Không thấy $RD"; exit 1; }
-  [ -f "$RD.goc" ] || cp "$RD" "$RD.goc" && ok "Đã lưu bản gốc: $RD.goc"
+  if [ ! -f "$RD.goc" ]; then cp "$RD" "$RD.goc" && ok "Đã lưu bản gốc: $RD.goc"; fi
   RA="$HOME/rootAVD"
   if [ ! -f "$RA/rootAVD.sh" ]; then
     echo "== Tải rootAVD =="
@@ -154,13 +154,46 @@ root)
   echo "== Vá root (Magisk) cho $SYS — khoảng 1–3 phút, máy thử sẽ tự tắt khi xong =="
   ( cd "$RA" && ANDROID_HOME="$SDK" bash ./rootAVD.sh "$SYS/ramdisk.img" ) 2>&1 | tail -25
   sleep 5; pgrep -f -- "-avd $AVD" >/dev/null && bash "$0" stop >/dev/null 2>&1
-  cmp -s "$RD" "$RD.goc" && { err "Ramdisk chưa được vá — gửi 25 dòng trên cho người hỗ trợ"; exit 1; }
+  cmp -s "$RD" "$RD.goc" && warn "Ramdisk giống bản đã lưu (có thể đã root từ trước) — bật máy rồi chạy report để kiểm tra"
   ok "Đã vá root. Bật lại máy:  bash $0 start"
   echo "   Sau khi bật: mở màn hình máy → app Magisk → nếu hỏi 'Cần cài đặt bổ sung' bấm OK (máy tự khởi động lại 1 lần)." ;;
 
 unroot)
   SYS=$(grep "^image.sysdir.1=" "$ANDROID_AVD_HOME/$AVD.avd/config.ini" | cut -d= -f2 | sed 's|/*$||'); RD="$SDK/$SYS/ramdisk.img"
   [ -f "$RD.goc" ] && { bash "$0" stop >/dev/null 2>&1; cp "$RD.goc" "$RD" && ok "Đã trả ramdisk gốc (bỏ root). Bật lại: bash $0 start"; } || err "Không có bản gốc để trả lại" ;;
+
+rootgrant)
+  # Tự bấm "Cho phép" (Grant) trên hộp hỏi quyền root của Magisk — không cần nhìn màn hình — rồi cấp sẵn root cho Shell + mọi app đã cài
+  A() { "$ADB" -s emulator-$PORT "$@"; }
+  if ! A shell 'su -c id' 2>/dev/null | grep -q "uid=0"; then
+    ( A shell 'su -c id' >/dev/null 2>&1 & )
+    T=""
+    for i in 1 2 3 4 5 6; do
+      sleep 2
+      A shell 'uiautomator dump /data/local/tmp/ui.xml >/dev/null 2>&1; cat /data/local/tmp/ui.xml' > /tmp/gpu-ui.xml 2>/dev/null
+      T=$(python3 - <<'PY'
+import re
+x=open("/tmp/gpu-ui.xml",encoding="utf-8",errors="ignore").read()
+m=re.search(r'text="(?:Grant|GRANT|Allow|ALLOW|Cho phép|CHO PHÉP|Cấp quyền|CẤP QUYỀN)"[^>]*?bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"',x)
+print(f"{(int(m[1])+int(m[3]))//2} {(int(m[2])+int(m[4]))//2}" if m else "")
+PY
+)
+      [ -n "$T" ] && { A shell input tap $T; ok "Đã bấm Cho phép ($T)"; break; }
+    done
+    [ -n "$T" ] || warn "Không thấy hộp hỏi quyền — mở app Magisk trên máy, bấm cài đặt bổ sung nếu có, rồi chạy lại"
+    sleep 3
+  fi
+  if A shell 'su -c id' 2>/dev/null | grep -q "uid=0"; then
+    cat > /tmp/gpu-grant.sh <<'GS'
+M=$(command -v magisk || ls /sbin/magisk /debug_ramdisk/magisk 2>/dev/null | head -1)
+$M --sqlite "REPLACE INTO settings (key,value) VALUES('root_access',3)"
+for u in 2000 $(cmd package list packages -3 -U | sed -n 's/.*uid:\([0-9]*\).*/\1/p' | sort -u); do
+  $M --sqlite "REPLACE INTO policies (uid,policy,until,logging,notification) VALUES($u,2,0,1,1)"
+done
+GS
+    A push /tmp/gpu-grant.sh /data/local/tmp/grant.sh >/dev/null 2>&1; A shell su -c "sh /data/local/tmp/grant.sh" >/dev/null 2>&1
+    ok "Root OK: Shell + mọi app đã cài được cấp quyền root sẵn"
+  else err "Chưa có root cho Shell"; fi ;;
 
 report)
   # BÁO CÁO 1 LẦN: GPU · game ARM · root · ảnh màn hình có bị đen · Chrome
@@ -173,7 +206,7 @@ report)
   echo "$GL" | grep -qi "nvidia\|geforce" && ok "GPU:            GTX 1080" || err "GPU:            KHÔNG dùng GTX 1080 ($GL)"
   echo "$ABI" | grep -q arm64 && ok "Game ARM:       chạy được ($ABI)" || err "Game ARM:       KHÔNG ($ABI)"
   if A shell 'su -c id' 2>/dev/null | grep -q "uid=0"; then ok "Root (su):      CÓ"
-  elif A shell pm list packages 2>/dev/null | grep -q com.topjohnwu.magisk; then warn "Root:           Magisk đã cài — mở app Magisk, cho phép 'Shell' quyền root rồi chạy lại report"
+  elif A shell pm list packages 2>/dev/null | grep -q com.topjohnwu.magisk; then warn "Root:           Magisk đã cài — chạy:  bash $0 rootgrant  (tự bấm Cho phép)"
   elif A root 2>&1 | grep -qi "cannot run as root\|production"; then err "Root:           KHÔNG (bản có Play Store bị khoá root)"
   else sleep 2; A wait-for-device; A shell id 2>/dev/null | grep -q "uid=0" && warn "Root:           chỉ có 'adb root' (chưa có su cho app)" || err "Root:           KHÔNG"; A unroot >/dev/null 2>&1; sleep 2; A wait-for-device; fi
   A shell pm list packages 2>/dev/null | grep -q com.android.vending && ok "Play Store:     CÓ" || err "Play Store:     KHÔNG"

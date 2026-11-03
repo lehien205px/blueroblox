@@ -269,6 +269,30 @@ def run_job(jid, fn):
     threading.Thread(target=go, daemon=True).start()
 
 
+
+# ---------- Biểu tượng "Clone 1/2/3/4" trên màn hình chính máy MEmu (màn hình chính MEmu không có tab Công việc) ----------
+BR_PKG = "shop.blueroblox.app"
+def clone_icons(port):
+    """Cài app BlueRoblox (có sẵn ô mở clone) vào máy, rồi bật đúng số biểu tượng Clone N theo số bản clone đang có."""
+    try:
+        apk = os.path.join(HOME, "blueroblox-cloud.apk")
+        has = "CloneLaunch" in out(shell(port, f"dumpsys package {BR_PKG} | grep -m1 CloneLaunch", 20))
+        if not has:
+            if not os.path.isfile(apk) or time.time() - os.path.getmtime(apk) > 600:
+                urllib.request.urlretrieve("https://blueroblox.shop/download/blueroblox-cloud.apk?t=" + str(int(time.time())), apk + ".part")
+                os.replace(apk + ".part", apk)
+            adb(port, ["install", "-r", apk], timeout=300)
+            shell(port, f"pm disable {BR_PKG}/.LoginActivity >/dev/null 2>&1 || su -c 'pm disable {BR_PKG}/.LoginActivity' >/dev/null 2>&1", 20)
+        LU = "pm list users | sed -n 's/.*UserInfo{\\([0-9]*\\):CloneTab[0-9]*:.*/\\1/p'"
+        n = 0
+        for u in out(shell(port, LU, 20)).split():
+            if "package:" in out(shell(port, f"pm list packages -3 --user {u}", 20)): n += 1
+        cmds = "; ".join(f"pm {'enable' if i <= n else 'disable'} {BR_PKG}/.Clone{i} >/dev/null 2>&1" for i in range(1, 5))
+        shell(port, cmds, 30)
+        return n
+    except Exception as e:
+        log("clone_icons lỗi:", repr(e)); return -1
+
 def safe_name(n):
     n = os.path.basename((n or "").replace("\\", "/")).strip()
     n = re.sub(r"[^\w.\-() \[\]+]", "_", n)[:120].strip(" .")
@@ -986,12 +1010,14 @@ class H(BaseHTTPRequestHandler):
                 for nm, u in rows:
                     for l in out(shell(port, f"pm list packages -3 --user {u}", 30)).splitlines():
                         if l.startswith("package:"): k = l.split(":", 1)[1].strip(); cnt[k] = cnt.get(k, 0) + 1
+                if int(port) >= 21500 and cnt: threading.Thread(target=clone_icons, args=(port,), daemon=True).start()   # máy cũ đã clone → thêm biểu tượng
                 return self.send_json(200, {"profile": rows[0][1] if rows else None, "cloned": sorted(cnt), "counts": cnt, "max": CLONE_MAX})
             b = self.jbody(); pkg = str(b.get("pkg") or "")
             if not PKG.match(pkg): return self.send_json(400, {"error": "Tên ứng dụng không hợp lệ."})
             if b.get("remove"):
                 for l in out(shell(port, LU, 20)).splitlines():
                     if len(l.split()) == 2: shell(port, f"pm uninstall --user {l.split()[1]} {shlex.quote(pkg)}", 60)
+                if int(port) >= 21500: clone_icons(port)
                 return self.send_json(200, {"ok": True, "msg": "Đã bỏ các bản clone."})
             if b.get("open"):                  # MỞ bản clone số i (màn hình chính của máy có thể không có tab Công việc)
                 try: i = max(1, int(b.get("open")))
@@ -1047,6 +1073,8 @@ class H(BaseHTTPRequestHandler):
                     if mc: raise RuntimeError(f"Đã có {done} bản clone. Máy cần KHỞI ĐỘNG LẠI 1 lần để mở thêm bản clone — bấm \"Khởi động lại\" rồi clone lại.")
                     raise RuntimeError(f"Đã có {done} bản clone — máy này chỉ cho tối đa {done} bản. Cần thêm acc thì thuê thêm máy và dùng Nhiều máy + Đồng bộ.")
                 if done < 1: raise RuntimeError("Chưa clone được: " + o[-150:])
+                if int(port) >= 21500 and clone_icons(port) > 0:
+                    return f"✅ Đã có {done} bản clone! Trên màn hình chính máy có biểu tượng cá voi \"Clone 1\", \"Clone 2\"… — bấm vào là mở bản clone."
                 return f"✅ Đã có {done} bản clone! Mở lại Clone tab → bấm ▶ Mở bản 1, 2… để chạy bản clone (hoặc tab Công việc/Work trong danh sách ứng dụng)."
             run_job(jid, work)
             return self.send_json(200, {"job": jid})

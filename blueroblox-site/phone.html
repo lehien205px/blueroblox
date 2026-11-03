@@ -1271,7 +1271,7 @@ const ACT = {
       $("clonelist").innerHTML = apps.length ? apps.map(p => { const k = cnt[p] || 0;
         return `<div class="app"><span title="${esc(p)}">${k ? "🧬 " : ""}${esc(p)}${k ? ` <small style="color:var(--ok)">✓ ${k} ${L("bản clone", k > 1 ? "clones" : "clone")}</small>` : ""}</span>
           <input class="in clonen" type="number" min="1" max="${mx}" inputmode="numeric" placeholder="${k ? k + 1 : 1}" title="${L("Số bản clone (để trống = 1)", "Number of clones (empty = 1)")}" data-clonen="${esc(p)}" style="width:62px;padding:6px 8px;text-align:center">
-          <button class="btn sm" data-clone="${esc(p)}">${k ? L("Thêm", "More") : "Clone"}</button>${k ? `<button class="btn sm red" data-unclone="${esc(p)}">${L("Bỏ clone", "Remove")}</button>` : ""}</div>`; }).join("")
+          ${Array.from({ length: k }, (_, i) => `<button class="btn sm" data-cloneopen="${esc(p)}" data-ci="${i + 1}" title="${L("Mở bản clone", "Open clone")} ${i + 1}">▶ ${k > 1 ? L("Mở ", "Open ") + (i + 1) : L("Mở clone", "Open clone")}</button>`).join("")}<button class="btn sm" data-clone="${esc(p)}">${k ? L("Thêm", "More") : "Clone"}</button>${k ? `<button class="btn sm red" data-unclone="${esc(p)}">${L("Bỏ clone", "Remove")}</button>` : ""}</div>`; }).join("")
         : L("<p>Chưa có app nào. Cài app (VD Roblox từ CH Play) trước, rồi quay lại đây để clone.</p>", "<p>No apps yet. Install an app first (e.g. Roblox from Play Store), then come back to clone it.</p>");
     } catch (e) { $("clonelist").innerHTML = `<p style="color:var(--bad)">${esc(e.message)}</p>`; }
   },
@@ -1354,6 +1354,8 @@ const ACT = {
   },
 };
 document.addEventListener("click", async e => {
+  const co = e.target.closest("[data-cloneopen]");
+  if (co) { co.disabled = true; try { const r = await api(cur.id + "/clone", { method: "POST", json: { pkg: co.dataset.cloneopen, open: +co.dataset.ci } }); toast(srv(r.msg)); } catch (er) { toast(er.message, 1); } co.disabled = false; return; }
   const cl = e.target.closest("[data-clone]"), ucl = e.target.closest("[data-unclone]");
   if (cl) {
     const inp = [...document.querySelectorAll("[data-clonen]")].find(x => x.dataset.clonen === cl.dataset.clone);

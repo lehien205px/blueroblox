@@ -653,7 +653,12 @@ def take_spare(new_name):
                 nm = d["ready"].pop(0)
                 i = next((k for k, x in v.items() if x["name"] == nm and not x["running"]), None)
                 if i is None: continue
-                memuc("rename", "-i", i, new_name, timeout=60)
+                for _ in range(3):                                           # đổi tên PHẢI thành công (tìm máy theo tên)
+                    memuc("rename", "-i", i, new_name, timeout=60)
+                    if any(x["name"] == new_name for x in vms().values()): break
+                    time.sleep(2)
+                else:
+                    print("   (không đổi tên được máy dựng sẵn — tạo máy mới)", flush=True); continue
                 for fn in os.listdir(os.path.join(HOME, "redroid")):          # app đã cài sẵn → khỏi cài lại
                     if fn.startswith(f"pre_{nm}_"):
                         try: os.replace(os.path.join(HOME, "redroid", fn), os.path.join(HOME, "redroid", fn.replace(f"pre_{nm}_", f"pre_{new_name}_", 1)))

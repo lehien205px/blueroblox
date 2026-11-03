@@ -36,7 +36,7 @@ def memu_names():
     sys.exit("Không thấy memuc.exe")
 
 def age_min(r):
-    t = r.get("updated_at") or r.get("created_at")
+    t = r.get("created_at") or r.get("updated_at")          # updated_at có lúc bị ghi giờ VN không kèm múi giờ → lệch 7 tiếng
     try: return (datetime.datetime.now(datetime.timezone.utc) - datetime.datetime.fromisoformat(t.replace("Z", "+00:00"))).total_seconds() / 60
     except Exception: return 999
 

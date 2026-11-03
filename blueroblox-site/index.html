@@ -536,6 +536,14 @@ h1 em::after{background:linear-gradient(90deg,rgba(143,208,255,0),#8fd0ff 15%,#f
 .vpill.exp{color:var(--bad);border-color:rgba(255,107,129,.5);background:rgba(255,107,129,.08)}
 .vpill.off{color:var(--muted);border-color:var(--line)}
 .vmi .acts{display:flex;gap:8px;flex-wrap:wrap}
+.vmi .live{display:flex;gap:12px;align-items:flex-start}
+.vmshot{position:relative;flex:none;width:96px;aspect-ratio:9/16;border-radius:10px;overflow:hidden;border:1px solid var(--line);background:#02040c;padding:0;cursor:pointer}
+.vmshot img{width:100%;height:100%;object-fit:contain;display:block;opacity:0;transition:opacity .25s}
+.vmshot img.on{opacity:1}
+.vmshot .lv{position:absolute;left:4px;bottom:4px;font-size:10.5px;font-weight:700;color:#fff;background:rgba(0,0,0,.55);border-radius:6px;padding:1px 5px}
+.vmshot .lv b{color:#ff5d6c}
+.vmshot .wait{position:absolute;inset:0;display:grid;place-items:center;font-size:11px;color:var(--muted);text-align:center;padding:4px}
+.vmi .live .info{flex:1;min-width:0;display:grid;gap:8px;align-content:start}
 
 
 /* ===== quản lý nội bộ ===== */
@@ -4472,7 +4480,7 @@ async function openCloud() {
   const [{ data }, , sh] = await Promise.all([sb.from("cloud_phones").select("*").eq("user_id", profile.id).order("created_at", { ascending: false }), cpLoadPricing(),
     sb.rpc("cp_shared_with_me").then(r => r, () => ({}))]);
   myCloud = (data || []).filter(p => p.status !== "cancelled").concat(Array.isArray(sh && sh.data) ? sh.data : []);
-  renderCloud();
+  renderCloud(); setTimeout(cpShotTick, 50);
   clearTimeout(cpPollT);
   if (myCloud.some(p => ["pending", "cancelling", "expired"].includes(p.status))) cpPollT = setTimeout(() => { if (!$("cpdlg").hidden) openCloud(); }, 6000);
 }
@@ -4485,12 +4493,14 @@ function renderCloud() {
     const locked = cpLocked(p);
     const lk = p.status === "active" && p.stream_url && !locked ? cpLinks(p) : null;
     const canRenew = !p.shared && !p.is_free && !locked && (p.status === "active" || (p.status === "expired" && g > 0));
-    return `<div class="vmi"><div class="top"><div class="nm">📱 ${esc(p.name)}<small>${p.is_free ? "🎁 " + L("Miễn phí", "Free") + " · " : ""}Android ${esc(p.android || "11")} · ${p.ram}GB · ${p.cpu} nhân · ${esc(p.res || "")} · ${p.fps || 30} FPS</small></div>${cpPill(p)}</div>
+    const shot = lk ? `<button class="vmshot" type="button" data-shotid="${esc(p.id)}" data-shothost="${esc(cpHost(p))}" title="${L("Màn hình trực tiếp — bấm để điều khiển", "Live screen — tap to control")}">${CP_SHOT[p.id] ? `<img alt="" class="on" src="${CP_SHOT[p.id]}">` : `<img alt=""><span class="wait">${L("Đang lấy hình…", "Loading…")}</span>`}<span class="lv"><b>●</b> ${L("Trực tiếp", "Live")}</span></button>` : "";
+    return `<div class="vmi">${shot ? `<div class="live">${shot}<div class="info">` : ""}<div class="top"><div class="nm">📱 ${esc(p.name)}<small>${p.is_free ? "🎁 " + L("Miễn phí", "Free") + " · " : ""}Android ${esc(p.android || "11")} · ${p.ram}GB · ${p.cpu} nhân · ${esc(p.res || "")} · ${p.fps || 30} FPS</small></div>${cpPill(p)}</div>
       ${exp ? `<div class="exp">${L("Hết hạn", "Expires")}: ${exp.toLocaleString(LANG === "en" ? "en-GB" : "vi-VN")}${left ? " · " + left : ""}</div>` : ""}
       ${p.status === "expired" ? `<div class="exp" style="color:var(--bad)">${g > 0 ? `Máy đã tạm dừng. Gia hạn trong <b>${g} phút</b> nữa để giữ dữ liệu, quá hạn máy sẽ bị xoá.` : "Đã quá 30 phút — máy đang bị xoá."}</div>` : ""}
       ${p.status === "pending" ? `<div class="exp">Máy đang khởi động (khoảng 2–3 phút), trang tự cập nhật.</div>` : ""}
       ${locked ? `<div class="exp" style="color:var(--bad)">🔒 Máy bị khoá${p.locked_until ? " đến " + new Date(p.locked_until).toLocaleString("vi-VN") : " vĩnh viễn"}${p.lock_reason ? ": " + esc(p.lock_reason) : ""}. Liên hệ hỗ trợ nếu cần.</div>` : ""}
       ${p.status === "error" && p.error ? `<div class="exp" style="color:var(--bad)">${esc(p.error)}</div>` : ""}
+      ${shot ? `</div></div>` : ""}
       ${p.shared ? `<div class="shby">👥 ${L("Được chia sẻ bởi", "Shared by")} <b>${esc(p.owner_name || "?")}</b> · ${p.share_expires ? L("đến ", "until ") + new Date(p.share_expires).toLocaleString(LANG === "en" ? "en-GB" : "vi-VN") : L("theo hạn máy", "until the phone expires")}</div>` : ""}
       <div class="acts">
         ${lk ? `<a class="btn sm" href="/phone.html?id=${encodeURIComponent(p.id)}" target="_blank" rel="noopener">▶ Điều khiển</a>`
@@ -4505,6 +4515,32 @@ function renderCloud() {
       </div></div>`;
   }).join("");
 }
+
+/* ---- MÀN HÌNH TRỰC TIẾP: ảnh nhỏ cập nhật mỗi ~4 giây trong danh sách máy (xem acc có đang chạy không, khỏi mở điều khiển) ---- */
+const cpShotBusy = new Set(), CP_SHOT = {};
+async function cpShotOne(el) {
+  const id = el.dataset.shotid; if (cpShotBusy.has(id)) return;
+  const tk = session && session.access_token; if (!tk) return;
+  cpShotBusy.add(id);
+  try {
+    const r = await fetch(el.dataset.shothost + "/cpapi/" + encodeURIComponent(id) + "/shot?w=270", { headers: { Authorization: "Bearer " + tk }, cache: "no-store" });
+    const w = el.querySelector(".wait");
+    if (!r.ok) { if (w) w.textContent = r.status === 409 ? L("Máy chưa chạy", "Not running") : L("Chưa lấy được hình", "No image yet"); return; }
+    const url = URL.createObjectURL(await r.blob()), img = el.querySelector("img"), old = CP_SHOT[id];
+    img.onload = () => { img.classList.add("on"); if (w) w.remove(); if (old && old !== url) URL.revokeObjectURL(old); };
+    CP_SHOT[id] = url; img.src = url;
+  } catch (e) {} finally { cpShotBusy.delete(id); }
+}
+function cpShotTick() {
+  if ($("cpdlg").hidden || document.hidden) return;
+  document.querySelectorAll("#cp-list .vmshot").forEach(cpShotOne);
+}
+setInterval(cpShotTick, 4000);
+document.addEventListener("click", e => {
+  const b = e.target.closest(".vmshot"); if (!b) return;
+  window.open("/phone.html?id=" + encodeURIComponent(b.dataset.shotid), "_blank", "noopener");
+});
+document.addEventListener("visibilitychange", cpShotTick);
 
 /* ---- Form thuê máy mới ---- */
 function cpChips(id, arr, key, suf) {

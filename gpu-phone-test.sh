@@ -8,6 +8,7 @@
 #   bash gpu-phone-test.sh start     # bật máy thử (4 nhân, 4GB, 720x1280)
 #   bash gpu-phone-test.sh check     # xem máy có ĐANG DÙNG GTX 1080 không + CPU/RAM
 #   bash gpu-phone-test.sh report    # báo cáo đủ: GPU · game ARM · root · Play Store · hình · Chrome
+#   bash gpu-phone-test.sh auto      # KIỂM TRA TẤT CẢ bản 9·10·11·12 một lệnh → bảng tổng kết (~40–60 phút)
 #   bash gpu-phone-test.sh root      # root bằng Magisk (giữ Play Store) · unroot = bỏ root
 #   bash gpu-phone-test.sh stop      # tắt máy thử
 #   bash gpu-phone-test.sh remove    # xoá sạch máy thử + SDK
@@ -209,6 +210,24 @@ GS
     A shell input keyevent 3
     ok "Root OK: Shell + mọi app đã cài được cấp quyền root sẵn"
   else err "Chưa có root cho Shell"; fi ;;
+auto)
+  # KIỂM TRA TẤT CẢ BẢN 1 LỆNH: với từng bản Android → tải, bật, root (Magisk), cấp root, báo cáo → bảng tổng kết
+  VERS="${VERS:-11 12 10 9}"; SUM="$HOME/gpu-auto-ketqua.txt"; : > "$SUM"
+  declare -A IM=([9]="system-images;android-28;google_apis_playstore;x86" [10]="system-images;android-29;google_apis_playstore;x86" \
+                 [11]="system-images;android-30;google_apis_playstore;x86_64" [12]="system-images;android-31;google_apis_playstore;x86_64")
+  for v in $VERS; do
+    echo; echo "############ ANDROID $v ############"
+    bash "$0" stop >/dev/null 2>&1
+    GPU_IMG="${IM[$v]}" bash "$0" image || GPU_IMG="${IM[$v]/;x86/;x86_64}" bash "$0" image || { echo "Android $v: TẢI LỖI" >> "$SUM"; continue; }
+    WIPE=1 bash "$0" start >/dev/null 2>&1 || { echo "Android $v: KHÔNG BẬT ĐƯỢC" >> "$SUM"; continue; }
+    bash "$0" root </dev/null 2>&1 | tail -3
+    bash "$0" start >/dev/null 2>&1; sleep 20
+    bash "$0" rootgrant 2>&1 | tail -2
+    R=$(bash "$0" report 2>&1); echo "$R"
+    { echo "== Android $v =="; echo "$R" | grep -E "GPU:|Game ARM:|Root|Play Store:|Ảnh màn hình:|Nén video|Kết nối phát hình|Chrome:" | sed 's/\x1b\[[0-9;]*m//g'; } >> "$SUM"
+  done
+  echo; echo "================ TỔNG KẾT (lưu ở $SUM) ================"; cat "$SUM" ;;
+
 report)
   # BÁO CÁO 1 LẦN: GPU · game ARM · root · ảnh màn hình có bị đen · Chrome
   A() { "$ADB" -s emulator-$PORT "$@"; }
@@ -228,6 +247,26 @@ report)
   [ "${BR:-0}" -gt 8 ] && ok "Ảnh màn hình:   có hình (độ sáng $BR)" || err "Ảnh màn hình:   ĐEN (độ sáng ${BR:-0}) → đây là lý do web bị đen"
   A shell 'screenrecord --time-limit 2 /data/local/tmp/t.mp4 >/dev/null 2>&1; stat -c %s /data/local/tmp/t.mp4 2>/dev/null; rm -f /data/local/tmp/t.mp4' | tr -d '\r' | { read SZ; [ "${SZ:-0}" -gt 2000 ] && ok "Nén video H264: được (${SZ} byte/2 giây)" || err "Nén video H264: LỖI (${SZ:-0} byte)"; }
   A shell 'am start -W -a android.intent.action.VIEW -d https://www.google.com com.android.chrome >/dev/null 2>&1; sleep 12; pidof com.android.chrome' | tr -d '\r' | grep -q . && ok "Chrome:         chạy được" || err "Chrome:         không chạy"
+  SB=$(python3 - "$((PORT + 1))" <<'PY'
+import socket,base64,os,time,sys
+p=sys.argv[1]
+try:
+  s=socket.create_connection(("127.0.0.1",8000),5); k=base64.b64encode(os.urandom(16)).decode()
+  q=f"/?action=proxy-adb&remote=tcp%3A8886&udid=127.0.0.1%3A{p}"
+  s.send(f"GET {q} HTTP/1.1\r\nHost: 127.0.0.1\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: {k}\r\nSec-WebSocket-Version: 13\r\n\r\n".encode())
+  s.settimeout(1); n=0; t=time.time(); h=b""
+  while time.time()-t<6:
+    try: d=s.recv(65536)
+    except socket.timeout: continue
+    if not d: break
+    n+=len(d); h+=d[:200] if len(h)<200 else b""
+  print(n if b" 101 " in h.split(b"\r\n")[0] else -1)
+except Exception as e: print(-2)
+PY
+)
+  if [ "${SB:--2}" -gt 300 ]; then ok "Kết nối phát hình: được (${SB} byte/6 giây) → nếu web vẫn đen là do kiểu phát (player)"
+  elif [ "${SB:--2}" -ge 0 ]; then err "Kết nối phát hình: nối được nhưng không có dữ liệu (${SB} byte)"
+  else err "Kết nối phát hình: KHÔNG nối được (${SB})"; fi
   echo "Cửa sổ:         $(pgrep -af -- '-avd gputest' | grep -q -- '-no-window' && echo 'ẩn (-no-window)' || echo 'hiện trên màn hình ảo :9')"
   echo "=================================================" ;;
 

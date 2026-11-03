@@ -163,27 +163,41 @@ unroot)
   [ -f "$RD.goc" ] && { bash "$0" stop >/dev/null 2>&1; cp "$RD.goc" "$RD" && ok "Đã trả ramdisk gốc (bỏ root). Bật lại: bash $0 start"; } || err "Không có bản gốc để trả lại" ;;
 
 rootgrant)
-  # Tự bấm "Cho phép" (Grant) trên hộp hỏi quyền root của Magisk — không cần nhìn màn hình — rồi cấp sẵn root cho Shell + mọi app đã cài
+  # Cấp root cho Shell + app KHÔNG cần nhìn màn hình: tự đọc giao diện máy (uiautomator) và tự bấm
   A() { "$ADB" -s emulator-$PORT "$@"; }
-  if ! A shell 'su -c id' 2>/dev/null | grep -q "uid=0"; then
-    ( A shell 'su -c id' >/dev/null 2>&1 & )
-    T=""
-    for i in 1 2 3 4 5 6; do
-      sleep 2
-      A shell 'uiautomator dump /data/local/tmp/ui.xml >/dev/null 2>&1; cat /data/local/tmp/ui.xml' > /tmp/gpu-ui.xml 2>/dev/null
-      T=$(python3 - <<'PY'
-import re
-x=open("/tmp/gpu-ui.xml",encoding="utf-8",errors="ignore").read()
-m=re.search(r'text="(?:Grant|GRANT|Allow|ALLOW|Cho phép|CHO PHÉP|Cấp quyền|CẤP QUYỀN)"[^>]*?bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"',x)
-print(f"{(int(m[1])+int(m[3]))//2} {(int(m[2])+int(m[4]))//2}" if m else "")
+  ui() { A shell 'uiautomator dump /data/local/tmp/ui.xml >/dev/null 2>&1; cat /data/local/tmp/ui.xml' > /tmp/gpu-ui.xml 2>/dev/null; }
+  # find <regex>  → in toạ độ giữa phần tử có chữ khớp ;  toggle <regex> → toạ độ công tắc cùng hàng (nếu đang TẮT)
+  pick() { python3 - "$1" "$2" <<'PY'
+import re,sys
+mode,pat=sys.argv[1],sys.argv[2]; x=open("/tmp/gpu-ui.xml",encoding="utf-8",errors="ignore").read()
+nodes=[(dict(re.findall(r'([\w-]+)="([^"]*)"',n))) for n in re.findall(r'<node [^>]*>',x)]
+def box(d): a=list(map(int,re.findall(r'\d+',d.get("bounds","")))); return a if len(a)==4 else None
+hit=[d for d in nodes if re.fullmatch(pat,d.get("text",""),re.I) and box(d)]
+if not hit: sys.exit(0)
+b=box(hit[0])
+if mode=="find": print((b[0]+b[2])//2,(b[1]+b[3])//2); sys.exit(0)
+cy=(b[1]+b[3])//2
+sw=[d for d in nodes if d.get("checkable")=="true" and box(d) and box(d)[1]-60<=cy<=box(d)[3]+60]
+if sw:
+    s=box(sw[0]); print((s[0]+s[2])//2,(s[1]+s[3])//2, sw[0].get("checked"))
 PY
-)
-      [ -n "$T" ] && { A shell input tap $T; ok "Đã bấm Cho phép ($T)"; break; }
-    done
-    [ -n "$T" ] || warn "Không thấy hộp hỏi quyền — mở app Magisk trên máy, bấm cài đặt bổ sung nếu có, rồi chạy lại"
-    sleep 3
+  }
+  okroot() { A shell 'su -c id' 2>/dev/null | grep -q "uid=0"; }
+  if ! okroot; then
+    # 1) có hộp hỏi quyền → bấm Cho phép
+    ( A shell 'su -c id' >/dev/null 2>&1 & ); sleep 3; ui; T=$(pick find 'Grant|Allow|Cho phép|Cấp quyền')
+    [ -n "$T" ] && { A shell input tap $T; ok "Đã bấm Cho phép"; sleep 3; }
   fi
-  if A shell 'su -c id' 2>/dev/null | grep -q "uid=0"; then
+  if ! okroot; then
+    # 2) Shell từng bị từ chối → vào app Magisk › Superuser › bật công tắc Shell
+    A shell am force-stop com.topjohnwu.magisk; A shell monkey -p com.topjohnwu.magisk -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1; sleep 4
+    ui; T=$(pick find 'OK|Đồng ý'); [ -n "$T" ] && { A shell input tap $T; sleep 2; ui; }
+    T=$(pick find 'Superuser|Siêu người dùng'); [ -n "$T" ] && { A shell input tap $T; sleep 3; ui; }
+    R=$(pick toggle 'Shell')
+    if [ -n "$R" ]; then set -- $R; [ "$3" = "true" ] || { A shell input tap $1 $2; ok "Đã bật root cho Shell trong Magisk"; }; sleep 2
+    else warn "Không thấy dòng Shell trong Magisk › Superuser. Chữ đang có trên màn hình:"; grep -o 'text="[^"]*"' /tmp/gpu-ui.xml | grep -v 'text=""' | head -15; fi
+  fi
+  if okroot; then
     cat > /tmp/gpu-grant.sh <<'GS'
 M=$(command -v magisk || ls /sbin/magisk /debug_ramdisk/magisk 2>/dev/null | head -1)
 $M --sqlite "REPLACE INTO settings (key,value) VALUES('root_access',3)"
@@ -192,9 +206,9 @@ for u in 2000 $(cmd package list packages -3 -U | sed -n 's/.*uid:\([0-9]*\).*/\
 done
 GS
     A push /tmp/gpu-grant.sh /data/local/tmp/grant.sh >/dev/null 2>&1; A shell su -c "sh /data/local/tmp/grant.sh" >/dev/null 2>&1
+    A shell input keyevent 3
     ok "Root OK: Shell + mọi app đã cài được cấp quyền root sẵn"
   else err "Chưa có root cho Shell"; fi ;;
-
 report)
   # BÁO CÁO 1 LẦN: GPU · game ARM · root · ảnh màn hình có bị đen · Chrome
   A() { "$ADB" -s emulator-$PORT "$@"; }

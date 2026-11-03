@@ -180,7 +180,9 @@ def stream_url(port):
     q = urllib.parse.quote
     udid = f"127.0.0.1:{port}"
     ws = BASE.replace("https://", "wss://").replace("http://", "ws://") + "/?action=proxy-adb&remote=" + q("tcp:8886", safe="") + "&udid=" + q(udid, safe="")
-    return f"{BASE}/#!action=stream&udid={q(udid, safe='')}&player=webcodecs&ws={q(ws, safe='')}"
+    # máy GPU (máy ảo Google, cổng 5600–5699): trình phát tinyh264 — webcodecs của Chrome có thể từ chối hình máy GPU gửi ra
+    pl = "tinyh264" if 5600 <= int(port) <= 5699 else "webcodecs"
+    return f"{BASE}/#!action=stream&udid={q(udid, safe='')}&player={pl}&ws={q(ws, safe='')}"
 
 def now(): return datetime.datetime.now().astimezone()
 def parse_dt(s):

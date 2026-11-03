@@ -459,8 +459,25 @@ RC
   fi
   if A shell 'su -c id' 2>/dev/null | grep -q "uid=0"; then
     ok "ROOT SÂU: CHẠY ✓  ($(A shell 'su -c id' | tr -d '\r' | cut -c1-40))"
+    touch "$HOME/.cloudphone-gpu-rooted"            # báo cho hệ thống thuê: máy GPU đã có root sâu
     A shell 'su -c "mount -o remount,rw / 2>/dev/null; echo ok-root-write > /data/local/tmp/.rootw && cat /data/local/tmp/.rootw"' | tr -d '\r' | grep -q ok-root-write && ok "App gọi su chạy được lệnh root (ghi file hệ thống OK)"
   else err "Root sâu chưa chạy. Nhật ký:"; A shell 'cat /data/local/tmp/cproot.log 2>/dev/null | tail -20' | tr -d '\r' | sed 's/^/   /'; fi ;;
+rootall)
+  # Gắn root sâu (bản mới nhất) cho TẤT CẢ bản Android máy GPU bán cho khách: 10 · 11 · 12 → bảng kết quả
+  declare -A IM=([10]="system-images;android-29;google_apis_playstore;x86" [11]="system-images;android-30;google_apis_playstore;x86_64" [12]="system-images;android-31;google_apis_playstore;x86_64")
+  RES=""
+  for v in ${VERS:-10 11 12}; do
+    echo; echo "############ ANDROID $v ############"
+    bash "$0" stop >/dev/null 2>&1
+    GPU_IMG="${IM[$v]}" bash "$0" image >/dev/null 2>&1 || { RES+="Android $v: tải lỗi\n"; continue; }
+    WIPE=1 bash "$0" start >/dev/null 2>&1 || { RES+="Android $v: không bật được\n"; continue; }
+    bash "$0" root </dev/null >/dev/null 2>&1; bash "$0" start >/dev/null 2>&1
+    O=$(bash "$0" rootboot 2>&1); echo "$O" | tail -4
+    echo "$O" | grep -q "ROOT SÂU: CHẠY" && RES+="Android $v: ROOT SÂU ✓\n" || RES+="Android $v: root CHƯA được\n"
+  done
+  bash "$0" stop >/dev/null 2>&1
+  echo; echo "================ KẾT QUẢ ROOT MÁY GPU ================"; printf "$RES" ;;
+
 auto)
   # KIỂM TRA TẤT CẢ BẢN 1 LỆNH: với từng bản Android → tải, bật, root (Magisk), cấp root, báo cáo → bảng tổng kết
   VERS="${VERS:-11 12 10 9}"; SUM="$HOME/gpu-auto-ketqua.txt"; : > "$SUM"

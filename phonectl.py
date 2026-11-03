@@ -95,6 +95,14 @@ GPU_MIN_VRAM = 700                                        # MB bộ nhớ card p
 SDK = os.path.expanduser("~/android-sdk")
 AVD_HOME = os.path.expanduser("~/.android/avd")
 GPU_IMG = CONF.get("GPU_IMG", "system-images;android-30;google_apis_playstore;x86_64")
+# Máy GPU theo bản Android (máy ảo Google chạy bằng GTX 1080, đã gắn root sâu bằng: bash ~/gpu-phone-test.sh rootboot)
+GPU_IMGS = {"10": "system-images;android-29;google_apis_playstore;x86",
+            "11": GPU_IMG,
+            "12": "system-images;android-31;google_apis_playstore;x86_64"}
+GPU_ONLY = {"9", "10"}          # redroid 9/10 không chạy được game/Chrome → các bản này CHỈ tạo bằng GPU
+def gpu_img_ok(av):
+    img = GPU_IMGS.get(av)
+    return bool(img) and os.path.isdir(os.path.join(SDK, *img.split(";")))
 GPU_PORTS = range(5611, 5682, 2)                          # cổng adb máy GPU (console = cổng − 1); 5601 là máy thử
 GPU_ENV = {**os.environ, "ANDROID_SDK_ROOT": SDK, "ANDROID_HOME": SDK, "ANDROID_AVD_HOME": AVD_HOME,
            "ANDROID_ADB_SERVER_PORT": "5038", "QT_QPA_PLATFORM": "offscreen", "DISPLAY": ":9"}
@@ -235,9 +243,9 @@ def gpu_config(name, ram, cpu, res, dpi=0):
     lines += [f"{k}={v}\n" for k, v in want.items() if k not in seen]
     open(cfg, "w", encoding="utf-8").writelines(lines)
 
-def gpu_create(name, ram, cpu, res, dpi=0):
+def gpu_create(name, ram, cpu, res, dpi=0, av="11"):
     am = os.path.join(SDK, "cmdline-tools", "latest", "bin", "avdmanager")
-    r = subprocess.run([am, "create", "avd", "-n", name, "-k", GPU_IMG, "-d", "pixel_4", "--force"],
+    r = subprocess.run([am, "create", "avd", "-n", name, "-k", GPU_IMGS.get(av, GPU_IMG), "-d", "pixel_4", "--force"],
                        input="no\n", capture_output=True, text=True, env=GPU_ENV)
     if r.returncode != 0 or not os.path.isdir(avd_dir(name)): return r
     gpu_config(name, ram, cpu, res, dpi)
@@ -504,9 +512,14 @@ def cmd_create(a):
     # Android 11 + card còn chỗ → máy GPU. Máy GPU CHƯA root được → khi đã có bản root, máy mới ưu tiên bản ROOT
     # (muốn ưu tiên GPU hơn root: thêm GPU_OVER_ROOT=1 vào ~/cloudphone.conf)
     rooted = pick_image(IMAGES[av][0]) != IMAGES[av][0]
-    gpu = av == "11" and not a.nogpu and (not rooted or gpu_rooted() or CONF.get("GPU_OVER_ROOT") == "1") and gpu_slot(st)
+    # Máy GPU nay đã có root sâu → bản nào có máy GPU (10/11/12) thì ưu tiên GPU khi card còn chỗ
+    gpu = gpu_img_ok(av) and not a.nogpu and (gpu_rooted() or not rooted or CONF.get("GPU_OVER_ROOT") == "1") and gpu_slot(st)
+    if av in GPU_ONLY and not gpu:
+        print(f"HẾT HÀNG: Android {av} chỉ chạy bằng máy GPU và card đồ hoạ đang đầy."); sys.exit(2)
     port = gpu_port(st) if gpu else free_port(st)
-    if gpu and not port: gpu, port = False, free_port(st)
+    if gpu and not port:
+        if av in GPU_ONLY: print("HẾT HÀNG: hết cổng máy GPU."); sys.exit(2)
+        gpu, port = False, free_port(st)
     if not port: print("LỖI: hết cổng (tối đa 30 máy/node)."); sys.exit(3)
     if not SAFE.match(a.name): print("LỖI: tên máy chỉ gồm chữ, số, _ . -"); sys.exit(1)
     fps = clamp_fps(a.fps)
@@ -519,7 +532,7 @@ def cmd_create(a):
            "dpi": a.dpi, "android": av, "created": fmt(now()), "expires": exp.isoformat()}
     if gpu: row["kind"] = "gpu"
     st["phones"].append(row); save(st)             # lưu trước để dịch vụ máy GPU đọc được cấu hình
-    r = gpu_create(a.name, a.ram, a.cpu, a.res, a.dpi) if gpu else docker_run(a.name, a.ram, a.cpu, port, a.res, fps, a.dpi, av)
+    r = gpu_create(a.name, a.ram, a.cpu, a.res, a.dpi, av) if gpu else docker_run(a.name, a.ram, a.cpu, port, a.res, fps, a.dpi, av)
     if r.returncode != 0:
         st = load(); st["phones"] = [x for x in st["phones"] if x["name"] != a.name]; save(st)
         if gpu: gpu_wipe(a.name)

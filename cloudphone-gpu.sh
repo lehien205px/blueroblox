@@ -24,7 +24,7 @@ PC="python3 $H/phonectl.py"
 case "${1:-}" in
 install)
   need_root install
-  N=${2:-8}
+  NUM=${2:-8}
   [ -x "$H/android-sdk/emulator/emulator" ] || { err "Chưa có Android SDK. Chạy trước:  bash ~/gpu-phone-test.sh install"; exit 1; }
   ls "$H/android-sdk/system-images/android-30/google_apis_playstore/x86_64" >/dev/null 2>&1 || { err "Chưa có Android 11 (GPU). Chạy:  bash ~/gpu-phone-test.sh install"; exit 1; }
   systemctl is-active -q cloudgpu-x || systemctl restart cloudgpu-x
@@ -54,9 +54,9 @@ EOF
   chmod 440 /etc/sudoers.d/cloudgpu
   visudo -cf /etc/sudoers.d/cloudgpu >/dev/null && ok "Quyền bật/tắt máy GPU" || { rm -f /etc/sudoers.d/cloudgpu; err "Lỗi quyền sudo"; exit 1; }
 
-  conf_set GPU_PHONES "$N"
+  conf_set GPU_PHONES "$NUM"
   systemctl restart cloudphoned cpapi 2>/dev/null && ok "Đã khởi động lại cloudphoned + cpapi"
-  ok "BẬT MÁY GPU: tối đa $N máy Android 11 mới sẽ chạy bằng GTX 1080"
+  ok "BẬT MÁY GPU: tối đa $NUM máy Android 11 mới sẽ chạy bằng GTX 1080"
   echo "   Thử trước:  bash $0 test" ;;
 
 test)

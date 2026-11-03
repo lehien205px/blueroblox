@@ -292,6 +292,51 @@ def install_err(o):
         if k in o: return msg
     return "Cài APK lỗi: " + o[-300:]
 
+# ---------- MÁY THỬ GPU (Android Emulator chạy bằng GTX 1080, tạo bằng ~/gpu-phone-test.sh) ----------
+GPU_SCRIPT = os.path.join(HOME, "gpu-phone-test.sh")
+GPU_PORT = 5601               # adb của máy thử (console 5600)
+GPU_IMGS = {"9": "system-images;android-28;google_apis_playstore;x86", "10": "system-images;android-29;google_apis_playstore;x86",
+            "11": "system-images;android-30;google_apis_playstore;x86_64", "12": "system-images;android-31;google_apis_playstore;x86_64"}
+
+def gpu_status():
+    d = {"installed": os.path.isfile(GPU_SCRIPT) and os.path.isdir(os.path.join(HOME, "android-sdk", "emulator")), "running": False}
+    pr = subprocess.run(["pgrep", "-f", "-o", "--", "-avd gputest"], capture_output=True, text=True)
+    pid = (pr.stdout or "").strip()
+    d["running"] = bool(pid)
+    if pid:
+        try:
+            ps = subprocess.run(["ps", "-o", "%cpu=,rss=", "-p", pid], capture_output=True, text=True).stdout.split()
+            d["cpu"] = float(ps[0]); d["ram_gb"] = round(int(ps[1]) / 1048576, 1)
+        except Exception: pass
+        try:
+            r = shell(GPU_PORT, "getprop sys.boot_completed; getprop ro.build.version.release; getprop ro.product.cpu.abilist; dumpsys SurfaceFlinger | grep -m1 GLES:", 20)
+            ls = [l.strip() for l in out(r).splitlines()]
+            d["booted"] = bool(ls and ls[0] == "1")
+            if len(ls) > 1: d["android"] = ls[1]
+            if len(ls) > 2: d["abi"] = ls[2]
+            if len(ls) > 3: d["gles"] = ls[3].replace("GLES:", "").strip()
+        except Exception: pass
+    try:
+        g = subprocess.run(["nvidia-smi", "--query-gpu=name,utilization.gpu,memory.used,memory.total", "--format=csv,noheader,nounits"],
+                           capture_output=True, text=True, timeout=10).stdout.strip().split(",")
+        d["gpu"] = {"name": g[0].strip(), "util": int(g[1]), "mem": int(g[2]), "total": int(g[3])}
+    except Exception: pass
+    gl = (d.get("gles") or "").lower()
+    d["on_gpu"] = "nvidia" in gl or "geforce" in gl
+    d["stream_url"] = stream_url_of(GPU_PORT) if d.get("booted") else None
+    return d
+
+def stream_url_of(port):
+    q = urllib.parse.quote; base = "https://" + PUBLIC_HOST; udid = f"127.0.0.1:{port}"
+    ws = base.replace("https://", "wss://") + "/?action=proxy-adb&remote=" + q("tcp:8886", safe="") + "&udid=" + q(udid, safe="")
+    return f"{base}/#!action=stream&udid={q(udid, safe='')}&player=webcodecs&ws={q(ws, safe='')}"
+
+def gpu_run(args, env=None, timeout=1800):
+    e = dict(os.environ); e.update(env or {})
+    r = subprocess.run(["bash", GPU_SCRIPT] + args, capture_output=True, text=True, timeout=timeout, env=e, stdin=subprocess.DEVNULL)
+    txt = re.sub(r"\x1b\[[0-9;]*m", "", (r.stdout or "") + (r.stderr or ""))
+    return r.returncode, txt
+
 def sniff_apk(path):
     """File không có đuôi nhưng thật ra là APK / gói APK → trả về đuôi đúng."""
     import zipfile
@@ -763,6 +808,36 @@ class H(BaseHTTPRequestHandler):
                     ls = [l for l in (r.stdout or "").splitlines() if l.startswith("ROOT_")]
                     ok = sum(l.startswith("ROOT_OK") for l in ls); bad = [l.split(" ", 1)[1] for l in ls if l.startswith(("ROOT_NO", "ROOT_WAIT"))]
                     return f"Đã root {ok} máy." + (" Chưa được: " + "; ".join(bad[:8]) if bad else "")
+                run_job(jid, work)
+                return self.send_json(200, {"job": jid})
+            if act == "gputest" and self.command == "GET":          # máy thử GPU: trạng thái
+                return self.send_json(200, gpu_status())
+            if act == "gputest" and self.command == "POST":
+                b = self.jbody(); do = str(b.get("do") or "")
+                if not os.path.isfile(GPU_SCRIPT): return self.send_json(400, {"error": "Chưa có ~/gpu-phone-test.sh trên server."})
+                if do not in ("start", "stop", "chrome", "android"): return self.send_json(400, {"error": "Lệnh không hợp lệ."})
+                ver = str(b.get("v") or "")
+                if do == "android" and ver not in GPU_IMGS: return self.send_json(400, {"error": "Chỉ có Android 9, 10, 11, 12."})
+                jid = new_job(me["uid"], "Máy thử GPU: " + do)
+                def work(j):
+                    if do == "stop": gpu_run(["stop"], timeout=120); return "Đã tắt máy thử."
+                    if do == "chrome":
+                        shell(GPU_PORT, "am start -a android.intent.action.VIEW -d https://www.google.com com.android.chrome", 20)
+                        time.sleep(15)
+                        alive = out(shell(GPU_PORT, "pidof com.android.chrome", 20)).strip()
+                        return "✅ Chrome đang chạy." if alive else "❌ Chrome không chạy — xem màn hình máy thử."
+                    if do == "android":
+                        JOBS[j]["msg"] = f"Đang tắt máy cũ và tải Android {ver} (5–15 phút)…"
+                        gpu_run(["stop"], timeout=120)
+                        rc, t = gpu_run(["image"], {"GPU_IMG": GPU_IMGS[ver]}, timeout=3600)
+                        if rc != 0 and ver in ("9", "10"):
+                            rc, t = gpu_run(["image"], {"GPU_IMG": GPU_IMGS[ver].replace(";x86", ";x86_64")}, timeout=3600)
+                        if rc != 0: raise RuntimeError("Cài Android " + ver + " lỗi: " + ((t.strip().splitlines() or ["?"])[-1][:200]))
+                    JOBS[j]["msg"] = "Đang bật máy thử (1–3 phút)…"
+                    rc, t = gpu_run(["start"], timeout=600)
+                    if rc != 0: raise RuntimeError((t.strip().splitlines() or ["Bật máy lỗi"])[-1][:240])
+                    st = gpu_status()
+                    return f"Máy thử Android {st.get('android', '?')} đã bật · " + ("đang dùng GTX 1080 ✅" if st.get("on_gpu") else "CHƯA dùng GPU ⚠")
                 run_job(jid, work)
                 return self.send_json(200, {"job": jid})
             if act == "preset" and self.command == "GET":

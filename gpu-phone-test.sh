@@ -43,8 +43,15 @@ install)
       && rm -rf "$SDK/cmdline-tools/latest" && mv "$SDK/cmdline-tools/cmdline-tools" "$SDK/cmdline-tools/latest" && ok "Android cmdline-tools" \
       || { err "Không tải được cmdline-tools"; exit 1; }
   fi
+  bash "$0" image || exit 1
+  bash "$0" xsetup
+  echo; warn "THOÁT SSH RỒI VÀO LẠI (để nhận quyền KVM), sau đó chạy:  bash $0 start" ;;
+
+image)
+  # tải bản Android ($GPU_IMG) + tạo lại máy thử — KHÔNG cần sudo (trang admin gọi được)
+  [ -x "$SM" ] || { err "Chưa cài. Chạy:  bash $0 install"; exit 1; }
   yes | "$SM" --licenses >/dev/null 2>&1
-  echo "== Tải emulator + Android 11 Google Play (vài phút) =="
+  echo "== Tải emulator + $IMG (vài phút) =="
   "$SM" "emulator" "platform-tools" "$IMG" >/dev/null && ok "emulator, platform-tools, $IMG" || { err "Tải SDK lỗi"; exit 1; }
   echo no | "$AM" create avd -n "$AVD" -k "$IMG" -d pixel_4 --force >/dev/null && ok "Tạo máy thử '$AVD'"
   CFG="$ANDROID_AVD_HOME/$AVD.avd/config.ini"
@@ -53,9 +60,7 @@ install)
   set_cfg hw.lcd.width 720; set_cfg hw.lcd.height 1280; set_cfg hw.lcd.density 320
   set_cfg disk.dataPartition.size 16G; set_cfg hw.keyboard yes; set_cfg fastboot.forceColdBoot yes
   set_cfg hw.audioInput no; set_cfg hw.audioOutput no; set_cfg showDeviceFrame no
-  ok "Cấu hình: 4 nhân · 4GB · 720x1280 · GPU host (GTX 1080)"
-  bash "$0" xsetup
-  echo; warn "THOÁT SSH RỒI VÀO LẠI (để nhận quyền KVM), sau đó chạy:  bash $0 start" ;;
+  ok "Cấu hình: 4 nhân · 4GB · 720x1280 · GPU host (GTX 1080)" ;;
 
 xsetup)
   echo "== Màn hình ảo $XD trên card NVIDIA (cần sudo) =="
@@ -113,7 +118,7 @@ start)
 
 chrome)
   # mở Chrome vào google.com trong máy thử → báo chạy được hay văng (đúng lỗi máy 9/10/11 đang gặp)
-  "$ADB" -s emulator-$PORT shell 'logcat -c; logcat -b crash -c; am start -a android.intent.action.VIEW -d https://www.google.com -p com.android.chrome >/dev/null 2>&1; sleep 15; pidof com.android.chrome >/dev/null && echo "✅ CHROME CHẠY ĐƯỢC" || echo "❌ CHROME VĂNG"; logcat -d -b crash | grep -m2 -E "Abort|FATAL"' | tr -d '\r'
+  "$ADB" -s emulator-$PORT shell 'logcat -c; logcat -b crash -c; am start -W -a android.intent.action.VIEW -d https://www.google.com com.android.chrome >/dev/null 2>&1; sleep 15; pidof com.android.chrome >/dev/null && echo "✅ CHROME CHẠY ĐƯỢC" || echo "❌ CHROME VĂNG"; logcat -d -b crash | grep -m2 -E "Abort|FATAL"' | tr -d '\r'
   echo "   Đồ hoạ: $("$ADB" -s emulator-$PORT shell dumpsys SurfaceFlinger 2>/dev/null | grep -m1 'GLES:' | tr -d '\r')" ;;
 
 check)

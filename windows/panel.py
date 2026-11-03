@@ -71,6 +71,26 @@ def run_admin(ps_cmd, log, secret=False):
     open(ps1, "w", encoding="utf-8-sig").write(body)
     ctypes.windll.shell32.ShellExecuteW(None, "runas", "powershell.exe", f'-NoProfile -ExecutionPolicy Bypass -File "{ps1}"', B, 1)
 
+def kill_tree(pid):
+    """Tắt 1 chương trình + các chương trình con của nó, NHƯNG GIỮ adb server.
+       (adb server hay được sinh ra làm "con" của ws-scrcpy / cloudphoned → taskkill /T giết luôn adb → MỌI máy mất kết nối:
+        web đen/giật, máy mới treo "Đang tạo…".)"""
+    keep = adb_pid()
+    out = subprocess.run(["powershell", "-NoProfile", "-Command",
+                          "Get-CimInstance Win32_Process | ForEach-Object { \"$($_.ProcessId),$($_.ParentProcessId)\" }"],
+                         capture_output=True, text=True, creationflags=NOWIN, timeout=60).stdout or ""
+    kids = {}
+    for ln in out.splitlines():
+        a = ln.strip().split(",")
+        if len(a) == 2 and a[0].isdigit() and a[1].isdigit(): kids.setdefault(a[1], []).append(a[0])
+    todo, seen = [str(pid)], []
+    while todo:
+        x = todo.pop()
+        if x in seen: continue
+        seen.append(x); todo += kids.get(x, [])
+    for x in reversed(seen):
+        if x != keep: subprocess.run(["taskkill", "/PID", x, "/F"], capture_output=True, creationflags=NOWIN)
+
 PORTS = {"ws-scrcpy": 8000, "cpapi": 8010, "duong-thang": 8443}
 def free_port(port):
     """Tắt chương trình CŨ còn giữ cổng (vd ws-scrcpy cũ mất kết nối adb → web đen màn, bản mới không mở được cổng: EADDRINUSE)."""
@@ -78,7 +98,7 @@ def free_port(port):
     pids = {ln.split()[-1] for ln in out.splitlines() if "LISTENING" in ln and re.search(rf"[:.]{port}\s", ln)}
     for pid in pids:
         if pid.isdigit() and int(pid) not in (0, os.getpid()):
-            subprocess.run(["taskkill", "/PID", pid, "/T", "/F"], capture_output=True, creationflags=NOWIN)
+            kill_tree(pid)
     return len(pids)
 def adb_pid():
     """PID của adb SERVER (tiến trình đang nghe cổng 5037) — KHÔNG phải các lệnh adb chạy thoáng qua
@@ -117,7 +137,7 @@ class Svc:
     def stop(self):
         self.want = False
         if self.p and self.p.poll() is None:
-            subprocess.run(["taskkill", "/PID", str(self.p.pid), "/T", "/F"], capture_output=True, creationflags=NOWIN)
+            kill_tree(self.p.pid)
             self.ui.say(self.name, "■ Đã tắt")
     def alive(self): return bool(self.p and self.p.poll() is None)
 
@@ -231,6 +251,10 @@ class App:
     def _heal(self, n, c):
         if self.booting: return
         on = lambda name: self.svcs[name].want
+        # adb server do CHÍNH bảng giữ (không làm "con" của dịch vụ nào → tắt/bật dịch vụ không kéo adb chết theo)
+        if n % 2 == 0 and on("ws-scrcpy") and not adb_pid():
+            subprocess.run([os.path.join(B, "platform-tools", "adb.exe"), "start-server"], capture_output=True, creationflags=NOWIN, env=ENV, timeout=30)
+            self._fix("adb bị tắt → bật lại adb")
         # trình phát hình / cổng bảo vệ không mở cổng ~16 giây → bật lại (tự tắt bản cũ giữ cổng)
         if on("ws-scrcpy") and self._bad("ws", not port_open(8000)) == 4: self._fix("trình phát hình :8000 không chạy → bật lại"); self._restart_svc("ws-scrcpy")
         if on("cpapi") and self._bad("api", not port_open(8010)) == 4: self._fix("cổng bảo vệ :8010 không chạy → bật lại"); self._restart_svc("cpapi")

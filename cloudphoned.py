@@ -143,6 +143,21 @@ def get_pending(status):
 def get_renew():
     return sb("GET", "cloud_phones?pending_renew_days=gt.0&status=in.(active,expired)&select=*") or []
 
+def get_upgrade():
+    return sb("GET", "cloud_phones?or=(pending_ram.not.is.null,pending_cpu.not.is.null)&status=eq.active&select=*") or []
+
+def do_upgrade(row):
+    """Khách đã trả tiền nâng RAM/CPU → cấp thêm cho máy (không khởi động lại)."""
+    name = row.get("container") or cname(row)
+    ram = int(row.get("pending_ram") or row["ram"]); cpu = int(row.get("pending_cpu") or row["cpu"])
+    print(f"[nâng cấp] {name} → {ram}GB · {cpu} nhân")
+    r = phonectl(["resize", name, "--ram", str(ram), "--cpu", str(cpu)])
+    if r.returncode == 0:
+        patch(row["id"], {"ram": ram, "cpu": cpu, "pending_ram": None, "pending_cpu": None})
+        notify(f"⬆️ Máy <b>{row.get('name') or name}</b> đã nâng lên {ram}GB RAM · {cpu} nhân.")
+    else:
+        print("lỗi nâng cấp:", (r.stdout or "")[-300:], (r.stderr or "")[-300:])
+
 def get_live():
     return sb("GET", "cloud_phones?status=in.(active,expired)&select=*") or []
 
@@ -419,6 +434,10 @@ def tick():
         if not mine(row): continue
         try: do_renew(row)
         except Exception as e: print("lỗi gia hạn:", e)
+    for row in get_upgrade():
+        if not mine(row): continue
+        try: do_upgrade(row)
+        except Exception as e: print("lỗi nâng cấp:", e)
     for row in get_live():
         if not mine(row): continue
         try: do_expiry(row)

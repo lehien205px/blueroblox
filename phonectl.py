@@ -906,6 +906,20 @@ def cmd_renew(a):
         start_phone(p); wait_boot(a.name, p["port"])
     print(f"🔄 '{a.name}' gia hạn +{a.days} ngày → hết hạn {fmt(base)}")
 
+def cmd_resize(a):
+    """Nâng RAM / CPU cho máy đang chạy — KHÔNG khởi động lại, giữ nguyên app/dữ liệu (docker update)."""
+    st = load(); p = next((x for x in st["phones"] if x["name"] == a.name), None)
+    if not p: print("Không có máy tên này."); sys.exit(1)
+    ram = a.ram if a.ram > 0 else float(p["ram"]); cpu = a.cpu if a.cpu > 0 else float(p["cpu"])
+    if is_gpu(p):
+        gpu_svc("stop", a.name); gpu_config(a.name, ram, cpu, p.get("res", "720x1280"), p.get("dpi", 0)); r = gpu_svc("start", a.name)
+    else:
+        r = sh(["docker", "update"] + mem_args(ram) + cpu_args(cpu) + [a.name])
+    if r.returncode != 0:
+        print("LỖI:", (r.stderr or r.stdout or "").strip()[:300]); sys.exit(4)
+    p["ram"], p["cpu"] = ram, cpu; save(st)
+    print(f"⬆️ '{a.name}' → {ram:g}GB RAM · {cpu:g} nhân")
+
 def cmd_list(a):
     st = load()
     if not st["phones"]: print("(chưa có máy nào)"); return
@@ -940,6 +954,7 @@ def main():
     sub.add_parser("list").set_defaults(f=cmd_list)
     d = sub.add_parser("delete"); d.add_argument("name"); d.set_defaults(f=cmd_delete)
     r = sub.add_parser("renew"); r.add_argument("name"); r.add_argument("--days", type=int, default=7); r.set_defaults(f=cmd_renew)
+    z = sub.add_parser("resize"); z.add_argument("name"); z.add_argument("--ram", type=float, default=0); z.add_argument("--cpu", type=float, default=0); z.set_defaults(f=cmd_resize)
     sub.add_parser("reap").set_defaults(f=cmd_reap)
     s = sub.add_parser("stop"); s.add_argument("name"); s.set_defaults(f=cmd_stop)
     sub.add_parser("connect-all").set_defaults(f=cmd_connect_all)

@@ -542,6 +542,53 @@ def cmd_bootall(a):
     print(f"BOOTALL xong: {len(todo) - bad}/{len(todo)} máy bật thành công" + ("" if not bad else f", {bad} máy lỗi"))
     if bad: sys.exit(6)
 
+# ---------- CHỐNG KẸT: máy chạy mà Android không lên (kẹt 99%, màn đen, adb offline) ----------
+HEAL_F = os.path.join(HOME, "redroid", "heal.json")
+STUCK_MIN = 6          # chạy quá 6 phút mà Android chưa lên → coi là kẹt
+def _hl():
+    try: return json.load(open(HEAL_F, encoding="utf-8"))
+    except Exception: return {}
+def _hs(d):
+    os.makedirs(os.path.dirname(HEAL_F), exist_ok=True); json.dump(d, open(HEAL_F, "w", encoding="utf-8"))
+def cmd_heal(a):
+    """Gọi định kỳ (bảng BlueRoblox ~2 phút/lần): máy kẹt → khởi động lại; kẹt 3 lần liền → XOÁ máy hỏng (máy khách sẽ được tạo lại)."""
+    st = load(); v = vms(); h = _hl(); t = time.time(); seen = set()
+    for p in st["phones"]:
+        nm = p["name"]; seen.add(nm)
+        if p.get("hold") or IDX(p, v) is None or not is_running(nm, p, v): h.pop(nm, None); continue
+        adb_connect(p["port"])
+        if booted(p["port"]): h.pop(nm, None); continue
+        e = h.setdefault(nm, {"since": t, "tries": 0})
+        if t - e["since"] < STUCK_MIN * 60: continue
+        if e["tries"] >= 2:
+            print(f"XOA_HONG {nm}: kẹt sau {e['tries']} lần khởi động lại → xoá máy hỏng (máy khách sẽ được tạo lại mới)", flush=True)
+            a.name = nm; cmd_delete(a); h.pop(nm, None); continue
+        e["tries"] += 1; e["since"] = t
+        print(f"KHOI_DONG_LAI {nm}: Android không lên quá {STUCK_MIN} phút → khởi động lại (lần {e['tries']})", flush=True)
+        adb("disconnect", serial(p), timeout=15); memuc("stop", "-i", IDX(p), timeout=120); time.sleep(3); start_phone(p)
+    for k in list(h):
+        if k not in seen: h.pop(k, None)
+    _hs(h)
+    if a.orphans: _cleanup(v, quiet=True)
+
+def _cleanup(v=None, quiet=False, all_=False):
+    """Xoá máy trong MEmu KHÔNG thuộc danh sách BlueRoblox (giả lập cũ / thừa / tạo dở). Giữ máy mẫu (MEMU_TEMPLATE)."""
+    v = v if v is not None else vms(); mine = {p["name"] for p in load()["phones"]}; tpl = CONF.get("MEMU_TEMPLATE", "")
+    gone = 0
+    for i in sorted(v, reverse=True):          # xoá từ số lớn xuống → số máy còn lại ít bị đổi
+        nm = v[i]["name"]
+        if nm == tpl or (nm in mine and not all_): continue
+        if quiet and not nm.startswith("cp_"): continue     # tự động: chỉ dọn máy do BlueRoblox tạo (cp_…)
+        print(f"XOA_THUA {nm} (MEmu #{i})", flush=True)
+        if v[i]["running"]: memuc("stop", "-i", i, timeout=120); time.sleep(3)
+        memuc("remove", "-i", i, timeout=180); gone += 1
+    if all_:
+        st = load(); st["phones"] = []; save(st)
+    if not quiet or gone: print(f"Đã xoá {gone} giả lập.")
+def cmd_cleanup(a):
+    if a.all and not a.yes: print("Thêm --yes để xác nhận XOÁ TẤT CẢ (kể cả máy khách)."); sys.exit(1)
+    _cleanup(all_=a.all)
+
 def cmd_noop(a): print("(bản Windows: không cần lệnh này)")
 def cmd_render(a):
     """Đổi chế độ vẽ của 1 máy: opengl | directx (khởi động lại máy ~1 phút)."""
@@ -600,6 +647,8 @@ def main():
     wp = s.add_parser("wallpaper"); wp.add_argument("name", nargs="?", default=""); wp.add_argument("--all", action="store_true"); wp.add_argument("--force", action="store_true"); wp.set_defaults(f=cmd_wallpaper)
     tp = s.add_parser("template"); tp.add_argument("name", nargs="?", default=""); tp.add_argument("--apply", action="store_true"); tp.set_defaults(f=cmd_template)
     hd = s.add_parser("hide"); hd.add_argument("name", nargs="?", default=""); hd.set_defaults(f=cmd_hide)
+    he = s.add_parser("heal"); he.add_argument("--orphans", action="store_true"); he.set_defaults(f=cmd_heal)
+    cl = s.add_parser("cleanup"); cl.add_argument("--all", action="store_true"); cl.add_argument("--yes", action="store_true"); cl.set_defaults(f=cmd_cleanup)
     ba = s.add_parser("bootall"); ba.add_argument("--quiet", action="store_true"); ba.set_defaults(f=cmd_bootall)
     for nm, fn in (("connect-all", cmd_connect_all), ("reap", cmd_reap), ("perms", cmd_perms), ("capacity", cmd_capacity), ("list", cmd_list),
                    ("memfix", cmd_noop), ("boost", cmd_noop), ("gpuinfo", cmd_noop)):

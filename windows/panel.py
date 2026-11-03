@@ -168,6 +168,7 @@ class App:
         btn("🖼 Ảnh nền cho máy", lambda: self.job("Đặt ảnh nền BlueRoblox cho các máy đang chạy (máy chưa có)", [PY, "phonectl.py", "wallpaper", "--all"]))
         btn("⏻ Thoát hẳn", self.quit_all, "#3a2030", "#ffb3bb")
         btn("🔑 Tự đăng nhập + tự chạy", self.autologon, "#2a2350", "#d9ccff")
+        btn("🧹 Dọn giả lập thừa", self.cleanup, "#3a2a10", "#ffd9a0")
         btn("🙈 Ẩn cửa sổ MEmu", lambda: self.job("Cho cửa sổ MEmu chạy ngầm", [PY, "phonectl.py", "hide"]))
         # nhật ký
         self.nb = ttk.Notebook(r); self.nb.pack(fill="both", expand=True, padx=14, pady=(0, 6))
@@ -262,11 +263,31 @@ class App:
                 except Exception as e: self.say("Tổng quan", f"🩺 tự bật máy lỗi: {e}")
                 finally: self._bootjob = False
             threading.Thread(target=bj, daemon=True).start()
+        # ~2 phút: CHỐNG KẸT — máy chạy mà Android không lên → khởi động lại; kẹt mãi → xoá máy hỏng + tạo lại máy khách; dọn giả lập cp_ thừa
+        if n % 30 == 22 and on("cloudphoned") and not getattr(self, "_healjob", False):
+            def hj():
+                self._healjob = True
+                try:
+                    r = subprocess.run([PY, "phonectl.py", "heal", "--orphans"], cwd=B, capture_output=True, text=True, encoding="utf-8",
+                                       errors="replace", env=ENV, creationflags=NOWIN, timeout=1200).stdout or ""
+                    for ln in r.splitlines():
+                        if ln.startswith(("KHOI_DONG_LAI", "XOA_HONG", "XOA_THUA", "Đã xoá")): self._fix(ln.split(" ", 1)[-1] if ln.startswith(("KHOI", "XOA")) else ln)
+                    if "XOA_HONG" in r:
+                        self._fix("tạo lại máy khách vừa xoá (giữ chủ máy, cấu hình, hạn dùng)")
+                        subprocess.run([PY, "run.py", "remake.py", "all"], cwd=B, capture_output=True, env=ENV, creationflags=NOWIN, timeout=3600)
+                except Exception as e: self.say("Tổng quan", f"🩺 chống kẹt lỗi: {e}")
+                finally: self._healjob = False
+            threading.Thread(target=hj, daemon=True).start()
         # ~5 phút: ổ đĩa sắp đầy → cảnh báo
         if n % 75 == 40:
             import shutil
             free = shutil.disk_usage("C:\\").free / 2**30
             if free < 15: self.say("Tổng quan", f"⚠ Ổ C: chỉ còn {free:.0f} GB trống — máy mới có thể không tạo được. Xoá bớt máy hết hạn / file rác.")
+
+    def cleanup(self):
+        if messagebox.askyesno("Dọn giả lập thừa", "XOÁ mọi giả lập trong MEmu KHÔNG thuộc danh sách BlueRoblox (giả lập cũ, tạo dở, bị kẹt)?\n"
+                               "Máy khách đang thuê và máy test1 được GIỮ NGUYÊN."):
+            self.job("Dọn giả lập thừa", [PY, "phonectl.py", "cleanup"])
 
     # ================= TỰ ĐĂNG NHẬP WINDOWS + TỰ CHẠY QUYỀN ADMIN =================
     def autologon(self):

@@ -83,6 +83,7 @@ netsh advfirewall firewall delete rule name="BlueRoblox chan 8000" | Out-Null
 netsh advfirewall firewall add rule name="BlueRoblox chan 8000" dir=in action=block protocol=TCP localport=8000,8010 remoteip=localsubnet | Out-Null
 
 Step "6/7 Tai chuong trinh BlueRoblox"
+& $PY -m pip install --quiet --disable-pip-version-check pillow 2>$null | Out-Null   # ảnh màn hình nhỏ (màn hình trực tiếp trong danh sách máy)
 foreach ($f in "cloudphoned.py", "cpapi.py") { Get "$RAW/$f" "$B\$f" }
 foreach ($f in "phonectl.py", "run.py", "remake.py", "keep.bat", "start-blue.bat", "panel.py", "wallpaper.png") { Get "$RAW/windows/$f" "$B\$f" }
 if (-not (Test-Path "$B\cloudphone.conf")) {

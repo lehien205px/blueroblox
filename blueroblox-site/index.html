@@ -1216,6 +1216,38 @@ html[data-theme] .cats button.on small{background:rgba(255,255,255,.25);color:#f
   .hero>.notice .nc{padding:7px 10px!important}
 }
 
+/* ===== Cột trái (màn rộng): menu + Hỗ trợ 24/7 + Discord — gọn, sang, không trống ===== */
+.cb-rail{display:none}
+@media (min-width:1280px){
+  .cb-rail{display:flex;flex-direction:column;gap:10px;position:fixed;left:14px;width:204px;top:520px;bottom:14px;z-index:31;overflow-y:auto;scrollbar-width:none;padding:2px 2px 6px}
+  .cb-rail::-webkit-scrollbar{display:none}
+  .rail-h{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:700;color:var(--muted);padding:6px 10px 0}
+  .rail-h i{width:8px;height:8px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 3px color-mix(in srgb,var(--ok) 25%,transparent)}
+  .cb-rail .notice{display:grid!important;grid-template-columns:1fr!important;gap:8px!important;margin:0!important;max-width:none!important}
+  .cb-rail .notice .nh{display:none}
+  html[data-theme] .cb-rail .notice .nc{padding:9px 10px!important;gap:10px;border-radius:16px;align-items:center}
+  .cb-rail .nc .ni{width:32px;height:32px;border-radius:10px;flex:none}
+  .cb-rail .nc .ni svg{width:17px;height:17px}
+  .cb-rail .nc .nt{min-width:0}
+  .cb-rail .nc .nt b{font-size:13.5px;display:block}
+  .cb-rail .nc .nt small{font-size:11.5px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .cb-rail .nc .na{font-size:0;padding:0;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;flex:none;margin-left:auto}
+  .cb-rail .nc .na svg{width:14px;height:14px;margin:0}
+  /* băng Discord → thẻ gọn */
+  .cb-rail #join-wrap{padding:0!important;margin:0;width:auto;max-width:none}
+  .cb-rail #join-band{display:grid;grid-template-columns:auto 1fr;gap:6px 10px;align-items:center;padding:12px;border-radius:18px;text-decoration:none}
+  .cb-rail #join-band .jd-ico{width:34px;height:34px;font-size:18px}
+  .cb-rail #join-band .jd-txt b{font-size:13.5px;line-height:1.25}
+  .cb-rail #join-band .jd-txt small{display:none}
+  .cb-rail #join-band .jd-btn{grid-column:1/-1;text-align:center;justify-content:center;padding:8px 10px;font-size:13px;margin:4px 0 0}
+  /* phần giữa: bỏ hàng thông báo → sản phẩm lên sát dưới phần giới thiệu */
+  html.has-rail .hero{padding-bottom:0}
+}
+@media (min-width:1280px){
+  .cb-rail .notice{grid-template-columns:minmax(0,1fr)!important}
+  .cb-rail .notice .nc{min-width:0;max-width:100%}
+}
+
 </style>
 <script>/* chế độ Sáng/Tối: nhớ lựa chọn (br_theme), lần đầu theo máy khách */(function(){var t=null;try{t=localStorage.getItem("br_theme")}catch(e){}if(t!=="light"&&t!=="dark")t=matchMedia&&matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t;})();</script>
 <script>
@@ -2070,6 +2102,7 @@ window.BR_CONFIG = {
     <button class="btn ghost sm" type="button" id="mt-login">Đăng nhập quản trị</button>
   </div>
 </div>
+<aside class="cb-rail" id="cb-rail" aria-label="Hỗ trợ"><div class="rail-h"><i></i><span data-i18n="rail_h">Hỗ trợ 24/7</span></div><div id="rail-help"></div></aside>
 <div class="maintbar" id="maintbar" hidden></div>
 <div class="toast" id="toast" hidden></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
@@ -2606,6 +2639,25 @@ if (typeof module !== "undefined") module.exports = { drawDongSon };
   });
 })();
 
+/* ===== Màn rộng: chuyển ô Hỗ trợ (chính sách, Discord, Zalo) + băng Discord vào cột trái dưới menu ===== */
+(function () {
+  const rail = document.getElementById("cb-rail"), box = document.getElementById("rail-help");
+  const nt = document.getElementById("notices"), jw = document.getElementById("join-wrap");
+  if (!rail || !box || !nt) return;
+  const mq = matchMedia("(min-width:1280px)");
+  const home = { nt: [nt.parentNode, nt.nextSibling], jw: jw ? [jw.parentNode, jw.nextSibling] : null };
+  function top() { const nav = document.querySelector(".top nav"); if (!nav) return;
+    const b = nav.getBoundingClientRect().bottom; rail.style.top = Math.max(120, Math.round(b + 12)) + "px"; }
+  function place() {
+    if (mq.matches) { box.appendChild(nt); if (jw) rail.appendChild(jw); document.documentElement.classList.add("has-rail"); requestAnimationFrame(top); }
+    else { home.nt[0].insertBefore(nt, home.nt[1]); if (jw && home.jw) home.jw[0].insertBefore(jw, home.jw[1]); document.documentElement.classList.remove("has-rail"); }
+  }
+  (mq.addEventListener ? mq.addEventListener("change", place) : mq.addListener(place));
+  addEventListener("resize", top);
+  const nav = document.querySelector(".top nav"); if (nav && "ResizeObserver" in window) new ResizeObserver(top).observe(nav);
+  place(); setTimeout(top, 400); setTimeout(top, 1500);
+})();
+
 </script>
 <script>
 /* BLUEROBLOX – giao diện khách + admin, nối Supabase */
@@ -2679,7 +2731,7 @@ const show = (id, on = true) => { $(id).hidden = !on; };
 /* ---------- song ngữ VI/EN ---------- */
 let LANG = "en"; try { const _sv = localStorage.getItem("br_lang"); if (_sv) LANG = _sv === "vi" ? "vi" : "en"; } catch (e) {}
 const EN = {
-  vn_t:"Vietnamese brand · servers in Vietnam", cb_tag:"VIETNAM CLOUD PHONE",
+  rail_h:"24/7 support", vn_t:"Vietnamese brand · servers in Vietnam", cb_tag:"VIETNAM CLOUD PHONE",
   nav_home:"Home", nav_shop:"Products", nav_topup:"Top up", nav_orders:"Orders", nav_policy:"Policy",
   login:"Log in", signup:"Sign up", balance:"Balance", btn_topup:"+ Top up", logout:"Log out", admin:"Admin",
   stat_sold:"Clones sold", stat_vps:"VPS running", stat_sup:"Support",

@@ -993,8 +993,19 @@ class H(BaseHTTPRequestHandler):
                 for l in out(shell(port, LU, 20)).splitlines():
                     if len(l.split()) == 2: shell(port, f"pm uninstall --user {l.split()[1]} {shlex.quote(pkg)}", 60)
                 return self.send_json(200, {"ok": True, "msg": "Đã bỏ các bản clone."})
+            memu_cap = None
+            if int(port) >= 21500:          # máy MEmu (Windows): mỗi Roblox chạy song song cần ~3GB RAM + 2 nhân riêng
+                ram, cpu = float(p.get("ram") or 0), float(p.get("cpu") or 0)
+                memu_cap = int(min((ram - 3) // 3, (cpu - 2) // 2))
+                if memu_cap < 1:
+                    return self.send_json(400, {"error": f"Máy {ram:g}GB / {cpu:g} nhân chưa đủ để chạy thêm Roblox (máy sẽ bị đứng). "
+                                                         "Clone tab cần tối thiểu 6GB RAM + 4 nhân cho 1 bản clone (mỗi bản thêm cần +3GB, +2 nhân) — "
+                                                         "bấm Nâng cấp RAM/CPU rồi clone lại. Hoặc thuê thêm máy và dùng Nhiều máy + Đồng bộ."})
             try: n = max(1, min(CLONE_MAX, int(b.get("n") or 1)))
             except (TypeError, ValueError): return self.send_json(400, {"error": "Số bản clone không hợp lệ."})
+            if memu_cap is not None and n > memu_cap:
+                return self.send_json(400, {"error": f"Máy này chỉ đủ chạy {memu_cap} bản clone cho mượt (mỗi bản cần +3GB RAM, +2 nhân). "
+                                                     "Chọn ít bản hơn, hoặc bấm Nâng cấp RAM/CPU."})
             jid = new_job(me["uid"], f"Clone {pkg} ×{n}")
             def work(j):
                 JOBS[j]["msg"] = f"Đang tạo {n} bản clone (mỗi bản ~20 giây)…"

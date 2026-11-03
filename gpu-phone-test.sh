@@ -216,7 +216,7 @@ rootboot)
   # Áp dụng cho mọi máy dùng bản Android này. Dùng magiskboot (trong Magisk chính thức) chạy ngay trong máy thử.
   A() { "$ADB" -s emulator-$PORT "$@"; }
   [ "$(A shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ] || { err "Bật máy thử trước:  bash $0 start"; exit 1; }
-  A shell 'magisk -v' 2>/dev/null | grep -qi magisk || { err "Bản này chưa có Magisk trong file khởi động — chạy:  bash $0 root"; A shell 'magisk -v; ls -la /system/bin/su' 2>&1 | head -3; exit 1; }
+  A shell 'ls -la /system/bin/su' 2>/dev/null | grep -q magisk || { err "Bản này chưa có Magisk trong file khởi động — chạy:  bash $0 root"; exit 1; }
   if ! A shell pm list packages 2>/dev/null | grep -q com.topjohnwu.magisk; then          # app Magisk bị mất khi tạo lại máy → cài lại
     cp "$HOME/rootAVD/Magisk.zip" /tmp/cp-magisk.apk 2>/dev/null && A install -r /tmp/cp-magisk.apk >/dev/null 2>&1 && ok "Đã cài lại app Magisk"
   fi
@@ -227,7 +227,16 @@ rootboot)
   unzip -p "$MZ" "lib/$L/libmagiskboot.so" > /tmp/cp-mb 2>/dev/null; [ -s /tmp/cp-mb ] || { err "Không lấy được magiskboot từ Magisk.zip"; exit 1; }
   cat > /tmp/cpgrant.sh <<'GS'
 #!/system/bin/sh
-M=/system/bin/magisk; [ -x "$M" ] || M=$(command -v magisk)
+# chạy quyền root ngay lúc khởi động (do init gọi), KHÔNG phụ thuộc app Magisk
+L=/data/local/tmp/cpgrant.log; exec >$L 2>&1; chmod 644 $L
+id; M=/system/bin/magisk; [ -x "$M" ] || M=$(command -v magisk)
+# Magisk chưa "cài đặt bổ sung" (máy mới) → tự làm: chép bộ Magisk vào /data/adb/magisk rồi bật daemon
+if ! $M -v >/dev/null 2>&1; then
+  mkdir -p /data/adb/magisk /data/adb/modules /data/adb/post-fs-data.d /data/adb/service.d
+  for f in magisk magisk32 magisk64 magiskinit magiskpolicy busybox; do [ -f "${0%/*}/$f" ] && cp -af "${0%/*}/$f" /data/adb/magisk/; done
+  chmod -R 755 /data/adb/magisk; $M --daemon; sleep 3
+fi
+echo "magisk: $($M -v 2>&1) / $($M -V 2>&1)"; cp -f /cache/magisk.log /data/local/tmp/magisk.log 2>/dev/null; chmod 644 /data/local/tmp/magisk.log 2>/dev/null
 while true; do
   $M --sqlite "REPLACE INTO settings (key,value) VALUES('root_access',3)" >/dev/null 2>&1
   for u in 2000 $(cmd package list packages -3 -U 2>/dev/null | sed -n 's/.*uid:\([0-9]*\).*/\1/p' | sort -u); do
@@ -256,8 +265,11 @@ RC
   cp /tmp/cp-rd.new "$RD" && ok "Đã gắn dịch vụ root tự động ($FMT) vào $SYS"
   A shell "rm -f $T/mb $T/rd.img $T/rd.cpio $T/rd.new $T/cpgrant.sh $T/cpgrant.rc"
   bash "$0" stop >/dev/null 2>&1; bash "$0" start >/dev/null 2>&1; sleep 25
-  A shell 'su -c id' 2>/dev/null | grep -q "uid=0" && ok "ROOT TỰ ĐỘNG: CHẠY ✓ (Shell + mọi app có root, không cần bấm)" \
-    || { err "Root tự động chưa chạy. Gỡ: cp '$RD.magisk' '$RD'"; A shell 'getprop init.svc.cpgrant; dmesg 2>/dev/null | grep -i cpgrant | tail -3'; } ;;
+  if A shell 'su -c id' 2>/dev/null | grep -q "uid=0"; then ok "ROOT TỰ ĐỘNG: CHẠY ✓ (Shell + mọi app có root, không cần bấm)"
+  else err "Root tự động chưa chạy. Thông tin dò lỗi:"
+    echo "   dịch vụ cpgrant: $(A shell getprop init.svc.cpgrant | tr -d '\r')"
+    A shell 'cat /data/local/tmp/cpgrant.log 2>/dev/null | head -8; echo ---; tail -15 /data/local/tmp/magisk.log 2>/dev/null' | tr -d '\r' | sed 's/^/   /'
+  fi ;;
 
 auto)
   # KIỂM TRA TẤT CẢ BẢN 1 LỆNH: với từng bản Android → tải, bật, root (Magisk), cấp root, báo cáo → bảng tổng kết

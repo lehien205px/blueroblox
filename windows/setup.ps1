@@ -10,12 +10,14 @@ $RAW = "https://raw.githubusercontent.com/lehien205px/blueroblox/main"   # thêm
 function Ok($m)  { Write-Host "  [OK] $m" -ForegroundColor Green }
 function Step($m){ Write-Host "`n== $m ==" -ForegroundColor Cyan }
 function Get($url, $out) {
-  $u = $url
-  if ($url -like "https://raw.githubusercontent.com/*") { $u = $url + "?t=" + [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() }
-  & curl.exe -fsSL -H "Cache-Control: no-cache" -o $out $u
-  if ($LASTEXITCODE -ne 0 -and $url -like "https://raw.githubusercontent.com/*") {      # dự phòng: api.github.com
+  # File của BlueRoblox: lấy qua api.github.com TRƯỚC (luôn là bản mới nhất — raw.githubusercontent hay trả bản cũ vài phút),
+  # api hết lượt (60 lần/giờ) thì dùng raw.githubusercontent
+  if ($url -like "https://raw.githubusercontent.com/lehien205px/blueroblox/main/*") {
     $api = $url -replace "https://raw.githubusercontent.com/lehien205px/blueroblox/main", "https://api.github.com/repos/lehien205px/blueroblox/contents"
-    & curl.exe -fsSL -H "Accept: application/vnd.github.raw" -o $out $api }
+    & curl.exe -fsSL -H "Accept: application/vnd.github.raw" -H "User-Agent: BlueRoblox-setup" -o $out $api
+    if ($LASTEXITCODE -eq 0) { return }
+    $url = $url + "?t=" + [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() }
+  & curl.exe -fsSL -H "Cache-Control: no-cache" -o $out $url
   if ($LASTEXITCODE -ne 0) { throw "Tải lỗi: $url" } }
 
 if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {

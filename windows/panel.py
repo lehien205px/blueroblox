@@ -518,7 +518,7 @@ Write-Host '[OK] Khong ngu, khong tat man hinh'
         log = os.path.join(LOGS, "setup.log")
         try: os.remove(log)
         except OSError: pass
-        run_admin(f"Set-Location C:\\\ncurl.exe -fsSL -H \"Cache-Control: no-cache\" -o C:\\blue\\setup.ps1 \"{RAW}/windows/setup.ps1?t={int(time.time())}\"\n& C:\\blue\\setup.ps1", log)
+        run_admin(f"Set-Location C:\\\ncurl.exe -fsSL -H \"Accept: application/vnd.github.raw\" -H \"User-Agent: BlueRoblox\" -o C:\\blue\\setup.ps1 \"https://api.github.com/repos/lehien205px/blueroblox/contents/windows/setup.ps1\"; if ($LASTEXITCODE -ne 0) {{ curl.exe -fsSL -o C:\\blue\\setup.ps1 \"{RAW}/windows/setup.ps1?t={int(time.time())}\" }}\n& C:\\blue\\setup.ps1", log)
         self.tail(log, "Cài đặt / Cập nhật")
 
     def set_key(self):
@@ -708,7 +708,7 @@ Write-Host '[OK] Tat Xbox Game DVR'
                 self.stop_all(); log = os.path.join(LOGS, "setup.log")
                 try: os.remove(log)
                 except OSError: pass
-                run_admin(f"Set-Location C:\\\ncurl.exe -fsSL -H \"Cache-Control: no-cache\" -o C:\\blue\\setup.ps1 \"{RAW}/windows/setup.ps1?t={int(time.time())}\"\n& C:\\blue\\setup.ps1", log)
+                run_admin(f"Set-Location C:\\\ncurl.exe -fsSL -H \"Accept: application/vnd.github.raw\" -H \"User-Agent: BlueRoblox\" -o C:\\blue\\setup.ps1 \"https://api.github.com/repos/lehien205px/blueroblox/contents/windows/setup.ps1\"; if ($LASTEXITCODE -ne 0) {{ curl.exe -fsSL -o C:\\blue\\setup.ps1 \"{RAW}/windows/setup.ps1?t={int(time.time())}\" }}\n& C:\\blue\\setup.ps1", log)
                 self.tail(log, "Cài đặt", 3600, wait=True)
             ok = os.path.isfile(os.path.join(B, "ws-scrcpy", "dist", "index.js"))
             step("1/6 Cài đặt phần mềm", ok, "" if ok else "cài chưa xong — xem tab Việc đang làm")

@@ -61,7 +61,7 @@ public class ControlActivity extends Activity {
     private Button veilBtn;
     private JSONObject phone = new JSONObject();
     private String id;
-    private String quality = "bal";
+    private String quality = "hd";
     private boolean full = false, gotVideo = false, landscapeDev = false;
     private int retries = 0;
     private SharedPreferences pref;
@@ -80,7 +80,9 @@ public class ControlActivity extends Activity {
         Ui.edgeToEdge(this);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         pref = getSharedPreferences("control", MODE_PRIVATE);
-        quality = pref.getString("q", "bal");
+        // Điện thoại: mặc định SIÊU NÉT (nét căng). Bản cũ đang lưu mức khác → chuyển lên Siêu nét 1 lần.
+        if (!pref.getBoolean("q_hd_v2", false)) pref.edit().putString("q", "hd").putBoolean("q_hd_v2", true).apply();
+        quality = pref.getString("q", "hd");
         id = getIntent().getStringExtra("id");
 
         LinearLayout root = Ui.col(this, 0);
@@ -277,7 +279,7 @@ public class ControlActivity extends Activity {
         showVeil(Ui.L("Đang kết nối máy…", "Connecting…"), true);
         Api.bg(() -> {
             String at = Api.token();
-            return Api.WEB + "/phone.html?id=" + URLEncoder.encode(id, "UTF-8") + "&embed=app#at=" + URLEncoder.encode(at, "UTF-8")
+            return Api.WEB + "/phone.html?id=" + URLEncoder.encode(id, "UTF-8") + "&embed=app&q=" + quality + "#at=" + URLEncoder.encode(at, "UTF-8")
                     + "&rt=" + URLEncoder.encode(Api.refresh, "UTF-8");
         }, url -> web.loadUrl(url), this::fail);
     }

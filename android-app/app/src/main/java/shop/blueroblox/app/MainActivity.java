@@ -98,293 +98,67 @@ public class MainActivity extends Activity {
         td.startTransition(220);
     }
 
-    // ---------------- XEM LỚN 1 MÁY: hình to, cập nhật nhanh (~2–3 hình/giây) — xem acc chạy mượt, bấm Điều khiển để vào máy ----------------
+    // ---------------- XEM LỚN 1 MÁY: VIDEO TRỰC TIẾP mượt như lúc điều khiển (chỉ xem, không bấm nhầm vào máy) ----------------
     private Dialog bigDlg = null;
+    @android.annotation.SuppressLint("SetJavaScriptEnabled")
     void openBig(JSONObject p) {
         final String pid = p.optString("id");
         LinearLayout root = Ui.col(this, 10);
         root.setBackgroundColor(Color.BLACK);
         root.setPadding(Ui.dp(10), Ui.dp(12), Ui.dp(10), Ui.dp(12));
         LinearLayout top = Ui.row(this, 10);
-        TextView title = Ui.text(this, p.optString("name", "Máy"), 16, Color.WHITE, true);
-        top.addView(title, Ui.weight(1));
-        TextView live = Ui.text(this, "● " + Ui.L("Trực tiếp", "Live"), 12, Ui.OK, true);
-        top.addView(live, Ui.wrap());
+        top.addView(Ui.text(this, p.optString("name", "Máy"), 16, Color.WHITE, true), Ui.weight(1));
+        top.addView(Ui.text(this, "● " + Ui.L("Trực tiếp · chỉ xem", "Live · view only"), 12, Ui.OK, true), Ui.wrap());
         TextView close = Ui.pill(this, "✕ " + Ui.L("Đóng", "Close"), Ui.SKY);
         top.addView(close, Ui.wrap());
         root.addView(top, Ui.fill());
-        final ImageView big = new ImageView(this);
-        big.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        Bitmap old = lastShot.get(pid);
-        if (old != null) big.setImageBitmap(old);
-        root.addView(big, new LinearLayout.LayoutParams(-1, 0, 1f));
+
+        FrameLayout box = new FrameLayout(this);
+        final android.webkit.WebView web = new android.webkit.WebView(this);
+        web.setBackgroundColor(Color.BLACK);
+        android.webkit.WebSettings ws = web.getSettings();
+        ws.setJavaScriptEnabled(true);
+        ws.setDomStorageEnabled(true);
+        ws.setMediaPlaybackRequiresUserGesture(false);
+        ws.setSupportZoom(false);
+        ws.setAllowFileAccess(false);
+        ws.setMixedContentMode(android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+        ws.setUserAgentString(ws.getUserAgentString() + " BlueRobloxApp/" + Api.version);
+        android.webkit.CookieManager.getInstance().setAcceptCookie(true);
+        android.webkit.CookieManager.getInstance().setAcceptThirdPartyCookies(web, true);
+        web.setWebChromeClient(new android.webkit.WebChromeClient());
+        web.setWebViewClient(new android.webkit.WebViewClient() {
+            @Override public boolean shouldOverrideUrlLoading(android.webkit.WebView v, android.webkit.WebResourceRequest r) {
+                String host = String.valueOf(r.getUrl().getHost());
+                return !(host.equals("blueroblox.shop") || host.equals("www.blueroblox.shop") || host.equals("phone.blueroblox.shop") || host.equals("fast.blueroblox.shop"));
+            }
+        });
+        box.addView(web, new FrameLayout.LayoutParams(-1, -1));
+        Bitmap old = lastShot.get(pid);                      // hình chụp gần nhất hiện tạm trong lúc video kết nối
+        final ImageView ph = new ImageView(this);
+        ph.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        if (old != null) ph.setImageBitmap(old);
+        box.addView(ph, new FrameLayout.LayoutParams(-1, -1));
+        View shield = new View(this);                        // lớp chặn chạm: chỉ xem, không bấm nhầm vào máy
+        shield.setOnTouchListener((v, e) -> true);
+        box.addView(shield, new FrameLayout.LayoutParams(-1, -1));
+        root.addView(box, new LinearLayout.LayoutParams(-1, 0, 1f));
+
         Button ctl = Ui.button(this, "▶ " + Ui.L("Điều khiển máy này", "Control this phone"), Ui.PRIMARY);
         root.addView(ctl, Ui.fill());
         final Dialog d = new Dialog(this, android.R.style.Theme_Black_NoTitleBar_Fullscreen);
         d.setContentView(root);
-        final boolean[] on = {true}, busy = {false};
-        final Runnable[] tick = new Runnable[1];
-        tick[0] = () -> {
-            if (!on[0] || !resumed) return;
-            if (!busy[0]) {
-                busy[0] = true;
-                final long t0 = System.currentTimeMillis();
-                Api.bg(() -> {
-                    byte[] b = Api.cpBytes(java.net.URLEncoder.encode(pid, "UTF-8") + "/shot?w=540");
-                    return BitmapFactory.decodeByteArray(b, 0, b.length);
-                }, bmp -> {
-                    busy[0] = false;
-                    if (bmp != null && on[0]) { showFrame(big, bmp); lastShot.put(pid, bmp); }
-                    if (on[0]) h.postDelayed(tick[0], Math.max(0, 400 - (System.currentTimeMillis() - t0)));
-                }, m -> { busy[0] = false; if (on[0]) h.postDelayed(tick[0], 1500); });
-            }
-        };
         close.setOnClickListener(v -> d.dismiss());
         ctl.setOnClickListener(v -> { d.dismiss(); startActivity(new Intent(this, ControlActivity.class).putExtra("id", pid)); });
-        d.setOnDismissListener(x -> { on[0] = false; h.removeCallbacks(tick[0]); if (bigDlg == d) bigDlg = null; });
+        d.setOnDismissListener(x -> { try { web.loadUrl("about:blank"); web.destroy(); } catch (Exception ignored) { } if (bigDlg == d) bigDlg = null; });
         bigDlg = d;
         d.show();
-        h.post(tick[0]);
-    }
-
-    JSONArray phones = new JSONArray();
-    JSONObject prof = new JSONObject(), price = new JSONObject(), status = new JSONObject();
-
-    // lựa chọn khi thuê máy
-    int sRam = 2, sCpu = 2, sDays = 7, sFps = 30, sQty = 1;
-    String sRes = "720x1280", sAnd = "";
-    boolean sFree = false;
-
-    /** Phiên bản Android admin đang bán (Android 12 lên đầu — chạy ổn nhất). */
-    java.util.List<String> andList() {
-        java.util.List<String> l = new java.util.ArrayList<>();
-        for (String v : price.optString("android_versions", "11").split(",")) { v = v.trim(); if (v.matches("\\d{1,2}") && !l.contains(v)) l.add(v); }
-        if (l.isEmpty()) l.add("11");
-        if (l.remove("12")) l.add(0, "12");
-        return l;
-    }
-    boolean isAdmin() { return "admin".equals(prof.optString("role")); }
-    /** Ưu đãi miễn phí đang mở (admin bật + chưa hết giờ). */
-    boolean freeLive() {
-        if (!price.optBoolean("free_on", false)) return false;
-        String u = price.optString("free_until", "");
-        if (u.isEmpty() || "null".equals(u)) return true;
-        if (android.os.Build.VERSION.SDK_INT < 26) return true;
-        try { return java.time.OffsetDateTime.parse(u).toInstant().toEpochMilli() > System.currentTimeMillis(); } catch (Exception e) { return true; }
-    }
-    /** Số máy của chính tài khoản đang có (đang tạo / chạy / tạm dừng). */
-    int myLive() {
-        int n = 0;
-        for (int i = 0; i < phones.length(); i++) {
-            JSONObject p = phones.optJSONObject(i); if (p == null || p.optBoolean("shared", false)) continue;
-            if (java.util.Arrays.asList("pending", "creating", "active", "expired", "cancelling").contains(p.optString("status"))) n++;
-        }
-        return n;
-    }
-    int maxPerUser() { return isAdmin() ? 0 : price.optInt("max_per_user", 0); }
-
-    @Override
-    protected void onCreate(Bundle b) {
-        super.onCreate(b);
-        Ui.init(this);
-        if (!Api.loggedIn()) { toLogin(); return; }
-        Ui.edgeToEdge(this);
-
-        LinearLayout root = Ui.col(this, 0);
-        root.setBackground(Ui.bubbles(this));
-
-        // Đầu trang: cá voi Cloud Blue + tên + số dư + nút Sáng/Tối
-        LinearLayout top = Ui.row(this, 10);
-        top.setPadding(Ui.dp(14), Ui.dp(10), Ui.dp(14), Ui.dp(10));
-        top.setBackground(Ui.round(Ui.LIGHT ? Color.argb(246, 243, 247, 252) : Color.argb(246, 7, 18, 38), 0, 0));
-        top.addView(Ui.whale(this, 34), new LinearLayout.LayoutParams(Ui.dp(50), Ui.dp(34)));
-        SpannableString bn = new SpannableString("BlueRoblox");
-        bn.setSpan(new ForegroundColorSpan(Ui.LIGHT ? Ui.BLUE : Color.rgb(90, 168, 255)), 0, 4, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-        TextView brand = Ui.text(this, "", 19, Ui.FG, true);
-        brand.setText(bn);
-        brand.setSingleLine(true);
-        top.addView(brand, Ui.weight(1));
-        balTop = Ui.pill(this, "…", Ui.SKY);
-        balTop.setOnClickListener(v -> openTopup());
-        top.addView(balTop, Ui.wrap());
-        TextView th = Ui.text(this, Ui.LIGHT ? "🌙" : "☀️", 17, Ui.FG, false);
-        th.setGravity(Gravity.CENTER);
-        th.setContentDescription(Ui.L("Đổi chế độ Sáng / Tối", "Switch light / dark mode"));
-        Ui.ripple(th, Ui.PANEL, 99, Ui.RING);
-        th.setOnClickListener(v -> { Ui.setLight(this, !Ui.LIGHT); recreate(); });
-        top.addView(th, new LinearLayout.LayoutParams(Ui.dp(40), Ui.dp(40)));
-        root.addView(top, Ui.fill());
-
-        content = new FrameLayout(this);
-        root.addView(content, new LinearLayout.LayoutParams(-1, 0, 1));
-
-        // Thanh điều hướng dưới
-        LinearLayout bar = Ui.row(this, 0);
-        bar.setBackground(Ui.ringed(Ui.PANEL, 0));
-        bar.setPadding(Ui.dp(6), Ui.dp(4), Ui.dp(6), Ui.dp(4));
-        String[][] items = {{"📱", Ui.L("Máy của tôi", "My phones")}, {"➕", Ui.L("Thuê máy", "Rent")}, {"👤", Ui.L("Tài khoản", "Account")}};
-        for (int i = 0; i < 3; i++) {
-            final int t = i;
-            TextView n = Ui.text(this, items[i][0] + "\n" + items[i][1], 12, Ui.MUTED, true);
-            n.setGravity(Gravity.CENTER);
-            n.setPadding(0, Ui.dp(8), 0, Ui.dp(8));
-            n.setOnClickListener(v -> show(t));
-            Ui.ripple(n, Color.TRANSPARENT, 14, 0);
-            nav[i] = n;
-            bar.addView(n, Ui.weight(1));
-        }
-        root.addView(bar, Ui.fill());
-        Ui.insets(root, true, true);
-        setContentView(root);
-
-        askNotifyPermission();
-        Updater.check(this, false);                 // có bản app mới → hiện thông báo cập nhật ngay trong app
-        show(getIntent().getIntExtra("tab", 0));
-        refresh();
-    }
-
-    @Override protected void onResume() { super.onResume(); resumed = true; if (Api.loggedIn()) refresh(); Updater.check(this, false); h.postDelayed(shotTick, 800); }
-    @Override protected void onPause() { super.onPause(); resumed = false; h.removeCallbacks(poll); h.removeCallbacks(shotTick); }
-
-    private void toLogin() {
-        startActivity(new Intent(this, LoginActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK));
-        finish();
-    }
-
-    private void askNotifyPermission() {
-        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
-            requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 7);
-    }
-
-    // ---------------- Tải dữ liệu ----------------
-    void refresh() {
-        h.removeCallbacks(poll);
-        Api.<Object[]>bg(() -> {
-            JSONObject[] o = {Api.profile(), Api.pricing(), Api.status()};
-            JSONArray ps = Api.phones();
-            return new Object[]{o, ps};
-        }, r -> {
-            JSONObject[] o = (JSONObject[]) r[0];
-            prof = o[0]; price = o[1]; status = o[2]; phones = (JSONArray) r[1];
-            balTop.setText("💰 " + Ui.vnd(prof.optDouble("balance", 0)));
-            ExpiryAlarm.schedule(this, phones);
-            if (tab == 0) renderPhones();
-            else if (tab == 2) renderAccount();
-            else if (!loaded) renderRent();          // lần đầu: vẽ lại bảng thuê với giá và giới hạn thật
-            loaded = true;
-            boolean pending = false;
-            for (int i = 0; i < phones.length(); i++) if ("pending".equals(phones.optJSONObject(i).optString("status"))) pending = true;
-            h.postDelayed(poll, pending ? 8000 : 30000);
-        }, m -> {
-            if (!Api.loggedIn()) { toLogin(); return; }
-            Ui.toast(this, m);
-            h.postDelayed(poll, 30000);
-        });
-    }
-
-    void show(int t) {
-        tab = t;
-        for (int i = 0; i < 3; i++) {
-            nav[i].setTextColor(i == t ? Ui.SKY : Ui.MUTED);
-            nav[i].setBackground(i == t ? Ui.round(Ui.LIGHT ? Color.argb(28, 43, 110, 240) : Color.argb(40, 90, 175, 255), 14, 0) : null);
-        }
-        if (t == 0) renderPhones(); else if (t == 1) renderRent(); else renderAccount();
-    }
-
-    private ScrollView page(LinearLayout body) {
-        body.setPadding(Ui.dp(16), Ui.dp(6), Ui.dp(16), Ui.dp(24));
-        ScrollView sv = Ui.scroll(this, body);
-        content.removeAllViews();
-        content.addView(sv, new FrameLayout.LayoutParams(-1, -1));
-        return sv;
-    }
-
-    // ---------------- Thời gian / giá ----------------
-    static long parseTime(String s) {
-        if (s == null || s.isEmpty() || s.equals("null")) return 0;
-        try {
-            String t = s.replace(" ", "T").replaceAll("\\.\\d+", "");
-            if (t.endsWith("Z")) t = t.substring(0, t.length() - 1) + "+00:00";
-            if (t.matches(".*[+-]\\d\\d$")) t = t + ":00";
-            Date d = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.US).parse(t);
-            return d == null ? 0 : d.getTime();
-        } catch (Exception e) { return 0; }
-    }
-
-    static String fdate(long ms) { return new SimpleDateFormat("HH:mm dd/MM/yyyy", Locale.getDefault()).format(new Date(ms)); }
-
-    static String left(long ms) {
-        long d = ms - System.currentTimeMillis();
-        if (d <= 0) return Ui.L("Đã hết hạn", "Expired");
-        long m = d / 60000, hh = m / 60, dd = hh / 24;
-        if (dd >= 1) return Ui.L("Còn " + dd + " ngày " + (hh % 24) + " giờ", dd + "d " + (hh % 24) + "h left");
-        if (hh >= 1) return Ui.L("Còn " + hh + " giờ " + (m % 60) + " phút", hh + "h " + (m % 60) + "m left");
-        return Ui.L("Còn " + m + " phút", m + " min left");
-    }
-
-    boolean isCtv() { return "approved".equals(prof.optString("ctv_status")) && prof.optDouble("ctv_discount", 0) > 0; }
-    double ctv(double v) { return isCtv() ? Math.round(v * (100 - prof.optDouble("ctv_discount", 0)) / 100) : v; }
-    double perDay(double ram, double cpu) { return ram * price.optDouble("price_ram_gb_day", 2500) + cpu * price.optDouble("price_cpu_day", 2000); }
-
-    static boolean locked(JSONObject p) {
-        if (!p.optBoolean("locked", false)) return false;
-        long u = parseTime(p.optString("locked_until", ""));
-        return u == 0 || u > System.currentTimeMillis();
-    }
-
-    // ---------------- TAB 1: Máy của tôi ----------------
-    void renderPhones() {
-        shots.clear();
-        LinearLayout body = Ui.col(this, 14);
-        if (status.optBoolean("maint", false)) {
-            LinearLayout m = Ui.card(this);
-            m.setBackground(Ui.round(Color.argb(30, 255, 200, 97), 18, Color.argb(120, 255, 200, 97)));
-            m.addView(Ui.text(this, "🛠 " + Ui.L("Đang bảo trì", "Under maintenance"), 15, Ui.WAIT, true));
-            String msg = status.optString("maint_msg", "");
-            m.addView(Ui.muted(this, msg.isEmpty() || msg.equals("null") ? Ui.L("Máy của bạn vẫn được giữ, không bị tính hết hạn trong lúc bảo trì.", "Your phones are kept during maintenance.") : msg));
-            body.addView(m, Ui.fill());
-        }
-        LinearLayout head = Ui.row(this, 10);
-        head.addView(Ui.h1(this, Ui.L("Máy của tôi", "My phones")), Ui.weight(1));
-        if (phones.length() > 0) {
-            TextView all = Ui.pill(this, "▦ " + Ui.L("Xem tất cả", "View all"), Ui.OK);
-            all.setOnClickListener(v -> openGrid());
-            head.addView(all, Ui.wrap());
-        }
-        TextView rf = Ui.pill(this, "⟳ " + Ui.L("Làm mới", "Refresh"), Ui.SKY);
-        rf.setOnClickListener(v -> { Ui.toast(this, Ui.L("Đang làm mới…", "Refreshing…")); refresh(); });
-        head.addView(rf, Ui.wrap());
-        body.addView(head, Ui.fill());
-
-        // Nhập mã chia sẻ / chuyển nhượng
-        LinearLayout cr = Ui.row(this, 8);
-        EditText code = Ui.input(this, Ui.L("🔑 Có mã chia sẻ? Nhập vào đây", "🔑 Have a share code? Enter it"), InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS);
-        cr.addView(code, Ui.weight(1));
-        Button cb = Ui.button(this, Ui.L("Nhập mã", "Redeem"), Ui.GHOST);
-        cb.setOnClickListener(v -> claim(code, cb));
-        cr.addView(cb, Ui.wrap());
-        body.addView(cr, Ui.fill());
-
-        if (phones.length() == 0) {
-            LinearLayout e = Ui.card(this);
-            e.setGravity(Gravity.CENTER_HORIZONTAL);
-            TextView ic = Ui.text(this, "📱", 44, Ui.FG, false);
-            ic.setGravity(Gravity.CENTER);
-            e.addView(ic, Ui.fill());
-            TextView t = Ui.h2(this, Ui.L("Bạn chưa thuê máy nào", "You have no phones yet"));
-            t.setGravity(Gravity.CENTER);
-            e.addView(t, Ui.fill());
-            TextView d = Ui.muted(this, Ui.L("Chọn RAM, CPU, số ngày — máy Android sẵn sàng sau khoảng 2–3 phút.", "Pick RAM, CPU and days — your Android phone is ready in 2–3 minutes."));
-            d.setGravity(Gravity.CENTER);
-            e.addView(d, Ui.fill());
-            Button go = Ui.button(this, Ui.L("Thuê máy ngay", "Rent a phone"), Ui.PRIMARY);
-            go.setOnClickListener(v -> show(1));
-            e.addView(go, Ui.fill());
-            body.addView(e, Ui.fill());
-        }
-        for (int i = 0; i < phones.length(); i++) body.addView(phoneCard(phones.optJSONObject(i)), Ui.fill());
-        page(body);
-        h.removeCallbacks(shotTick); h.postDelayed(shotTick, 300);
+        Api.bg(() -> {
+            String at = Api.token();
+            return Api.WEB + "/phone.html?id=" + java.net.URLEncoder.encode(pid, "UTF-8") + "&embed=app&q=bal#at=" + java.net.URLEncoder.encode(at, "UTF-8")
+                    + "&rt=" + java.net.URLEncoder.encode(Api.refresh, "UTF-8");
+        }, url -> { if (bigDlg == d) web.loadUrl(url); }, m -> Ui.toast(this, m));
+        h.postDelayed(() -> ph.animate().alpha(0f).setDuration(400).start(), 3500);   // video lên → ẩn hình chụp
     }
 
     // ---------------- XEM TẤT CẢ MÁY: lưới màn hình trực tiếp của mọi máy (khách có nhiều máy theo dõi 1 lần) ----------------

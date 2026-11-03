@@ -61,7 +61,7 @@ public class ControlActivity extends Activity {
     private Button veilBtn;
     private JSONObject phone = new JSONObject();
     private String id;
-    private String quality = "hd";
+    private String quality = "bal";
     private boolean full = false, gotVideo = false, landscapeDev = false;
     private int retries = 0;
     private SharedPreferences pref;
@@ -80,9 +80,10 @@ public class ControlActivity extends Activity {
         Ui.edgeToEdge(this);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         pref = getSharedPreferences("control", MODE_PRIVATE);
-        // Điện thoại: mặc định SIÊU NÉT (nét căng). Bản cũ đang lưu mức khác → chuyển lên Siêu nét 1 lần.
-        if (!pref.getBoolean("q_hd_v2", false)) pref.edit().putString("q", "hd").putBoolean("q_hd_v2", true).apply();
-        quality = pref.getString("q", "hd");
+        // Điện thoại: mặc định ÍT TRỄ (mượt, bấm ăn ngay — Siêu nét 8 Mbps/60 FPS làm điện thoại & 4G nghẹn → bấm không nổi).
+        // Bản cũ đang ép Siêu nét → chuyển về Ít trễ 1 lần; khách muốn nét hơn tự chọn Siêu nét.
+        if (!pref.getBoolean("q_bal_v3", false)) pref.edit().putString("q", "bal").putBoolean("q_bal_v3", true).apply();
+        quality = pref.getString("q", "bal");
         id = getIntent().getStringExtra("id");
 
         LinearLayout root = Ui.col(this, 0);

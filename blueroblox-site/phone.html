@@ -769,6 +769,7 @@ window.cpApp = {
   paste(t) { return pasteToPhone(String(t || "")); },
   copyOut() { return main.cmd("clipget"); },
   open(id) { const p = phones.find(x => x.id === id); if (p) openPhone(p); },
+  act(n) { try { if (cur && ACT[n]) ACT[n](); } catch (e) { toast(e.message, 1); } },   // app Android mở các bảng chức năng của web (Kho, Macro, FPS…)
 };
 
 /* ---------- 1 máy ---------- */

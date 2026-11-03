@@ -273,7 +273,7 @@ def run_job(jid, fn):
 # ---------- Biểu tượng "Clone 1/2/3/4" trên màn hình chính máy MEmu (màn hình chính MEmu không có tab Công việc) ----------
 BR_PKG = "shop.blueroblox.app"
 def clone_icons(port):
-    """Cài app BlueRoblox (có sẵn ô mở clone) vào máy, rồi bật đúng số biểu tượng Clone N theo số bản clone đang có."""
+    """Cài app BlueRoblox (có ô mở clone) vào máy — CHỈ cho người dùng chính, rồi bật đúng số biểu tượng Clone N + làm mới màn hình chính."""
     try:
         apk = os.path.join(HOME, "blueroblox-cloud.apk")
         has = "CloneLaunch" in out(shell(port, f"dumpsys package {BR_PKG} | grep -m1 CloneLaunch", 20))
@@ -281,14 +281,18 @@ def clone_icons(port):
             if not os.path.isfile(apk) or time.time() - os.path.getmtime(apk) > 600:
                 urllib.request.urlretrieve("https://blueroblox.shop/download/blueroblox-cloud.apk?t=" + str(int(time.time())), apk + ".part")
                 os.replace(apk + ".part", apk)
-            adb(port, ["install", "-r", apk], timeout=300)
+            adb(port, ["install", "-r", "--user", "0", apk], timeout=300)
             shell(port, f"pm disable {BR_PKG}/.LoginActivity >/dev/null 2>&1 || su -c 'pm disable {BR_PKG}/.LoginActivity' >/dev/null 2>&1", 20)
         LU = "pm list users | sed -n 's/.*UserInfo{\\([0-9]*\\):CloneTab[0-9]*:.*/\\1/p'"
         n = 0
         for u in out(shell(port, LU, 20)).split():
-            if "package:" in out(shell(port, f"pm list packages -3 --user {u}", 20)): n += 1
+            shell(port, f"pm uninstall --user {u} {BR_PKG} >/dev/null 2>&1", 30)          # app BlueRoblox không nằm trong bản clone
+            if any(l.startswith("package:") and l.split(":", 1)[1].strip() != BR_PKG
+                   for l in out(shell(port, f"pm list packages -3 --user {u}", 20)).splitlines()): n += 1
         cmds = "; ".join(f"pm {'enable' if i <= n else 'disable'} {BR_PKG}/.Clone{i} >/dev/null 2>&1" for i in range(1, 5))
-        shell(port, cmds, 30)
+        # màn hình chính MEmu chỉ quét app lúc mở → khởi động lại màn hình chính để hiện biểu tượng mới
+        shell(port, cmds + "; L=$(cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.HOME | tail -n 1 | cut -d/ -f1); "
+                    "[ -n \"$L\" ] && am force-stop $L; am start -a android.intent.action.MAIN -c android.intent.category.HOME >/dev/null 2>&1", 40)
         return n
     except Exception as e:
         log("clone_icons lỗi:", repr(e)); return -1
@@ -1009,7 +1013,9 @@ class H(BaseHTTPRequestHandler):
                 cnt = {}
                 for nm, u in rows:
                     for l in out(shell(port, f"pm list packages -3 --user {u}", 30)).splitlines():
-                        if l.startswith("package:"): k = l.split(":", 1)[1].strip(); cnt[k] = cnt.get(k, 0) + 1
+                        if l.startswith("package:"):
+                            k = l.split(":", 1)[1].strip()
+                            if k != BR_PKG: cnt[k] = cnt.get(k, 0) + 1
                 if int(port) >= 21500 and cnt: threading.Thread(target=clone_icons, args=(port,), daemon=True).start()   # máy cũ đã clone → thêm biểu tượng
                 return self.send_json(200, {"profile": rows[0][1] if rows else None, "cloned": sorted(cnt), "counts": cnt, "max": CLONE_MAX})
             b = self.jbody(); pkg = str(b.get("pkg") or "")
@@ -1081,7 +1087,7 @@ class H(BaseHTTPRequestHandler):
 
         if act == "apps":
             r = shell(port, "pm list packages -3", 30)
-            pk = sorted(l.split(":", 1)[1].strip() for l in out(r).splitlines() if l.startswith("package:"))
+            pk = sorted(l.split(":", 1)[1].strip() for l in out(r).splitlines() if l.startswith("package:") and l.split(":", 1)[1].strip() != BR_PKG)
             return self.send_json(200, {"apps": pk})
 
         if act in ("launch", "stop", "uninstall", "clear") and self.command == "POST":

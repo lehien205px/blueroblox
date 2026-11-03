@@ -399,14 +399,85 @@ public class MainActivity extends Activity {
         d.show();
     }
 
+    /** Khách tự nâng RAM / CPU: trả thêm cho phần thời gian còn lại (giá do máy chủ tính, có giảm CTV). */
+    void upgrade(JSONObject p) {
+        final int R0 = p.optInt("ram"), C0 = p.optInt("cpu");
+        final int maxR = price.optInt("max_ram", 16), maxC = price.optInt("max_cpu", 8);
+        final int[] nr = {R0}, nc = {C0};
+        final long[] cost = {0};
+        final boolean gpu = p.optInt("port") >= 5600 && p.optInt("port") <= 5699;
+        LinearLayout c = Ui.col(this, 12);
+        c.addView(Ui.muted(this, Ui.L("Hiện tại: ", "Now: ") + R0 + "GB RAM · " + C0 + Ui.L(" nhân · ", " cores · ") + left(parseTime(p.optString("expires_at")))));
+        TextView lr = Ui.text(this, "RAM", 14, Ui.FG, true); c.addView(lr);
+        Ui.Wrap wr = new Ui.Wrap(this, 8); c.addView(wr, Ui.fill());
+        TextView lc = Ui.text(this, "CPU", 14, Ui.FG, true); c.addView(lc);
+        Ui.Wrap wc = new Ui.Wrap(this, 8); c.addView(wc, Ui.fill());
+        TextView sum = Ui.text(this, "", 14, Ui.FG, false);
+        LinearLayout sb = Ui.card(this); sb.addView(sum); c.addView(sb, Ui.fill());
+        c.addView(Ui.muted(this, gpu
+                ? Ui.L("Máy sẽ tự khởi động lại khoảng 1 phút để nhận cấu hình mới — app và dữ liệu giữ nguyên.", "The phone restarts (~1 min) to apply — apps and data stay.")
+                : Ui.L("Máy không khởi động lại, app và dữ liệu giữ nguyên — tài nguyên mới có sau khoảng 30 giây.", "No restart, apps and data stay — applies in ~30s.")));
+        Button ok = Ui.button(this, Ui.L("Nâng cấp ngay", "Upgrade now"), Ui.PRIMARY);
+        c.addView(ok, Ui.fill());
+        Runnable[] draw = new Runnable[1];
+        Runnable quote = () -> {
+            if (nr[0] == R0 && nc[0] == C0) { cost[0] = 0; draw[0].run(); return; }
+            final int qr = nr[0], qc = nc[0];
+            Api.bg(() -> Api.rpc("cloudphone_upgrade_quote", new JSONObject().put("p_id", p.optString("id")).put("p_ram", qr).put("p_cpu", qc)),
+                    r -> { if (qr == nr[0] && qc == nc[0]) { try { cost[0] = Long.parseLong(String.valueOf(r).replaceAll("[^0-9]", "")); } catch (Exception e) { cost[0] = 0; } draw[0].run(); } },
+                    m -> { sum.setText(m.contains("upgrade") ? Ui.L("Máy chủ chưa cập nhật tính năng nâng cấp.", "Upgrade isn't available yet.") : m); });
+        };
+        draw[0] = () -> {
+            for (int i = 0; i < wr.getChildCount(); i++) Ui.setChip((TextView) wr.getChildAt(i), (int) wr.getChildAt(i).getTag() == nr[0]);
+            for (int i = 0; i < wc.getChildCount(); i++) Ui.setChip((TextView) wc.getChildAt(i), (int) wc.getChildAt(i).getTag() == nc[0]);
+            boolean same = nr[0] == R0 && nc[0] == C0;
+            double bal = prof.optDouble("balance", 0);
+            sum.setText(same ? Ui.L("Chọn RAM hoặc CPU muốn nâng.", "Pick more RAM or CPU.")
+                    : Ui.L("Cấu hình mới: ", "New: ") + nr[0] + "GB · " + nc[0] + Ui.L(" nhân", " cores")
+                    + "\n" + Ui.L("Trả thêm cho thời gian còn lại: ", "Pay for the remaining time: ") + Ui.vnd(cost[0])
+                    + "\n" + Ui.L("Số dư: ", "Balance: ") + Ui.vnd(bal));
+            ok.setEnabled(!same);
+            ok.setText(!same && bal < cost[0] ? Ui.L("Nạp thêm tiền", "Top up") : Ui.L("Nâng cấp ngay", "Upgrade now"));
+        };
+        int[] rams = {2, 3, 4, 6, 8, 10, 12, 16, 24, 32, 48, 64}, cpus = {2, 3, 4, 6, 8, 10, 12, 16, 24, 32};
+        java.util.TreeSet<Integer> rs = new java.util.TreeSet<>(), cs = new java.util.TreeSet<>();
+        rs.add(R0); for (int v : rams) if (v > R0 && v <= maxR) rs.add(v); if (maxR > R0) rs.add(maxR);
+        cs.add(C0); for (int v : cpus) if (v > C0 && v <= maxC) cs.add(v); if (maxC > C0) cs.add(maxC);
+        for (int v : rs) { TextView ch = Ui.chip(this, (v == R0 ? Ui.L("Giữ ", "Keep ") : "") + v + "GB", false); ch.setTag(v);
+            ch.setOnClickListener(x -> { nr[0] = (int) x.getTag(); draw[0].run(); quote.run(); }); wr.addView(ch); }
+        for (int v : cs) { TextView ch = Ui.chip(this, (v == C0 ? Ui.L("Giữ ", "Keep ") : "") + v + Ui.L(" nhân", " cores"), false); ch.setTag(v);
+            ch.setOnClickListener(x -> { nc[0] = (int) x.getTag(); draw[0].run(); quote.run(); }); wc.addView(ch); }
+        Dialog d = Ui.sheet(this, "⬆️ " + Ui.L("Nâng cấp ", "Upgrade ") + p.optString("name"), c);
+        ok.setOnClickListener(v -> {
+            if (prof.optDouble("balance", 0) < cost[0]) { d.dismiss(); openTopup(); return; }
+            ok.setEnabled(false);
+            Api.bg(() -> Api.rpc("cloudphone_upgrade", new JSONObject().put("p_id", p.optString("id")).put("p_ram", nr[0]).put("p_cpu", nc[0])), r -> {
+                d.dismiss();
+                Ui.toast(this, Ui.L("Đã nâng lên " + nr[0] + "GB · " + nc[0] + " nhân — máy nhận cấu hình mới trong giây lát.", "Upgraded to " + nr[0] + "GB · " + nc[0] + " cores."));
+                refresh(); h.postDelayed(this::refresh, 5000);
+            }, m -> {
+                ok.setEnabled(true);
+                Ui.toast(this, m.contains("UPGRADE_PENDING") ? Ui.L("Máy đang nâng cấp, đợi chút rồi thử lại.", "An upgrade is already in progress.")
+                        : m.contains("FREE_NO_UPGRADE") ? Ui.L("Máy miễn phí không nâng cấp được.", "Free phones can't be upgraded.")
+                        : m.contains("PHONE_NOT_ACTIVE") ? Ui.L("Máy phải đang chạy mới nâng cấp được.", "The phone must be running.") : m);
+            });
+        });
+        draw[0].run();
+        d.show();
+    }
+
     void moreMenu(JSONObject p) {
         LinearLayout c = Ui.col(this, 10);
         Button sh = Ui.button(this, "👥 " + Ui.L("Chia sẻ / chuyển nhượng", "Share / transfer"), Ui.GHOST);
         Button rn = Ui.button(this, "✏️ " + Ui.L("Đổi tên", "Rename"), Ui.GHOST);
+        Button up = Ui.button(this, "⬆️ " + Ui.L("Nâng cấp RAM / CPU", "Upgrade RAM / CPU"), Ui.GHOST);
+        boolean canUp = "active".equals(p.optString("status")) && !locked(p) && !p.optBoolean("is_free") && !p.optBoolean("shared");
+        up.setEnabled(canUp); up.setAlpha(canUp ? 1f : .45f);
         boolean canShare = ("active".equals(p.optString("status")) || "pending".equals(p.optString("status"))) && !locked(p);
         sh.setEnabled(canShare); sh.setAlpha(canShare ? 1f : .45f);
-        c.addView(sh, Ui.fill()); c.addView(rn, Ui.fill());
+        c.addView(up, Ui.fill()); c.addView(sh, Ui.fill()); c.addView(rn, Ui.fill());
         Dialog d = Ui.sheet(this, p.optString("name"), c);
+        up.setOnClickListener(v -> { d.dismiss(); upgrade(p); });
         sh.setOnClickListener(v -> { d.dismiss(); share(p); });
         rn.setOnClickListener(v -> { d.dismiss(); rename(p); });
         d.show();

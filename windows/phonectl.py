@@ -507,6 +507,32 @@ def cmd_list(a):
     for p in st["phones"]:
         i = IDX(p, v); print(f"{p['name']:<16} #{'?' if i is None else i:<3} cổng {p['port']:<6} {p['ram']}G/{p['cpu']}  hết hạn {fmt(parse_dt(p['expires']))}  {'chạy' if is_running(p['name'], p, v) else 'tắt'}")
 
+def cmd_bootall(a):
+    """Sau khi Windows khởi động lại: bật lần lượt mọi máy khách CÒN HẠN đang tắt → chờ Android lên → nối điều khiển."""
+    st = load(); v = vms(); todo = []
+    for p in st["phones"]:
+        if parse_dt(p["expires"]) < now(): continue
+        if IDX(p, v) is None: print(f"⚠ {p['name']}: không còn trong MEmu (bấm ♻ Làm mới máy khách)"); continue
+        if is_running(p["name"], p, v): adb_connect(p["port"]); print(f"✓ {p['name']}: đang chạy"); continue
+        todo.append(p)
+    print(f"Cần bật {len(todo)} máy khách…", flush=True); bad = 0
+    for p in todo:
+        print(f"▶ Bật {p['name']}…", flush=True)
+        r = start_phone(p)
+        if _start_failed(r): print(f"✗ {p['name']}: MEmu không bật được"); bad += 1; continue
+        ok = False; t0 = time.time()
+        while time.time() - t0 < BOOT_WAIT:
+            adb_connect(p["port"])
+            if booted(p["port"]): ok = True; break
+            time.sleep(3)
+        if ok:
+            tune(p["name"], p["port"]); grant_perms(p["name"])
+            try: hide_window(p["name"])
+            except Exception: pass
+        print(f"✅ {p['name']}: sẵn sàng" if ok else f"✗ {p['name']}: Android chưa lên sau {BOOT_WAIT // 60} phút"); bad += 0 if ok else 1
+    print(f"BOOTALL xong: {len(todo) - bad}/{len(todo)} máy bật thành công" + ("" if not bad else f", {bad} máy lỗi"))
+    if bad: sys.exit(6)
+
 def cmd_noop(a): print("(bản Windows: không cần lệnh này)")
 def cmd_render(a):
     """Đổi chế độ vẽ của 1 máy: opengl | directx (khởi động lại máy ~1 phút)."""
@@ -565,7 +591,7 @@ def main():
     wp = s.add_parser("wallpaper"); wp.add_argument("name", nargs="?", default=""); wp.add_argument("--all", action="store_true"); wp.add_argument("--force", action="store_true"); wp.set_defaults(f=cmd_wallpaper)
     tp = s.add_parser("template"); tp.add_argument("name", nargs="?", default=""); tp.add_argument("--apply", action="store_true"); tp.set_defaults(f=cmd_template)
     hd = s.add_parser("hide"); hd.add_argument("name", nargs="?", default=""); hd.set_defaults(f=cmd_hide)
-    for nm, fn in (("connect-all", cmd_connect_all), ("reap", cmd_reap), ("perms", cmd_perms), ("capacity", cmd_capacity), ("list", cmd_list),
+    for nm, fn in (("bootall", cmd_bootall), ("connect-all", cmd_connect_all), ("reap", cmd_reap), ("perms", cmd_perms), ("capacity", cmd_capacity), ("list", cmd_list),
                    ("memfix", cmd_noop), ("boost", cmd_noop), ("gpuinfo", cmd_noop)):
         s.add_parser(nm).set_defaults(f=fn)
     a = ap.parse_args(); a.f(a)

@@ -113,6 +113,9 @@ class App:
         tk.Label(top, text="🐋 BlueRoblox", fg=BLUE, bg=BG, font=("Segoe UI", 18, "bold")).pack(side="left")
         tk.Label(top, text="  máy chủ Windows · MEmu", fg=MUTED, bg=BG, font=("Segoe UI", 11)).pack(side="left", pady=(6, 0))
         self.adm = tk.Label(top, text="", bg=BG, font=("Segoe UI", 10)); self.adm.pack(side="right")
+        # dòng tổng: đủ đèn xanh = OK
+        self.banner = tk.Label(r, text="⏳ Đang kiểm tra…", fg="#1a1300", bg=WARN, font=("Segoe UI", 13, "bold"), anchor="w", padx=14, pady=6)
+        self.banner.pack(fill="x", padx=18, pady=(0, 6)); self.state = {}; self.booting = False
         # đèn trạng thái
         self.lights = {}
         grid = tk.Frame(r, bg=BG); grid.pack(fill="x", padx=14)
@@ -163,7 +166,7 @@ class App:
         r.after(150, self._drain)
         threading.Thread(target=self._checker, daemon=True).start()
         r.protocol("WM_DELETE_WINDOW", self.on_close)
-        if auto: r.after(1500, self.start_all)
+        if auto: r.after(1500, self.boot_auto)          # Windows khởi động lại → tự bật A→Z
 
     # ---------- nhật ký ----------
     def say(self, tab, line): self.q.put((tab, line))
@@ -180,9 +183,61 @@ class App:
         except queue.Empty: pass
         self.root.after(150, self._drain)
 
+    NAMES = {"memu": "MEmu", "adb": "adb", "key": "Khoá Supabase", "ws": "Trình phát hình", "api": "Cổng bảo vệ",
+             "daemon": "Nhận đơn", "cf": "Đường hầm Cloudflare", "web": "Web"}
     def light(self, k, ok, text):
         dot, sub = self.lights[k]
         dot.configure(fg=GOOD if ok is True else BAD if ok is False else WARN); sub.configure(text=text)
+        self.state[k] = ok is True
+        good = sum(1 for x in self.NAMES if self.state.get(x)); bad = [self.NAMES[x] for x in self.NAMES if x in self.state and not self.state[x]]
+        if good == len(self.NAMES) and not self.booting:
+            self.banner.configure(text=f"✅ OK — đủ {good}/{len(self.NAMES)} đèn xanh · hệ thống đang chạy, nhận đơn bình thường", bg=GOOD, fg="#062012")
+        elif self.booting:
+            self.banner.configure(text=f"⏳ Đang tự khởi động A→Z… ({good}/{len(self.NAMES)} đèn xanh) — {self.boot_step}", bg=WARN, fg="#1a1300")
+        else:
+            self.banner.configure(text=f"⚠ {good}/{len(self.NAMES)} đèn xanh — lỗi: {', '.join(bad) or 'đang kiểm tra'}", bg=BAD, fg="white")
+
+    # ================= TỰ BẬT A→Z KHI WINDOWS KHỞI ĐỘNG LẠI =================
+    boot_step = ""
+    def boot_auto(self):
+        self.booting = True; threading.Thread(target=self._boot, daemon=True).start()
+    def _boot(self):
+        S = lambda m: self.say("Tổng quan", m)
+        def stepmsg(m): self.boot_step = m; S(m)
+        try:
+            S("\n🔄 ========== WINDOWS VỪA KHỞI ĐỘNG: tự bật A→Z ==========")
+            stepmsg("1/5 Chờ mạng + Windows ổn định…")
+            t0 = time.time()
+            while time.time() - t0 < 120:
+                try: socket.create_connection(("1.1.1.1", 443), 5).close(); break
+                except OSError: time.sleep(5)
+            time.sleep(15)
+            stepmsg("2/5 Dọn lệnh MEmu kẹt từ lần trước…")
+            for im in ("memuc.exe",): subprocess.run(["taskkill", "/F", "/IM", im], capture_output=True, creationflags=NOWIN)
+            for fn in os.listdir(os.path.join(B, "redroid")) if os.path.isdir(os.path.join(B, "redroid")) else []:
+                if fn.endswith(".lock"):
+                    try: os.remove(os.path.join(B, "redroid", fn))
+                    except OSError: pass
+            stepmsg("3/5 Bật trình phát hình + cổng bảo vệ + nhận đơn…")
+            self.root.after(0, self.start_all)
+            t0 = time.time()
+            while time.time() - t0 < 120 and not (port_open(8000) and port_open(8010)): time.sleep(2)
+            q = subprocess.run(["sc", "query", "cloudflared"], capture_output=True, text=True, creationflags=NOWIN).stdout or ""
+            if "SERVICE_NAME" in q and "RUNNING" not in q:
+                subprocess.run(["sc", "start", "cloudflared"], capture_output=True, creationflags=NOWIN)
+            stepmsg("4/5 Bật lại các máy khách còn hạn (mỗi máy ~1–2 phút)…")
+            code, out = self.job("Bật lại máy khách sau khi khởi động", [PY, "phonectl.py", "bootall"], wait=True)
+            stepmsg("5/5 Kiểm tra đủ đèn xanh…")
+            t0 = time.time()
+            while time.time() - t0 < 180 and not all(self.state.get(x) for x in self.NAMES): time.sleep(4)
+            ok = all(self.state.get(x) for x in self.NAMES)
+            bad = [self.NAMES[x] for x in self.NAMES if not self.state.get(x)]
+            S("🎉 ========== XONG: đủ đèn xanh — OK ==========" if ok and code == 0 else
+              f"⚠ ========== XONG nhưng còn lỗi: {', '.join(bad) or 'có máy khách chưa bật được (xem tab Việc đang làm)'} ==========")
+        except Exception as e:
+            S(f"✗ Tự bật bị lỗi: {e}")
+        finally:
+            self.booting = False
 
     # ---------- kiểm tra trạng thái (mỗi 4 giây) ----------
     def _checker(self):

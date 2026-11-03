@@ -135,6 +135,7 @@ public class MainActivity extends Activity {
         setContentView(root);
 
         askNotifyPermission();
+        Updater.check(this, false);                 // có bản app mới → hiện thông báo cập nhật ngay trong app
         show(getIntent().getIntExtra("tab", 0));
         refresh();
     }
@@ -800,6 +801,9 @@ public class MainActivity extends Activity {
         out.setOnClickListener(v -> Ui.confirm(this, Ui.L("Đăng xuất?", "Log out?"), Ui.L("Máy của bạn vẫn chạy bình thường.", "Your phones keep running."),
                 Ui.L("Đăng xuất", "Log out"), () -> { ExpiryAlarm.cancelAll(this); Api.logout(); toLogin(); }));
         body.addView(out, Ui.fill());
+        Button upd = Ui.button(this, "🔄 " + Ui.L("Kiểm tra cập nhật", "Check for updates"), Ui.GHOST);
+        upd.setOnClickListener(v -> Updater.check(this, true));
+        body.addView(upd, Ui.fill());
         TextView ver = Ui.muted(this, "BlueRoblox Cloud Phone v" + Api.version);
         ver.setGravity(Gravity.CENTER);
         body.addView(ver, Ui.fill());

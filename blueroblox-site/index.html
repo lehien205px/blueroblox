@@ -4537,7 +4537,7 @@ document.addEventListener("click", e => {
 function cpAndChips() {
   const L0 = cpAndList().sort((a, b) => (a === "12" ? -1 : b === "12" ? 1 : 0));      // Android 12 chạy ổn nhất → ưu tiên, đứng đầu
   if (!L0.includes(cpSel.android)) cpSel.android = L0.includes("12") ? "12" : L0.includes("11") ? "11" : L0[0];
-  $("cp-and").innerHTML = L0.map(v => `<button type="button" data-and="${v}" class="${v === cpSel.android ? "on" : ""}">Android ${v}${v === "12" ? ` <small>⭐ ${L("Khuyên dùng", "Recommended")}</small>` : v === "10" ? ` <small>⚡ GPU · ${L("app x86, không chạy game ARM", "x86 apps, no ARM games")}</small>` : v !== "11" ? ` <small>${L("Mới", "New")}</small>` : ""}</button>`).join("");
+  $("cp-and").innerHTML = L0.map(v => `<button type="button" data-and="${v}" class="${v === cpSel.android ? "on" : ""}">Android ${v}${v === "9" ? ` <small>🎮 64-bit · ${L("chạy Roblox", "runs Roblox")}</small>` : v === "12" ? ` <small>⭐ ${L("Khuyên dùng", "Recommended")}</small>` : v === "10" ? ` <small>⚡ GPU · ${L("app x86, không chạy game ARM", "x86 apps, no ARM games")}</small>` : v !== "11" ? ` <small>${L("Mới", "New")}</small>` : ""}</button>`).join("");
 }
 document.addEventListener("click", e => { const b = e.target.closest("[data-and]"); if (!b) return; cpSel.android = b.dataset.and; cpAndChips(); cpOrderUpd(); });
 async function openCpOrder(wantFree) {
@@ -5787,7 +5787,7 @@ async function cpUpgrade(id) {
       <label>RAM</label><div class="upchips">${RAMS.length ? chips(RAMS, nr, R0, "r", "GB") : `<span class="hint">${L("Đã tối đa", "Already max")}</span>`}</div>
       <label>CPU</label><div class="upchips">${CPUS.length ? chips(CPUS, nc, C0, "c", L(" nhân", " cores")) : `<span class="hint">${L("Đã tối đa", "Already max")}</span>`}</div>
       <div class="sum"><span>${L("Trả thêm cho thời gian còn lại", "Pay for the remaining time")}</span><b>${vnd(cost)}</b></div>
-      <div class="hint">${L("Máy không khởi động lại, app và dữ liệu giữ nguyên — tài nguyên mới có trong khoảng 15–30 giây. Các lần gia hạn sau tính theo cấu hình mới.", "No restart, apps and data stay — new resources apply in ~15–30s. Future renewals use the new config.")}${!same && bal < cost ? `<br><b style="color:var(--bad)">${L("Số dư không đủ — cần nạp thêm ", "Not enough balance — top up ")}${vnd(cost - bal)}</b>` : ""}</div>
+      <div class="hint">${+p.port >= 5600 ? L("Máy tự khởi động lại khoảng 1 phút để nhận cấu hình mới — app và dữ liệu giữ nguyên. Các lần gia hạn sau tính theo cấu hình mới.", "The phone restarts (~1 min) to apply — apps and data stay. Future renewals use the new config.") : L("Máy không khởi động lại, app và dữ liệu giữ nguyên — tài nguyên mới có trong khoảng 15–30 giây. Các lần gia hạn sau tính theo cấu hình mới.", "No restart, apps and data stay — new resources apply in ~15–30s. Future renewals use the new config.")}${!same && bal < cost ? `<br><b style="color:var(--bad)">${L("Số dư không đủ — cần nạp thêm ", "Not enough balance — top up ")}${vnd(cost - bal)}</b>` : ""}</div>
       <div class="row2"><button class="btn ghost" type="button" data-upclose>${L("Đóng", "Close")}</button><button class="btn" type="button" id="up-go" ${same ? "disabled" : ""}>${!same && bal < cost ? L("Nạp tiền", "Top up") : L("Nâng cấp ngay", "Upgrade now")}</button></div></div>`;
     m.querySelectorAll("[data-upr]").forEach(b => b.onclick = () => { nr = +b.dataset.upr; draw(); });
     m.querySelectorAll("[data-upc]").forEach(b => b.onclick = () => { nc = +b.dataset.upc; draw(); });

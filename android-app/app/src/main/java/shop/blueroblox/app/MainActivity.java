@@ -51,19 +51,27 @@ public class MainActivity extends Activity {
     private final java.util.Map<String, Bitmap> lastShot = new java.util.HashMap<>();
     private final java.util.Set<String> shotBusy = new java.util.HashSet<>();
     private boolean resumed = false;
+    private final java.util.Map<String, ImageView> gridShots = new java.util.HashMap<>();   // màn hình "Xem tất cả máy"
+    private Dialog gridDlg = null;
     private final Runnable shotTick = new Runnable() {
         @Override public void run() {
             h.removeCallbacks(this);
             if (!resumed || tab != 0) return;
-            for (java.util.Map.Entry<String, ImageView> e : new java.util.HashMap<>(shots).entrySet()) {
-                final String id = e.getKey(); final ImageView iv = e.getValue();
+            java.util.Set<String> ids = new java.util.LinkedHashSet<String>();
+            if (gridDlg != null) ids.addAll(gridShots.keySet());
+            ids.addAll(shots.keySet());
+            for (final String id : ids) {
                 if (shotBusy.contains(id)) continue;
                 shotBusy.add(id);
                 Api.bg(() -> {
                     byte[] b = Api.cpBytes(java.net.URLEncoder.encode(id, "UTF-8") + "/shot?w=270");
                     return BitmapFactory.decodeByteArray(b, 0, b.length);
-                }, bmp -> { shotBusy.remove(id); if (bmp != null) { lastShot.put(id, bmp); iv.setImageBitmap(bmp);
-                    Object t = iv.getTag(); if (t instanceof View) { ((View) t).setVisibility(View.GONE); iv.setTag(null); } } },
+                }, bmp -> { shotBusy.remove(id); if (bmp == null) return; lastShot.put(id, bmp);
+                    for (ImageView iv : new ImageView[]{shots.get(id), gridShots.get(id)}) {
+                        if (iv == null) continue;
+                        iv.setImageBitmap(bmp);
+                        Object t = iv.getTag(); if (t instanceof View) { ((View) t).setVisibility(View.GONE); iv.setTag(null); }
+                    } },
                    msg -> shotBusy.remove(id));
             }
             h.postDelayed(this, 4000);
@@ -269,6 +277,11 @@ public class MainActivity extends Activity {
         }
         LinearLayout head = Ui.row(this, 10);
         head.addView(Ui.h1(this, Ui.L("Máy của tôi", "My phones")), Ui.weight(1));
+        if (phones.length() > 0) {
+            TextView all = Ui.pill(this, "▦ " + Ui.L("Xem tất cả", "View all"), Ui.OK);
+            all.setOnClickListener(v -> openGrid());
+            head.addView(all, Ui.wrap());
+        }
         TextView rf = Ui.pill(this, "⟳ " + Ui.L("Làm mới", "Refresh"), Ui.SKY);
         rf.setOnClickListener(v -> { Ui.toast(this, Ui.L("Đang làm mới…", "Refreshing…")); refresh(); });
         head.addView(rf, Ui.wrap());
@@ -303,6 +316,92 @@ public class MainActivity extends Activity {
         for (int i = 0; i < phones.length(); i++) body.addView(phoneCard(phones.optJSONObject(i)), Ui.fill());
         page(body);
         h.removeCallbacks(shotTick); h.postDelayed(shotTick, 300);
+    }
+
+    // ---------------- XEM TẤT CẢ MÁY: lưới màn hình trực tiếp của mọi máy (khách có nhiều máy theo dõi 1 lần) ----------------
+    void openGrid() {
+        if (gridDlg != null) { gridDlg.dismiss(); }
+        gridShots.clear();
+        android.util.DisplayMetrics dm = getResources().getDisplayMetrics();
+        float wdp = dm.widthPixels / dm.density;
+        final int cols = wdp >= 900 ? 5 : wdp >= 600 ? 4 : wdp >= 400 ? 3 : 2;
+        int gap = Ui.dp(8), pad = Ui.dp(12);
+        int cellW = (dm.widthPixels - pad * 2 - gap * (cols - 1)) / cols, cellH = cellW * 16 / 9;
+
+        LinearLayout root = Ui.col(this, 10);
+        root.setBackgroundColor(Ui.BG);
+        root.setPadding(pad, Ui.dp(14), pad, Ui.dp(10));
+        LinearLayout top = Ui.row(this, 10);
+        int run = 0, pause = 0, other = 0;
+        for (int i = 0; i < phones.length(); i++) {
+            String st = phones.optJSONObject(i).optString("status");
+            if ("active".equals(st) && !locked(phones.optJSONObject(i))) run++; else if ("expired".equals(st)) pause++; else other++;
+        }
+        LinearLayout tt = Ui.col(this, 2);
+        tt.addView(Ui.h2(this, Ui.L("Tất cả máy (", "All phones (") + phones.length() + ")"));
+        tt.addView(Ui.muted(this, "● " + run + Ui.L(" đang chạy", " running") + (pause > 0 ? " · ⏸ " + pause + Ui.L(" tạm dừng", " paused") : "")
+                + (other > 0 ? " · " + other + Ui.L(" khác", " other") : "") + Ui.L(" · tự cập nhật ~4 giây", " · live ~4s")));
+        top.addView(tt, Ui.weight(1));
+        TextView close = Ui.pill(this, "✕ " + Ui.L("Đóng", "Close"), Ui.SKY);
+        top.addView(close, Ui.wrap());
+        root.addView(top, Ui.fill());
+
+        LinearLayout grid = Ui.col(this, gap);
+        LinearLayout row = null;
+        for (int i = 0; i < phones.length(); i++) {
+            final JSONObject p = phones.optJSONObject(i);
+            if (i % cols == 0) { row = Ui.row(this, gap); grid.addView(row, Ui.fill()); }
+            final String pid = p.optString("id"), st = p.optString("status");
+            boolean live = "active".equals(st) && !locked(p) && !status.optBoolean("maint", false);
+            LinearLayout cell = Ui.col(this, 4);
+            FrameLayout box = new FrameLayout(this);
+            box.setBackground(Ui.round(Color.rgb(2, 4, 12), 10, live ? Color.argb(90, 61, 220, 132) : Color.argb(70, 255, 93, 108)));
+            ImageView iv = new ImageView(this);
+            iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            Bitmap old = lastShot.get(pid);
+            if (live && old != null) iv.setImageBitmap(old);
+            box.addView(iv, new FrameLayout.LayoutParams(-1, -1));
+            if (!live || old == null) {
+                TextView wt = Ui.muted(this, live ? Ui.L("Đang lấy hình…", "Loading…")
+                        : locked(p) ? "🔒 " + Ui.L("Bị khoá", "Locked")
+                        : "pending".equals(st) ? "◌ " + Ui.L("Đang tạo…", "Creating…")
+                        : "expired".equals(st) ? "⏸ " + Ui.L("Tạm dừng", "Paused") : Ui.L("Lỗi", "Error"));
+                wt.setGravity(Gravity.CENTER);
+                box.addView(wt, new FrameLayout.LayoutParams(-1, -1));
+                if (live) iv.setTag(wt);
+            }
+            TextView dot = Ui.text(this, live ? "●" : "○", 12, live ? Ui.OK : Ui.BAD, true);
+            FrameLayout.LayoutParams dlp = new FrameLayout.LayoutParams(-2, -2, Gravity.TOP | Gravity.END);
+            dlp.setMargins(0, Ui.dp(4), Ui.dp(6), 0);
+            box.addView(dot, dlp);
+            if (live) {
+                box.setOnClickListener(v -> startActivity(new Intent(this, ControlActivity.class).putExtra("id", pid)));
+                gridShots.put(pid, iv);
+            }
+            cell.addView(box, new LinearLayout.LayoutParams(cellW, cellH));
+            TextView nm = Ui.text(this, p.optString("name", "Máy"), 12, Ui.FG, true);
+            nm.setSingleLine(true); nm.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            cell.addView(nm, new LinearLayout.LayoutParams(cellW, -2));
+            long exp = parseTime(p.optString("expires_at"));
+            if (exp > 0) {
+                long remain = exp - System.currentTimeMillis();
+                TextView ex = Ui.text(this, "⏱ " + left(exp), 11, remain < 86400000L ? Ui.WAIT : Ui.MUTED, false);
+                ex.setSingleLine(true);
+                cell.addView(ex, new LinearLayout.LayoutParams(cellW, -2));
+            }
+            row.addView(cell, new LinearLayout.LayoutParams(cellW, -2));
+        }
+        ScrollView sv = new ScrollView(this);
+        sv.addView(grid);
+        root.addView(sv, new LinearLayout.LayoutParams(-1, 0, 1f));
+
+        Dialog d = new Dialog(this, android.R.style.Theme_Black_NoTitleBar_Fullscreen);
+        d.setContentView(root);
+        close.setOnClickListener(v -> d.dismiss());
+        d.setOnDismissListener(x -> { gridShots.clear(); if (gridDlg == d) gridDlg = null; });
+        gridDlg = d;
+        d.show();
+        h.removeCallbacks(shotTick); h.postDelayed(shotTick, 200);
     }
 
     private View phoneCard(JSONObject p) {

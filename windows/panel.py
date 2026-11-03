@@ -69,6 +69,19 @@ def run_admin(ps_cmd, log):
     open(ps1, "w", encoding="utf-8-sig").write(body)
     ctypes.windll.shell32.ShellExecuteW(None, "runas", "powershell.exe", f'-NoProfile -ExecutionPolicy Bypass -File "{ps1}"', B, 1)
 
+PORTS = {"ws-scrcpy": 8000, "cpapi": 8010, "duong-thang": 8443}
+def free_port(port):
+    """Tắt chương trình CŨ còn giữ cổng (vd ws-scrcpy cũ mất kết nối adb → web đen màn, bản mới không mở được cổng: EADDRINUSE)."""
+    out = subprocess.run(["netstat", "-ano", "-p", "TCP"], capture_output=True, text=True, creationflags=NOWIN).stdout or ""
+    pids = {ln.split()[-1] for ln in out.splitlines() if "LISTENING" in ln and re.search(rf"[:.]{port}\s", ln)}
+    for pid in pids:
+        if pid.isdigit() and int(pid) not in (0, os.getpid()):
+            subprocess.run(["taskkill", "/PID", pid, "/T", "/F"], capture_output=True, creationflags=NOWIN)
+    return len(pids)
+def adb_pid():
+    out = subprocess.run(["tasklist", "/FI", "IMAGENAME eq adb.exe", "/FO", "CSV", "/NH"], capture_output=True, text=True, creationflags=NOWIN).stdout or ""
+    m = re.search(r'"adb\.exe","(\d+)"', out); return m.group(1) if m else ""
+
 class Svc:
     def __init__(self, name, ui):
         self.name, self.ui, self.p, self.want = name, ui, None, False
@@ -78,6 +91,8 @@ class Svc:
         if self.p and self.p.poll() is None: return
         cwd, cmd = SERVICES[self.name]
         if not os.path.isdir(cwd): self.ui.say(self.name, f"✗ Chưa cài ({cwd}) — bấm Cài đặt trước"); return
+        if self.name in PORTS and free_port(PORTS[self.name]): self.ui.say(self.name, f"♻ Đã tắt bản cũ còn giữ cổng {PORTS[self.name]}"); time.sleep(1)
+        if self.name == "ws-scrcpy": self.ui.adb_seen = adb_pid()
         try:
             self.p = subprocess.Popen(cmd, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
                                       env=ENV, creationflags=NOWIN, bufsize=1, text=True, encoding="utf-8", errors="replace")
@@ -269,6 +284,13 @@ class App:
                     L(0, self.light, "web", False, "không vào được")
             L(0, self.adm.configure, {"text": "🛡 Đang chạy quyền Admin" if is_admin() else "Quyền thường (nút ①③ sẽ hỏi quyền Admin)",
                                       "fg": GOOD if is_admin() else MUTED})
+            ws = self.svcs["ws-scrcpy"]
+            if ws.alive() and n % 5 == 2:          # adb bị tắt/bật lại → ws-scrcpy mất theo dõi máy → web đen màn → tự bật lại ws-scrcpy
+                ap = adb_pid()
+                if ap and getattr(self, "adb_seen", "") and ap != self.adb_seen:
+                    self.say("ws-scrcpy", "♻ adb vừa khởi động lại → bật lại trình phát hình"); self.adb_seen = ap
+                    threading.Thread(target=lambda: (ws.stop(), time.sleep(2), ws.start()), daemon=True).start()
+                elif ap and not getattr(self, "adb_seen", ""): self.adb_seen = ap
             if n % 150 == 5 and c.get("FAST_BASE") and c.get("CF_DNS_TOKEN"): self.fast_dns(quiet=True)   # ~10 phút: IP nhà mạng đổi → cập nhật
             n += 1; time.sleep(4)
 

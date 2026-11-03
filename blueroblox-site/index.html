@@ -1000,15 +1000,15 @@ html[data-theme] body::before{background:var(--bg)}
 #fx-bg,#school,.fx-drums{display:none!important}
 
 /* ---------- đầu trang ---------- */
-html[data-theme] .top,html[data-theme] .top.scrolled,html.lite[data-theme] .top{background:var(--hdr)!important;-webkit-backdrop-filter:none;backdrop-filter:none;border-bottom:2px solid var(--ring);box-shadow:none}
-html[data-theme] .top::after{display:none}
+html[data-theme] header.top,html[data-theme] header.top.scrolled,html.lite[data-theme] header.top{background:var(--hdr)!important;-webkit-backdrop-filter:none;backdrop-filter:none;border-bottom:2px solid var(--ring);box-shadow:none}
+html[data-theme] header.top::after{display:none}
 html[data-theme] .logo .wm b{color:var(--fg)}
 html[data-theme] .logo .wm b em{background:none;-webkit-background-clip:border-box;background-clip:border-box;color:var(--blue)}
 html[data-theme=dark] .logo .wm b em{color:#5aa8ff}
-html[data-theme] .top nav{background:var(--card);border:0;box-shadow:0 0 0 2px var(--ring)}
-html[data-theme] .top nav a{color:var(--muted)}
-html[data-theme] .top nav a:hover{color:var(--fg);background:var(--soft)}
-html[data-theme] .top nav a.on{color:#fff;background:linear-gradient(180deg,#5c9dff,#2b6ef0);box-shadow:0 6px 16px -6px rgba(43,110,240,.7),inset 0 1px 0 rgba(255,255,255,.45)}
+html[data-theme] header.top nav{background:var(--card);border:0;box-shadow:0 0 0 2px var(--ring)}
+html[data-theme] header.top nav a{color:var(--muted)}
+html[data-theme] header.top nav a:hover{color:var(--fg);background:var(--soft)}
+html[data-theme] header.top nav a.on{color:#fff;background:linear-gradient(180deg,#5c9dff,#2b6ef0);box-shadow:0 6px 16px -6px rgba(43,110,240,.7),inset 0 1px 0 rgba(255,255,255,.45)}
 /* ngôn ngữ: viên thuốc trắng/mực, viền neon (bỏ cam) */
 html[data-theme] .langsw{background:var(--card);box-shadow:0 0 0 2px var(--ring)}
 html[data-theme] .langsw button{color:var(--muted)}
@@ -1184,14 +1184,14 @@ html[data-theme] .cats button.on small{background:rgba(255,255,255,.25);color:#f
 /* Màn hình rộng: menu chuyển sang cột trái (dùng khoảng trống 2 bên), đầu trang chỉ còn 1 hàng */
 @media (min-width:1280px){
   html[data-theme] body{padding-left:232px}
-  .top::before{content:"";position:fixed;left:0;top:0;bottom:0;width:232px;background:var(--hdr);border-right:2px solid var(--ring);pointer-events:none}
-  .top .wrap{min-height:64px;flex-wrap:nowrap;padding-block:8px;max-width:1380px}
-  .top .wrap::after{display:none}
-  .top .logo{position:fixed;left:22px;top:16px;z-index:2}
-  html[data-theme] .top nav{position:fixed;left:14px;top:84px;width:204px;margin:0;order:0;flex-direction:column;flex-wrap:nowrap;align-items:stretch;gap:4px;padding:10px;border-radius:22px;overflow:visible;z-index:2}
-  .top nav a{justify-content:flex-start;padding:11px 14px!important;font-size:15px!important}
+  header.top::before{content:"";position:fixed;left:0;top:0;bottom:0;width:232px;background:var(--hdr);border-right:2px solid var(--ring);pointer-events:none}
+  header.top .wrap{min-height:64px;flex-wrap:nowrap;padding-block:8px;max-width:1380px}
+  header.top .wrap::after{display:none}
+  header.top .logo{position:fixed;left:22px;top:16px;z-index:2}
+  html[data-theme] header.top nav{position:fixed;left:14px;top:84px;width:204px;margin:0;order:0;flex-direction:column;flex-wrap:nowrap;align-items:stretch;gap:4px;padding:10px;border-radius:22px;overflow:visible;z-index:2}
+  header.top nav a{justify-content:flex-start;padding:11px 14px!important;font-size:15px!important}
   .acct{margin-left:auto}
-  body.admin-page .top::before{display:none}
+  body.admin-page header.top::before{display:none}
 }
 /* Điện thoại: bỏ khung cá voi lớn (logo đã có ở đầu trang) để sản phẩm lên sớm */
 @media (max-width:700px){
@@ -1202,7 +1202,7 @@ html[data-theme] .cats button.on small{background:rgba(255,255,255,.25);color:#f
   .hero>.notice{order:3;grid-template-columns:1fr;gap:8px!important}
   .hero>.notice .nc{padding:8px 10px!important}
 }
-@media (min-width:1280px){ .top .logo .mark{width:54px;height:38px} .top .logo .wm b{font-size:19px} .top .logo .wm small{font-size:10.5px} }
+@media (min-width:1280px){ header.top .logo .mark{width:54px;height:38px} header.top .logo .wm b{font-size:19px} header.top .logo .wm small{font-size:10.5px} }
 /* Laptop màn thấp (≤ 860px chiều cao): thu gọn thêm để thấy sản phẩm ngay */
 @media (min-width:701px) and (max-height:860px){
   .hero{padding-block:12px 4px;row-gap:10px}
@@ -1246,6 +1246,23 @@ html[data-theme] .cats button.on small{background:rgba(255,255,255,.25);color:#f
 @media (min-width:1280px){
   .cb-rail .notice{grid-template-columns:minmax(0,1fr)!important}
   .cb-rail .notice .nc{min-width:0;max-width:100%}
+}
+/* nút nguy hiểm (Huỷ / Xoá) giữ màu đỏ; nút xanh lá giữ màu */
+html[data-theme] .btn.danger{background:rgba(255,107,129,.10);color:var(--bad);box-shadow:0 0 0 1.5px rgba(255,107,129,.55)}
+html[data-theme] .btn.danger:hover{background:rgba(255,107,129,.18)}
+html[data-theme] .btn.okb{background:linear-gradient(180deg,#6cf0c8,#22b98c);color:#032a1f}
+/* biểu tượng app = cá voi nét trên nền xanh bóng */
+.appbig img.cb-wh{object-fit:contain;padding:8px 6px;background:linear-gradient(160deg,#2b6ef0,#0f3fb3);box-shadow:0 0 0 2px rgba(255,255,255,.85),0 6px 16px rgba(43,110,240,.4)}
+img.cb-wh{object-fit:contain;padding:8px 6px;border-radius:16px;background:linear-gradient(160deg,#2b6ef0,#0f3fb3);box-shadow:0 0 0 2px rgba(255,255,255,.85),0 6px 16px rgba(43,110,240,.4)}
+.m-help{padding-block:6px 14px}
+.m-help .notice{display:grid!important;gap:8px!important;margin:0!important;max-width:none!important}
+.m-help .notice .nh{display:flex!important}
+.m-help #join-wrap{padding:10px 0 0!important}
+/* điện thoại: thanh "Tất cả sản phẩm" gọn 2 hàng (tiêu đề / ô tìm + sắp xếp) */
+@media (max-width:700px){
+  .shop .bar{display:grid!important;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center}
+  .shop .bar h2{grid-column:1/-1;font-size:20px;margin:0}
+  .shop .bar #sort{width:auto;min-width:118px}
 }
 
 </style>
@@ -2646,17 +2663,26 @@ if (typeof module !== "undefined") module.exports = { drawDongSon };
   if (!rail || !box || !nt) return;
   const mq = matchMedia("(min-width:1280px)");
   const home = { nt: [nt.parentNode, nt.nextSibling], jw: jw ? [jw.parentNode, jw.nextSibling] : null };
-  function top() { const nav = document.querySelector(".top nav"); if (!nav) return;
+  function top() { const nav = document.querySelector("header.top nav"); if (!nav) return;
     const b = nav.getBoundingClientRect().bottom; rail.style.top = Math.max(120, Math.round(b + 12)) + "px"; }
+  const mob = matchMedia("(max-width:700px)"), pay = document.getElementById("pay");
   function place() {
-    if (mq.matches) { box.appendChild(nt); if (jw) rail.appendChild(jw); document.documentElement.classList.add("has-rail"); requestAnimationFrame(top); }
-    else { home.nt[0].insertBefore(nt, home.nt[1]); if (jw && home.jw) home.jw[0].insertBefore(jw, home.jw[1]); document.documentElement.classList.remove("has-rail"); }
+    if (mq.matches) { box.appendChild(nt); if (jw) rail.appendChild(jw); document.documentElement.classList.add("has-rail"); requestAnimationFrame(top); return; }
+    document.documentElement.classList.remove("has-rail");
+    if (mob.matches && pay) {                      // điện thoại: sản phẩm lên trước, ô hỗ trợ xuống dưới danh sách sản phẩm
+      const w = document.getElementById("m-help") || (() => { const d = document.createElement("section"); d.className = "wrap m-help"; d.id = "m-help"; pay.parentNode.insertBefore(d, pay); return d; })();
+      w.appendChild(nt); if (jw) w.appendChild(jw);
+    } else { home.nt[0].insertBefore(nt, home.nt[1]); if (jw && home.jw) home.jw[0].insertBefore(jw, home.jw[1]); }
   }
-  (mq.addEventListener ? mq.addEventListener("change", place) : mq.addListener(place));
+  [mq, mob].forEach(m => m.addEventListener ? m.addEventListener("change", place) : m.addListener(place));
   addEventListener("resize", top);
-  const nav = document.querySelector(".top nav"); if (nav && "ResizeObserver" in window) new ResizeObserver(top).observe(nav);
+  const nav = document.querySelector("header.top nav"); if (nav && "ResizeObserver" in window) new ResizeObserver(top).observe(nav);
   place(); setTimeout(top, 400); setTimeout(top, 1500);
 })();
+
+/* biểu tượng app trong các hộp hướng dẫn → cá voi nét */
+(function () { const w = (document.querySelector(".cb-cloud img") || {}).src; if (!w) return;
+  document.querySelectorAll('img[src="/apple-touch-icon.png"],img[src="/icon-192.png"],img[src="icon-192.png"]').forEach(i => { i.src = w; i.classList.add("cb-wh"); }); })();
 
 </script>
 <script>
@@ -5449,8 +5475,8 @@ function renderAppHelp() {
   const inApp = /BlueRobloxApp\//.test(navigator.userAgent) || IS_STANDALONE;
   const v = APP_INFO && APP_INFO.version ? "v" + APP_INFO.version + (APP_INFO.size ? " · " + (APP_INFO.size / 1048576).toFixed(1) + "MB" : "") : "";
   const app = inApp ? "" : IS_IOS
-    ? `<div class="appbig"><img src="/apple-touch-icon.png" alt=""><div class="t"><b>📱 ${L("Dùng như app trên iPhone", "Use it like an app on iPhone")}</b><span>${L("Thêm BlueRoblox vào màn hình chính — mở toàn màn hình, thuê và điều khiển máy ngay trên iPhone.", "Add BlueRoblox to your Home Screen — full screen, rent and control phones on iPhone.")}</span></div><a class="btn" href="#" data-iosguide="1">${L("Xem cách cài", "How to install")}</a></div>`
-    : `<div class="appbig"><img src="/apple-touch-icon.png" alt=""><div class="t"><b>📲 ${L("Tải app BlueRoblox Cloud cho Android", "Get the BlueRoblox Cloud Android app")}</b><span>${L("Thuê, gia hạn và điều khiển máy ngay trên điện thoại — mượt hơn web, báo trước khi hết hạn. Miễn phí.", "Rent, renew and control your phones on the go — smoother than the web, with expiry reminders. Free.")}</span>${v ? `<small>${v}</small>` : ""}</div><a class="btn" href="/download/blueroblox-cloud.apk" download>⬇️ ${L("Tải app miễn phí", "Download free")}</a></div>`;
+    ? `<div class="appbig"><img class="cb-wh" src="${(document.querySelector('.cb-cloud img') || {}).src || '/apple-touch-icon.png'}" alt=""><div class="t"><b>📱 ${L("Dùng như app trên iPhone", "Use it like an app on iPhone")}</b><span>${L("Thêm BlueRoblox vào màn hình chính — mở toàn màn hình, thuê và điều khiển máy ngay trên iPhone.", "Add BlueRoblox to your Home Screen — full screen, rent and control phones on iPhone.")}</span></div><a class="btn" href="#" data-iosguide="1">${L("Xem cách cài", "How to install")}</a></div>`
+    : `<div class="appbig"><img class="cb-wh" src="${(document.querySelector('.cb-cloud img') || {}).src || '/apple-touch-icon.png'}" alt=""><div class="t"><b>📲 ${L("Tải app BlueRoblox Cloud cho Android", "Get the BlueRoblox Cloud Android app")}</b><span>${L("Thuê, gia hạn và điều khiển máy ngay trên điện thoại — mượt hơn web, báo trước khi hết hạn. Miễn phí.", "Rent, renew and control your phones on the go — smoother than the web, with expiry reminders. Free.")}</span>${v ? `<small>${v}</small>` : ""}</div><a class="btn" href="/download/blueroblox-cloud.apk" download>⬇️ ${L("Tải app miễn phí", "Download free")}</a></div>`;
   const help = `<button class="helpbtn" type="button" data-help="1"><span class="i">📖</span><span class="t"><b>${L("Hướng dẫn sử dụng từ A đến Z", "Step-by-step guide (A to Z)")}</b><small>${L("Thuê máy · điều khiển · cài app · Roblox · clone · macro · gia hạn… bấm để xem", "Renting · controlling · apps · Roblox · clone · macro · renewing… tap to read")}</small></span><span class="go">›</span></button>`;
   const capp = inApp ? "" : IS_IOS
     ? `<a class="cpchip app" href="#" data-iosguide="1">📱 <b>${L("Cài lên iPhone", "Install on iPhone")}</b></a>`

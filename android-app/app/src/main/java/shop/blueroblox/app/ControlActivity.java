@@ -204,7 +204,7 @@ public class ControlActivity extends Activity {
         load();
     }
 
-    @Override protected void onResume() { super.onResume(); resumed = true; h.removeCallbacks(kbPoll); h.postDelayed(kbPoll, 1500); }
+    @Override protected void onResume() { super.onResume(); resumed = true; h.removeCallbacks(kbPoll); h.postDelayed(kbPoll, 1500); Updater.check(this, false); }
     @Override protected void onPause() { super.onPause(); resumed = false; h.removeCallbacks(kbPoll); }
 
     /** Hỏi máy cloud mỗi ~1 giây: có đang chờ gõ chữ không → tự hiện / ẩn ô gõ + bàn phím điện thoại. */

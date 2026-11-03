@@ -33,7 +33,7 @@ import java.net.URL;
  * "Cho phép cài ứng dụng từ nguồn này". Từ Android 12, các lần sau có thể tự cập nhật không cần hỏi.
  */
 public final class Updater {
-    private static boolean shownThisRun = false;
+    private static long lastCheck = 0, shownCode = 0, shownAt = 0;
     private static final String P = "upd";
 
     /** Mã phiên bản đang chạy (số build GitHub). */
@@ -46,7 +46,9 @@ public final class Updater {
 
     /** Gọi khi mở app. manual = true: bấm "Kiểm tra cập nhật" (luôn báo kết quả). */
     public static void check(Activity a, boolean manual) {
-        if (!manual && shownThisRun) return;
+        long now = System.currentTimeMillis();
+        if (!manual && now - lastCheck < 10 * 60_000L) return;      // tự kiểm tra tối đa 10 phút/lần (mở app, quay lại app, vào máy)
+        lastCheck = now;
         SharedPreferences sp = a.getSharedPreferences(P, Context.MODE_PRIVATE);
         Api.bg(() -> {
             HttpURLConnection c = (HttpURLConnection) new URL(Api.WEB + "/download/app.json?t=" + System.currentTimeMillis()).openConnection();
@@ -59,10 +61,11 @@ public final class Updater {
         }, j -> {
             long code = j.optLong("code", 0);
             if (code <= myCode(a)) { if (manual) Ui.toast(a, Ui.L("Bạn đang dùng bản mới nhất (v" + Api.version + ").", "You're on the latest version (v" + Api.version + ").")); return; }
-            // "Để sau" → không làm phiền lại trong 12 giờ (trừ khi tự bấm kiểm tra)
+            // "Để sau" → không làm phiền lại trong 3 giờ (trừ khi tự bấm kiểm tra)
             if (!manual && sp.getLong("later_" + code, 0) > System.currentTimeMillis()) return;
             if (a.isFinishing()) return;
-            shownThisRun = true;
+            if (!manual && shownCode == code && System.currentTimeMillis() - shownAt < 30 * 60_000L) return;   // vừa báo bản này rồi
+            shownCode = code; shownAt = System.currentTimeMillis();
             offer(a, j, code, sp);
         }, m -> { if (manual) Ui.toast(a, Ui.L("Không kiểm tra được cập nhật: ", "Couldn't check for updates: ") + m); });
     }
@@ -87,7 +90,7 @@ public final class Updater {
         r.addView(go, Ui.weight(1.4f));
         c.addView(r, Ui.fill());
         Dialog d = Ui.sheet(a, "🚀 " + Ui.L("Có bản cập nhật mới", "Update available"), c);
-        later.setOnClickListener(v -> { sp.edit().putLong("later_" + code, System.currentTimeMillis() + 12 * 3600_000L).apply(); d.dismiss(); });
+        later.setOnClickListener(v -> { sp.edit().putLong("later_" + code, System.currentTimeMillis() + 3 * 3600_000L).apply(); d.dismiss(); });
         go.setOnClickListener(v -> {
             // Lần đầu: Android yêu cầu cho phép app này cài ứng dụng
             if (Build.VERSION.SDK_INT >= 26 && !a.getPackageManager().canRequestPackageInstalls()) {

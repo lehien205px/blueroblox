@@ -140,7 +140,7 @@ public class MainActivity extends Activity {
         refresh();
     }
 
-    @Override protected void onResume() { super.onResume(); if (Api.loggedIn()) refresh(); }
+    @Override protected void onResume() { super.onResume(); if (Api.loggedIn()) refresh(); Updater.check(this, false); }
     @Override protected void onPause() { super.onPause(); h.removeCallbacks(poll); }
 
     private void toLogin() {

@@ -56,8 +56,15 @@ def _unstick_memuc():
     run(["powershell", "-NoProfile", "-Command",
          "Get-CimInstance Win32_Process -Filter \"name='memuc.exe'\" | Where-Object { $_.CreationDate -lt (Get-Date).AddSeconds(-45) } | "
          "ForEach-Object { Stop-Process -Id $_.ProcessId -Force }"], 60)
+    # chương trình đang GIỮ khoá (vd connect-all cũ treo từ lâu) → tắt nó; Windows không cho xoá file khoá khi nó còn mở
+    lf = os.path.join(HOME, "redroid", "memuc.lock")
+    try:
+        pid = open(lf).read().strip()
+        if pid.isdigit() and int(pid) != os.getpid():
+            subprocess.run(["taskkill", "/PID", pid, "/F"], capture_output=True, creationflags=NOWIN)
+    except OSError: pass
     time.sleep(2)
-    try: os.remove(os.path.join(HOME, "redroid", "memuc.lock"))
+    try: os.remove(lf)
     except OSError: pass
     print("   (lệnh MEmu bị treo → đã gỡ, làm tiếp)", flush=True)
 def memuc(*a, timeout=300):

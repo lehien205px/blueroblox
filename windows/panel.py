@@ -272,7 +272,10 @@ class App:
         # ~1 phút: lệnh MEmu treo quá 3 phút → tắt; máy khách mất kết nối điều khiển → nối lại
         if n % 15 == 5 and on("cloudphoned"):
             ps = ("Get-CimInstance Win32_Process -Filter \"name='memuc.exe'\" | Where-Object { $_.CreationDate -lt (Get-Date).AddMinutes(-3) } | "
-                  "ForEach-Object { Stop-Process -Id $_.ProcessId -Force; 'X' }")
+                  "ForEach-Object { Stop-Process -Id $_.ProcessId -Force; 'X' }; "
+                  # lệnh phonectl ngắn (list / connect-all / show…) chạy quá 5 phút = treo → tắt (nó giữ khoá MEmu, chặn đơn khách)
+                  "Get-CimInstance Win32_Process -Filter \"name='python.exe'\" | Where-Object { $_.CommandLine -match 'phonectl\\.py\" (connect-all|list|show|hide|capacity|perms)|phonectl\\.py (connect-all|list|show|hide|capacity|perms)' "
+                  "-and $_.CreationDate -lt (Get-Date).AddMinutes(-5) } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force; 'X' }")
             out = subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True, text=True, creationflags=NOWIN, timeout=60).stdout or ""
             if "X" in out: self._fix(f"tắt {out.count('X')} lệnh MEmu bị treo")
             r = subprocess.run([PY, "phonectl.py", "connect-all"], cwd=B, capture_output=True, text=True, encoding="utf-8", errors="replace",

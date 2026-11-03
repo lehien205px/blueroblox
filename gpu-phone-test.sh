@@ -112,7 +112,8 @@ start)
     else rm -f "$HOME/.android/adbkey.ws" "$HOME/.android/adbkey.pub.ws"; fi
   fi
   echo "== Bật máy thử (đồ hoạ: $EG) =="
-  DISPLAY=$XD setsid nohup "$EMU" -avd "$AVD" -port "$PORT" -no-window -gpu "$EG" -feature -Vulkan -no-audio -no-boot-anim -no-snapshot ${WIPE:+-wipe-data} \
+  NW="-no-window"; [ -n "${WIN:-}" ] && NW=""
+  DISPLAY=$XD setsid nohup "$EMU" -avd "$AVD" -port "$PORT" $NW -gpu "$EG" -feature -Vulkan -no-audio -no-boot-anim -no-snapshot ${WIPE:+-wipe-data} \
       -camera-back none -camera-front none -netdelay none -netspeed full > "$LOG" 2>&1 < /dev/null &
   "$ADB" start-server >/dev/null 2>&1
   for i in $(seq 1 90); do
@@ -132,6 +133,27 @@ chrome)
   # mở Chrome vào google.com trong máy thử → báo chạy được hay văng (đúng lỗi máy 9/10/11 đang gặp)
   "$ADB" -s emulator-$PORT shell 'logcat -c; logcat -b crash -c; am start -W -a android.intent.action.VIEW -d https://www.google.com com.android.chrome >/dev/null 2>&1; sleep 15; pidof com.android.chrome >/dev/null && echo "✅ CHROME CHẠY ĐƯỢC" || echo "❌ CHROME VĂNG"; logcat -d -b crash | grep -m2 -E "Abort|FATAL"' | tr -d '\r'
   echo "   Đồ hoạ: $("$ADB" -s emulator-$PORT shell dumpsys SurfaceFlinger 2>/dev/null | grep -m1 'GLES:' | tr -d '\r')" ;;
+
+report)
+  # BÁO CÁO 1 LẦN: GPU · game ARM · root · ảnh màn hình có bị đen · Chrome
+  A() { "$ADB" -s emulator-$PORT "$@"; }
+  [ "$(A shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ] || { err "Máy thử chưa bật xong (chạy: bash $0 start)"; exit 1; }
+  V=$(A shell getprop ro.build.version.release | tr -d '\r'); ABI=$(A shell getprop ro.product.cpu.abilist | tr -d '\r')
+  GL=$(A shell dumpsys SurfaceFlinger 2>/dev/null | grep -m1 "GLES:" | tr -d '\r')
+  echo "================ BÁO CÁO MÁY THỬ ================"
+  echo "Android:        $V   ($(A shell getprop ro.build.type | tr -d '\r') · $(A shell getprop ro.product.name | tr -d '\r'))"
+  echo "$GL" | grep -qi "nvidia\|geforce" && ok "GPU:            GTX 1080" || err "GPU:            KHÔNG dùng GTX 1080 ($GL)"
+  echo "$ABI" | grep -q arm64 && ok "Game ARM:       chạy được ($ABI)" || err "Game ARM:       KHÔNG ($ABI)"
+  if A shell 'su -c id' 2>/dev/null | grep -q "uid=0"; then ok "Root (su):      CÓ"
+  elif A root 2>&1 | grep -qi "cannot run as root\|production"; then err "Root:           KHÔNG (bản có Play Store bị khoá root)"
+  else sleep 2; A wait-for-device; A shell id 2>/dev/null | grep -q "uid=0" && warn "Root:           chỉ có 'adb root' (chưa có su cho app)" || err "Root:           KHÔNG"; A unroot >/dev/null 2>&1; sleep 2; A wait-for-device; fi
+  A shell pm list packages 2>/dev/null | grep -q com.android.vending && ok "Play Store:     CÓ" || err "Play Store:     KHÔNG"
+  BR=$(A exec-out screencap 2>/dev/null | python3 -c "import sys;b=sys.stdin.buffer.read()[16:];px=[b[i]+b[i+1]+b[i+2] for i in range(0,len(b)-4,4*997)];print(int(sum(px)/3/max(1,len(px))))" 2>/dev/null)
+  [ "${BR:-0}" -gt 8 ] && ok "Ảnh màn hình:   có hình (độ sáng $BR)" || err "Ảnh màn hình:   ĐEN (độ sáng ${BR:-0}) → đây là lý do web bị đen"
+  A shell 'screenrecord --time-limit 2 /data/local/tmp/t.mp4 >/dev/null 2>&1; stat -c %s /data/local/tmp/t.mp4 2>/dev/null; rm -f /data/local/tmp/t.mp4' | tr -d '\r' | { read SZ; [ "${SZ:-0}" -gt 2000 ] && ok "Nén video H264: được (${SZ} byte/2 giây)" || err "Nén video H264: LỖI (${SZ:-0} byte)"; }
+  A shell 'am start -W -a android.intent.action.VIEW -d https://www.google.com com.android.chrome >/dev/null 2>&1; sleep 12; pidof com.android.chrome' | tr -d '\r' | grep -q . && ok "Chrome:         chạy được" || err "Chrome:         không chạy"
+  echo "Cửa sổ:         $(pgrep -af -- '-avd gputest' | grep -q -- '-no-window' && echo 'ẩn (-no-window)' || echo 'hiện trên màn hình ảo :9')"
+  echo "=================================================" ;;
 
 check)
   echo "== Android: $("$ADB" -s emulator-$PORT shell getprop ro.build.version.release 2>/dev/null | tr -d '\r') · chip hỗ trợ: $("$ADB" -s emulator-$PORT shell getprop ro.product.cpu.abilist 2>/dev/null | tr -d '\r')"

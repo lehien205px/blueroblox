@@ -71,6 +71,19 @@ def run_admin(ps_cmd, log, secret=False):
     open(ps1, "w", encoding="utf-8-sig").write(body)
     ctypes.windll.shell32.ShellExecuteW(None, "runas", "powershell.exe", f'-NoProfile -ExecutionPolicy Bypass -File "{ps1}"', B, 1)
 
+def runq(cmd, timeout=120):
+    """Chạy lệnh nền, kết quả ra FILE tạm (không pipe → không bao giờ treo vì tiến trình con giữ pipe). Quá giờ → tắt, trả về phần đã có."""
+    import tempfile
+    with tempfile.TemporaryFile() as fo:
+        try: p = subprocess.Popen(cmd, cwd=B, stdout=fo, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, env=ENV, creationflags=NOWIN)
+        except OSError as e: return str(e)
+        try: p.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            subprocess.run(["taskkill", "/PID", str(p.pid), "/F"], capture_output=True, creationflags=NOWIN)
+            try: p.wait(timeout=10)
+            except subprocess.TimeoutExpired: pass
+        fo.seek(0); return fo.read().decode("utf-8", "replace")
+
 def kill_tree(pid):
     """Tắt 1 chương trình + các chương trình con của nó, NHƯNG GIỮ adb server.
        (adb server hay được sinh ra làm "con" của ws-scrcpy / cloudphoned → taskkill /T giết luôn adb → MỌI máy mất kết nối:
@@ -270,25 +283,29 @@ class App:
                 subprocess.run(["sc", "stop", "cloudflared"], capture_output=True, creationflags=NOWIN); time.sleep(3)
                 subprocess.run(["sc", "start", "cloudflared"], capture_output=True, creationflags=NOWIN)
         # ~1 phút: lệnh MEmu treo quá 3 phút → tắt; máy khách mất kết nối điều khiển → nối lại
-        if n % 15 == 5 and on("cloudphoned"):
-            ps = ("Get-CimInstance Win32_Process -Filter \"name='memuc.exe'\" | Where-Object { $_.CreationDate -lt (Get-Date).AddMinutes(-3) } | "
-                  "ForEach-Object { Stop-Process -Id $_.ProcessId -Force; 'X' }; "
-                  # lệnh phonectl ngắn (list / connect-all / show…) chạy quá 5 phút = treo → tắt (nó giữ khoá MEmu, chặn đơn khách)
-                  "Get-CimInstance Win32_Process -Filter \"name='python.exe'\" | Where-Object { $_.CommandLine -match 'phonectl\\.py\" (connect-all|list|show|hide|capacity|perms)|phonectl\\.py (connect-all|list|show|hide|capacity|perms)' "
-                  "-and $_.CreationDate -lt (Get-Date).AddMinutes(-5) } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force; 'X' }")
-            out = subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True, text=True, creationflags=NOWIN, timeout=60).stdout or ""
-            if "X" in out: self._fix(f"tắt {out.count('X')} lệnh MEmu bị treo")
-            r = subprocess.run([PY, "phonectl.py", "connect-all"], cwd=B, capture_output=True, text=True, encoding="utf-8", errors="replace",
-                               env=ENV, creationflags=NOWIN, timeout=180).stdout or ""
-            k = r.count("nối lại")
-            if k: self._fix(f"nối lại điều khiển {k} máy khách")
+        if n % 15 == 5 and on("cloudphoned") and not getattr(self, "_stuckjob", False):
+            def sj():
+                self._stuckjob = True
+                try:
+                    ps = ("Get-CimInstance Win32_Process -Filter \"name='memuc.exe'\" | Where-Object { $_.CreationDate -lt (Get-Date).AddMinutes(-3) } | "
+                          "ForEach-Object { Stop-Process -Id $_.ProcessId -Force; 'X' }; "
+                          # lệnh phonectl ngắn (list / connect-all / show…) chạy quá 5 phút = treo → tắt (nó giữ khoá MEmu, chặn đơn khách)
+                          "Get-CimInstance Win32_Process -Filter \"name='python.exe'\" | Where-Object { $_.CommandLine -match 'phonectl\\.py\" (connect-all|list|show|hide|capacity|perms)|phonectl\\.py (connect-all|list|show|hide|capacity|perms)' "
+                          "-and $_.CreationDate -lt (Get-Date).AddMinutes(-5) } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force; 'X' }")
+                    out = runq(["powershell", "-NoProfile", "-Command", ps], 60)
+                    if "X" in out: self._fix(f"tắt {out.count('X')} lệnh MEmu bị treo")
+                    r = runq([PY, "phonectl.py", "connect-all"], 180)
+                    k = r.count("nối lại")
+                    if k: self._fix(f"nối lại điều khiển {k} máy khách")
+                except Exception as e: self.say("Tổng quan", f"🩺 gỡ treo lỗi: {e}")
+                finally: self._stuckjob = False
+            threading.Thread(target=sj, daemon=True).start()
         # ~1 phút: máy khách còn hạn mà đang TẮT ngoài ý muốn (bấm Close trong Multiple Instance Manager, MEmu văng…) → tự bật lại
         if n % 15 == 7 and on("cloudphoned") and not getattr(self, "_bootjob", False):
             def bj():
                 self._bootjob = True
                 try:
-                    r = subprocess.run([PY, "phonectl.py", "bootall", "--quiet"], cwd=B, capture_output=True, text=True, encoding="utf-8",
-                                       errors="replace", env=ENV, creationflags=NOWIN, timeout=1800).stdout or ""
+                    r = runq([PY, "phonectl.py", "bootall", "--quiet"], 1800)
                     for ln in r.splitlines():
                         if ln.strip() and ("▶" in ln or "✅" in ln or "✗" in ln or "⚠" in ln): self._fix(ln.strip())
                 except Exception as e: self.say("Tổng quan", f"🩺 tự bật máy lỗi: {e}")
@@ -299,13 +316,12 @@ class App:
             def hj():
                 self._healjob = True
                 try:
-                    r = subprocess.run([PY, "phonectl.py", "heal", "--orphans"], cwd=B, capture_output=True, text=True, encoding="utf-8",
-                                       errors="replace", env=ENV, creationflags=NOWIN, timeout=1200).stdout or ""
+                    r = runq([PY, "phonectl.py", "heal", "--orphans"], 1200)
                     for ln in r.splitlines():
                         if ln.startswith(("KHOI_DONG_LAI", "XOA_HONG", "XOA_THUA", "Đã xoá")): self._fix(ln.split(" ", 1)[-1] if ln.startswith(("KHOI", "XOA")) else ln)
                     if "XOA_HONG" in r:
                         self._fix("tạo lại máy khách vừa xoá (giữ chủ máy, cấu hình, hạn dùng)")
-                        subprocess.run([PY, "run.py", "remake.py", "all"], cwd=B, capture_output=True, env=ENV, creationflags=NOWIN, timeout=3600)
+                        runq([PY, "run.py", "remake.py", "all"], 3600)
                 except Exception as e: self.say("Tổng quan", f"🩺 chống kẹt lỗi: {e}")
                 finally: self._healjob = False
             threading.Thread(target=hj, daemon=True).start()
@@ -314,8 +330,7 @@ class App:
             def pj():
                 self._pooljob = True
                 try:
-                    r = subprocess.run([PY, "phonectl.py", "pool"], cwd=B, capture_output=True, text=True, encoding="utf-8",
-                                       errors="replace", env=ENV, creationflags=NOWIN, timeout=1500).stdout or ""
+                    r = runq([PY, "phonectl.py", "pool"], 1500)
                     for ln in r.splitlines():
                         if ln.startswith(("DUNG_SAN", "SAN_SANG", "LỖI", "XOA_DO")):
                             self.say("Tổng quan", "⚡ Máy dựng sẵn: " + ln.split(" ", 1)[-1] + f"  ({time.strftime('%H:%M:%S')})")

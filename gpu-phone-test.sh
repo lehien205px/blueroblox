@@ -210,9 +210,56 @@ GS
     A shell input keyevent 3
     ok "Root OK: Shell + mọi app đã cài được cấp quyền root sẵn"
   else err "Chưa có root cho Shell"; fi ;;
+rootboot)
+  # ROOT TỰ ĐỘNG KHÔNG CẦN BẤM: gắn vào ramdisk (đã có Magisk) 1 dịch vụ chạy quyền root lúc khởi động,
+  # cứ 15 giây cấp sẵn quyền root cho Shell + MỌI app khách cài (tool/game không phải bấm "Cho phép").
+  # Áp dụng cho mọi máy dùng bản Android này. Dùng magiskboot (trong Magisk chính thức) chạy ngay trong máy thử.
+  A() { "$ADB" -s emulator-$PORT "$@"; }
+  [ "$(A shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ] || { err "Bật máy thử trước:  bash $0 start"; exit 1; }
+  A shell pm list packages 2>/dev/null | grep -q com.topjohnwu.magisk || { err "Bản này chưa có Magisk — chạy:  bash $0 root"; exit 1; }
+  SYS=$(grep "^image.sysdir.1=" "$ANDROID_AVD_HOME/$AVD.avd/config.ini" | cut -d= -f2 | sed 's|/*$||'); RD="$SDK/$SYS/ramdisk.img"
+  [ -f "$RD.magisk" ] || cp "$RD" "$RD.magisk"            # bản đã có Magisk (chưa gắn dịch vụ) — luôn làm lại từ bản này
+  AB=$(A shell getprop ro.product.cpu.abi | tr -d '\r'); case "$AB" in x86_64) L=x86_64;; *) L=x86;; esac
+  MZ="$HOME/rootAVD/Magisk.zip"; [ -f "$MZ" ] || { err "Không thấy $MZ (chạy: bash $0 root)"; exit 1; }
+  unzip -p "$MZ" "lib/$L/libmagiskboot.so" > /tmp/cp-mb 2>/dev/null; [ -s /tmp/cp-mb ] || { err "Không lấy được magiskboot từ Magisk.zip"; exit 1; }
+  cat > /tmp/cpgrant.sh <<'GS'
+#!/system/bin/sh
+M=/system/bin/magisk; [ -x "$M" ] || M=$(command -v magisk)
+while true; do
+  $M --sqlite "REPLACE INTO settings (key,value) VALUES('root_access',3)" >/dev/null 2>&1
+  for u in 2000 $(cmd package list packages -3 -U 2>/dev/null | sed -n 's/.*uid:\([0-9]*\).*/\1/p' | sort -u); do
+    $M --sqlite "REPLACE INTO policies (uid,policy,until,logging,notification) VALUES($u,2,0,0,0)" >/dev/null 2>&1
+  done
+  sleep 15
+done
+GS
+  cat > /tmp/cpgrant.rc <<'RC'
+service cpgrant /system/bin/sh ${MAGISKTMP}/cpgrant.sh
+    user root
+    group root
+    seclabel u:r:magisk:s0
+    oneshot
+    disabled
+
+on property:sys.boot_completed=1
+    start cpgrant
+RC
+  T=/data/local/tmp
+  A push /tmp/cp-mb $T/mb >/dev/null && A push "$RD.magisk" $T/rd.img >/dev/null && A push /tmp/cpgrant.sh $T/cpgrant.sh >/dev/null && A push /tmp/cpgrant.rc $T/cpgrant.rc >/dev/null || { err "Không chép được file vào máy"; exit 1; }
+  OUT=$(A shell "cd $T && chmod 755 mb && rm -f rd.cpio rd.new && ./mb decompress rd.img rd.cpio 2>&1" | tr -d '\r'); echo "   $OUT" | head -3
+  FMT=$(echo "$OUT" | sed -n 's/.*\[\(.*\)\].*/\1/p' | head -1); [ -n "$FMT" ] || FMT=lz4_legacy
+  A shell "cd $T && (./mb cpio rd.cpio 'exists overlay.d/sbin' || ./mb cpio rd.cpio 'mkdir 0750 overlay.d' 'mkdir 0750 overlay.d/sbin') && ./mb cpio rd.cpio 'add 0644 overlay.d/cpgrant.rc cpgrant.rc' 'add 0755 overlay.d/sbin/cpgrant.sh cpgrant.sh' && ./mb compress=$FMT rd.cpio rd.new" 2>&1 | tr -d '\r' | tail -3
+  A pull $T/rd.new /tmp/cp-rd.new >/dev/null 2>&1 && [ -s /tmp/cp-rd.new ] || { err "Đóng gói ramdisk lỗi"; exit 1; }
+  cp /tmp/cp-rd.new "$RD" && ok "Đã gắn dịch vụ root tự động ($FMT) vào $SYS"
+  A shell "rm -f $T/mb $T/rd.img $T/rd.cpio $T/rd.new $T/cpgrant.sh $T/cpgrant.rc"
+  bash "$0" stop >/dev/null 2>&1; bash "$0" start >/dev/null 2>&1; sleep 25
+  A shell 'su -c id' 2>/dev/null | grep -q "uid=0" && ok "ROOT TỰ ĐỘNG: CHẠY ✓ (Shell + mọi app có root, không cần bấm)" \
+    || { err "Root tự động chưa chạy. Gỡ: cp '$RD.magisk' '$RD'"; A shell 'getprop init.svc.cpgrant; dmesg 2>/dev/null | grep -i cpgrant | tail -3'; } ;;
+
 auto)
   # KIỂM TRA TẤT CẢ BẢN 1 LỆNH: với từng bản Android → tải, bật, root (Magisk), cấp root, báo cáo → bảng tổng kết
   VERS="${VERS:-11 12 10 9}"; SUM="$HOME/gpu-auto-ketqua.txt"; : > "$SUM"
+  exec > >(tee "$HOME/gpu-auto-log.txt") 2>&1          # ghi toàn bộ quá trình để dò lỗi
   declare -A IM=([9]="system-images;android-28;google_apis_playstore;x86" [10]="system-images;android-29;google_apis_playstore;x86" \
                  [11]="system-images;android-30;google_apis_playstore;x86_64" [12]="system-images;android-31;google_apis_playstore;x86_64")
   for v in $VERS; do
@@ -220,9 +267,9 @@ auto)
     bash "$0" stop >/dev/null 2>&1
     GPU_IMG="${IM[$v]}" bash "$0" image || GPU_IMG="${IM[$v]/;x86/;x86_64}" bash "$0" image || { echo "Android $v: TẢI LỖI" >> "$SUM"; continue; }
     WIPE=1 bash "$0" start >/dev/null 2>&1 || { echo "Android $v: KHÔNG BẬT ĐƯỢC" >> "$SUM"; continue; }
-    bash "$0" root </dev/null 2>&1 | tail -3
+    bash "$0" root </dev/null 2>&1 | tail -12
     bash "$0" start >/dev/null 2>&1; sleep 20
-    bash "$0" rootgrant 2>&1 | tail -2
+    bash "$0" rootboot 2>&1 | tail -3
     R=$(bash "$0" report 2>&1); echo "$R"
     { echo "== Android $v =="; echo "$R" | grep -E "GPU:|Game ARM:|Root|Play Store:|Ảnh màn hình:|Nén video|Kết nối phát hình|Chrome:" | sed 's/\x1b\[[0-9;]*m//g'; } >> "$SUM"
   done

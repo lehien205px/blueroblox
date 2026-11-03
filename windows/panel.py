@@ -25,7 +25,10 @@ SERVICES = {   # tên: (thư mục chạy, lệnh)
     "ws-scrcpy": (os.path.join(B, "ws-scrcpy", "dist"), [__import__("shutil").which("node") or r"C:\Program Files\nodejs\node.exe", "index.js"]),
     "cpapi": (B, [PY, "-u", "run.py", "cpapi.py"]),
     "cloudphoned": (B, [PY, "-u", "run.py", "cloudphoned.py"]),
+    "duong-thang": (B, [os.path.join(B, "caddy.exe"), "run", "--config", os.path.join(B, "Caddyfile"), "--adapter", "caddyfile"]),
 }
+FAST_HOST, FAST_PORT, ZONE = "fast.blueroblox.shop", 8443, "blueroblox.shop"
+CADDY_URL = "https://caddyserver.com/api/download?os=windows&arch=amd64&p=github.com%2Fcaddy-dns%2Fcloudflare"
 
 def conf():
     d = {}
@@ -127,7 +130,7 @@ class App:
         bar1 = tk.Frame(r, bg=BG); bar1.pack(fill="x", padx=14, pady=(8, 2))
         bar2 = tk.Frame(r, bg=BG); bar2.pack(fill="x", padx=14, pady=(2, 8))
         def btn(text, cmd, color=CARD, fg=FG):
-            bar = bar1 if len(bar1.winfo_children()) < 6 else bar2
+            bar = bar1 if len(bar1.winfo_children()) < 7 else bar2
             b = tk.Button(bar, text=text, command=cmd, bg=color, fg=fg, activebackground=BLUE, activeforeground="white", relief="flat",
                           font=("Segoe UI", 10, "bold"), padx=12, pady=7, cursor="hand2", bd=0)
             b.pack(side="left", padx=3); return b
@@ -141,6 +144,7 @@ class App:
         btn("📋 Danh sách máy", lambda: self.job("Danh sách máy", [PY, "phonectl.py", "list"]))
         btn("♻ Làm mới máy khách", self.remake)
         btn("⚡ Tối ưu Windows", self.optimize)
+        btn("🛣 Đường thẳng (ít trễ)", self.fast_setup)
         btn("🖼 Ảnh nền cho máy", lambda: self.job("Đặt ảnh nền BlueRoblox cho các máy đang chạy (máy chưa có)", [PY, "phonectl.py", "wallpaper", "--all"]))
         btn("⏻ Thoát hẳn", self.quit_all, "#3a2030", "#ffb3bb")
         btn("🙈 Ẩn cửa sổ MEmu", lambda: self.job("Cho cửa sổ MEmu chạy ngầm", [PY, "phonectl.py", "hide"]))
@@ -210,6 +214,7 @@ class App:
                     L(0, self.light, "web", False, "không vào được")
             L(0, self.adm.configure, {"text": "🛡 Đang chạy quyền Admin" if is_admin() else "Quyền thường (nút ①③ sẽ hỏi quyền Admin)",
                                       "fg": GOOD if is_admin() else MUTED})
+            if n % 150 == 5 and c.get("FAST_BASE") and c.get("CF_DNS_TOKEN"): self.fast_dns(quiet=True)   # ~10 phút: IP nhà mạng đổi → cập nhật
             n += 1; time.sleep(4)
 
     # ---------- việc chạy 1 lần ----------
@@ -299,7 +304,10 @@ class App:
         if not os.path.isfile(os.path.join(B, "platform-tools", "adb.exe")): self.say("Tổng quan", "✗ Chưa cài — bấm ① Cài đặt trước"); return
         if len(conf().get("SUPABASE_SERVICE_KEY", "")) < 30: self.say("Tổng quan", "✗ Chưa có khoá Supabase — bấm ② trước"); return
         subprocess.run([os.path.join(B, "platform-tools", "adb.exe"), "start-server"], capture_output=True, creationflags=NOWIN, env=ENV)
-        for n in SERVICES: self.svcs[n].start(); time.sleep(0.5)
+        c = conf(); ENV["CF_API_TOKEN"] = c.get("CF_DNS_TOKEN", "")
+        for n in SERVICES:
+            if n == "duong-thang" and not (c.get("FAST_BASE") and os.path.isfile(os.path.join(B, "caddy.exe"))): continue   # chưa bật đường thẳng
+            self.svcs[n].start(); time.sleep(0.5)
     def stop_all(self):
         for s in self.svcs.values(): s.stop()
 
@@ -338,6 +346,82 @@ reg add HKLM\SOFTWARE\Policies\Microsoft\Windows\GameDVR /v AllowGameDVR /t REG_
 Write-Host '[OK] Tat Xbox Game DVR'
 """, log)
         self.tail(log, "Tối ưu Windows", 300)
+
+
+    # ================= ĐƯỜNG THẲNG: khách nối thẳng về nhà, không vòng qua Cloudflare Hồng Kông =================
+    def _cf(self, method, path, token, body=None):
+        req = urllib.request.Request("https://api.cloudflare.com/client/v4" + path, method=method,
+                                     data=json.dumps(body).encode() if body is not None else None,
+                                     headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=20) as r: return json.loads(r.read().decode())
+
+    def fast_dns(self, token=None, quiet=False):
+        """Trỏ fast.blueroblox.shop về IP nhà mạng hiện tại (IP đổi thì tự cập nhật)."""
+        token = token or conf().get("CF_DNS_TOKEN", "")
+        if not token: return False
+        try:
+            ip = urllib.request.urlopen("https://api.ipify.org", timeout=10).read().decode().strip()
+            z = self._cf("GET", f"/zones?name={ZONE}", token)["result"][0]["id"]
+            recs = self._cf("GET", f"/zones/{z}/dns_records?type=A&name={FAST_HOST}", token)["result"]
+            body = {"type": "A", "name": FAST_HOST, "content": ip, "ttl": 120, "proxied": False}
+            if recs and recs[0]["content"] == ip:
+                if not quiet: self.say("Việc đang làm", f"✓ {FAST_HOST} đã trỏ đúng IP {ip}")
+                return True
+            if recs: self._cf("PUT", f"/zones/{z}/dns_records/{recs[0]['id']}", token, body)
+            else: self._cf("POST", f"/zones/{z}/dns_records", token, body)
+            self.say("Việc đang làm", f"✓ Đã trỏ {FAST_HOST} → {ip}")
+            return True
+        except Exception as e:
+            self.say("Việc đang làm", f"✗ Cập nhật tên miền đường thẳng lỗi: {e}"); return False
+
+    def _lan_ip(self):
+        try:
+            s_ = socket.socket(socket.AF_INET, socket.SOCK_DGRAM); s_.connect(("1.1.1.1", 80)); ip = s_.getsockname()[0]; s_.close(); return ip
+        except Exception: return "?"
+
+    def fast_setup(self):
+        t = simpledialog.askstring("Đường thẳng (ít trễ)",
+            "Cần 1 mã Cloudflare (API Token) quyền sửa tên miền:\n"
+            "dash.cloudflare.com → góc phải: My Profile → API Tokens → Create Token → mẫu \"Edit zone DNS\"\n"
+            "→ Permissions bấm \"+ Add more\": Zone · Zone · Read → Zone Resources: chọn blueroblox.shop\n"
+            "→ Continue → Create Token → Copy, rồi dán vào đây.\n"
+            "(Mã chỉ lưu trong C:\\blue\\cloudphone.conf, không gửi đi đâu.)", show="•", parent=self.root)
+        if not t: return
+        t = t.strip()
+        threading.Thread(target=self._fast_setup, args=(t,), daemon=True).start()
+
+    def _fast_setup(self, token):
+        S = lambda m: self.say("Việc đang làm", m)
+        self.root.after(0, self.nb.select, len(SERVICES) + 1)
+        S("\n===== Bật ĐƯỜNG THẲNG =====")
+        try:
+            self._cf("GET", f"/zones?name={ZONE}", token)["result"][0]["id"]
+        except Exception as e:
+            S(f"✗ Mã Cloudflare không dùng được ({e}). Tạo lại mã theo mẫu \"Edit zone DNS\" cho blueroblox.shop."); return
+        S("✓ Mã Cloudflare dùng được")
+        set_conf("CF_DNS_TOKEN", token)
+        exe = os.path.join(B, "caddy.exe")
+        if not os.path.isfile(exe):
+            S("Đang tải Caddy (máy chủ HTTPS, bản chính thức caddyserver.com, ~40MB)…")
+            try:
+                urllib.request.urlretrieve(CADDY_URL, exe + ".part"); os.replace(exe + ".part", exe); S("✓ Đã tải Caddy")
+            except Exception as e: S(f"✗ Tải Caddy lỗi: {e}"); return
+        open(os.path.join(B, "Caddyfile"), "w", encoding="utf-8").write(
+            "{\n\tadmin off\n}\n" + f"{FAST_HOST}:{FAST_PORT} {{\n\ttls {{\n\t\tdns cloudflare {{env.CF_API_TOKEN}}\n\t}}\n"
+            "\treverse_proxy 127.0.0.1:8010 {\n\t\tflush_interval -1\n\t}\n}\n")
+        if not self.fast_dns(token): return
+        set_conf("FAST_BASE", f"https://{FAST_HOST}:{FAST_PORT}")
+        log = os.path.join(LOGS, "fastfw.log")
+        run_admin(f"netsh advfirewall firewall delete rule name='BlueRoblox duong thang' | Out-Null\n"
+                  f"netsh advfirewall firewall add rule name='BlueRoblox duong thang' dir=in action=allow protocol=TCP localport={FAST_PORT}", log)
+        self.tail(log, "Mở cổng 8443 trên tường lửa Windows", 120, wait=True)
+        S("Đang bật lại dịch vụ để dùng đường thẳng…")
+        self.stop_all(); time.sleep(2); self.root.after(0, self.start_all)
+        lan = self._lan_ip()
+        S("✅ Máy Windows đã sẵn sàng đường thẳng. VIỆC CUỐI — trên ROUTER (modem nhà mạng):")
+        S(f"   Mở/chuyển cổng (Port Forwarding / NAT / Virtual Server): cổng ngoài {FAST_PORT} TCP → máy {lan} cổng {FAST_PORT}")
+        S("   (trước đây cổng này trỏ về máy Ubuntu 192.168.1.21 → sửa thành IP máy Windows ở trên)")
+        S(f"   Xong thì mở trang điều khiển máy trên web: góc trên hiện \"⚡ trễ mạng … ms\" là đang đi đường thẳng.")
 
     # ================= TỰ ĐỘNG A→Z =================
     def _ui(self, fn, *a):

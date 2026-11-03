@@ -1162,6 +1162,60 @@ html[data-theme] .cats button.on small{background:rgba(255,255,255,.25);color:#f
   .cb-chunky{font-size:30px;margin-top:12px}
 }
 
+/* ================================================================
+   BỐ CỤC GỌN — khách thấy sản phẩm ngay, không phải kéo xuống tìm
+   ================================================================ */
+.hero{min-height:0!important;padding-block:18px 6px;row-gap:14px;align-items:center}
+.hero h1{font-size:clamp(34px,4.1vw,54px);margin:12px 0 6px}
+.hero p{margin:10px 0 16px}
+.hero .cta{margin-top:0}
+.cb-stage{max-width:440px}
+.cb-board{padding:22px 20px 18px}
+.cb-cloud{padding:18px 14px 6px}
+.cb-cloud img{width:min(230px,68%)}
+.cb-chunky{font-size:clamp(30px,3.4vw,42px);margin-top:12px}
+/* 3 ô thông báo nằm ngang 1 hàng dưới phần đầu trang */
+.hero>.notice{grid-column:1/-1;max-width:none!important;margin-top:2px!important;display:grid!important;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px!important}
+.hero>.notice .nh{display:none}
+.hero>.notice .nc{padding:10px 12px!important}
+#join-wrap{padding-block:0 14px!important}
+.shop{padding-top:8px}
+
+/* Màn hình rộng: menu chuyển sang cột trái (dùng khoảng trống 2 bên), đầu trang chỉ còn 1 hàng */
+@media (min-width:1280px){
+  html[data-theme] body{padding-left:232px}
+  .top::before{content:"";position:fixed;left:0;top:0;bottom:0;width:232px;background:var(--hdr);border-right:2px solid var(--ring);pointer-events:none}
+  .top .wrap{min-height:64px;flex-wrap:nowrap;padding-block:8px;max-width:1380px}
+  .top .wrap::after{display:none}
+  .top .logo{position:fixed;left:22px;top:16px;z-index:2}
+  html[data-theme] .top nav{position:fixed;left:14px;top:84px;width:204px;margin:0;order:0;flex-direction:column;flex-wrap:nowrap;align-items:stretch;gap:4px;padding:10px;border-radius:22px;overflow:visible;z-index:2}
+  .top nav a{justify-content:flex-start;padding:11px 14px!important;font-size:15px!important}
+  .acct{margin-left:auto}
+  body.admin-page .top::before{display:none}
+}
+/* Điện thoại: bỏ khung cá voi lớn (logo đã có ở đầu trang) để sản phẩm lên sớm */
+@media (max-width:700px){
+  .cb-stage{display:none}
+  .hero{padding-block:10px 4px;row-gap:10px}
+  .hero h1{font-size:34px;margin:10px 0 4px}
+  .hero p{font-size:14.5px;margin:8px 0 12px}
+  .hero>.notice{order:3;grid-template-columns:1fr;gap:8px!important}
+  .hero>.notice .nc{padding:8px 10px!important}
+}
+@media (min-width:1280px){ .top .logo .mark{width:54px;height:38px} .top .logo .wm b{font-size:19px} .top .logo .wm small{font-size:10.5px} }
+/* Laptop màn thấp (≤ 860px chiều cao): thu gọn thêm để thấy sản phẩm ngay */
+@media (min-width:701px) and (max-height:860px){
+  .hero{padding-block:12px 4px;row-gap:10px}
+  .hero h1{font-size:clamp(32px,3.3vw,42px);margin:8px 0 4px}
+  .hero p{font-size:14.5px;margin:6px 0 12px}
+  .eyebrow{padding:5px 12px;font-size:12px}
+  .vnb{width:38px;height:38px}.vnb svg{width:26px;height:26px}.vnb canvas{width:28px;height:28px}
+  .cb-stage{max-width:330px}.cb-board{padding:16px 14px 14px}.cb-cloud{padding:12px 10px 4px}.cb-cloud img{width:min(160px,60%)}
+  .cb-chunky{font-size:28px;margin-top:8px}
+  .hero .btn.lg{padding-block:10px}
+  .hero>.notice .nc{padding:7px 10px!important}
+}
+
 </style>
 <script>/* chế độ Sáng/Tối: nhớ lựa chọn (br_theme), lần đầu theo máy khách */(function(){var t=null;try{t=localStorage.getItem("br_theme")}catch(e){}if(t!=="light"&&t!=="dark")t=matchMedia&&matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t;})();</script>
 <script>
@@ -1242,7 +1296,6 @@ window.BR_CONFIG = {
       <button class="btn ghost lg" id="hero-topup" type="button"><svg class="ic" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.4"/></svg><span data-i18n="nav_topup">Nạp tiền</span></button>
     </div>
     <div style="display:none"><b id="st-a"></b><b id="st-b"></b></div>
-    <div class="notice" id="notices"></div>
   </div>
   <div class="cb-stage" aria-hidden="true">
     <div class="cb-board">
@@ -1253,6 +1306,7 @@ window.BR_CONFIG = {
       <div class="cb-chunky">CLOUD<br>BLUE<small data-i18n="cb_tag">ĐIỆN THOẠI ĐÁM MÂY VIỆT NAM</small></div>
     </div>
   </div>
+  <div class="notice" id="notices"></div>
 </section>
 
 <section class="wrap" id="join-wrap" hidden style="padding-block:0 28px">

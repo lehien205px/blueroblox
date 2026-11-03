@@ -33,17 +33,44 @@ MEMU = next((d for d in MEMU_DIRS if d and os.path.isfile(os.path.join(d, "memuc
 NOWIN = 0x08000000
 
 def run(args, timeout=180, text=True):
-    try:
-        return subprocess.run([str(x) for x in args], capture_output=True, text=text, timeout=timeout, creationflags=NOWIN,
-                              encoding="utf-8" if text else None, errors="replace" if text else None)
-    except subprocess.TimeoutExpired:
-        return subprocess.CompletedProcess(args, 124, "", "timeout")
+    """Chạy lệnh, ghi kết quả ra FILE tạm (không dùng pipe): memuc hay để lại tiến trình con giữ pipe → Python chờ mãi
+       dù đã quá giờ (khoá MEmu bị giữ hàng chục phút, đơn khách bị huỷ). Quá giờ → tắt cả cây tiến trình, trả về ngay."""
+    import tempfile
+    args = [str(x) for x in args]
+    with tempfile.TemporaryFile() as fo, tempfile.TemporaryFile() as fe:
+        try: p = subprocess.Popen(args, stdout=fo, stderr=fe, stdin=subprocess.DEVNULL, creationflags=NOWIN)
+        except OSError as e: return subprocess.CompletedProcess(args, 127, "", str(e))
+        try: code = p.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            tree = ["/T"] if args[0].lower().endswith("memuc.exe") else []      # adb: KHÔNG /T (adb server có thể là "con" → chết theo)
+            subprocess.run(["taskkill", "/PID", str(p.pid)] + tree + ["/F"], capture_output=True, creationflags=NOWIN)
+            try: p.wait(timeout=10)
+            except subprocess.TimeoutExpired: pass
+            code = 124
+        fo.seek(0); fe.seek(0); out, err = fo.read(), fe.read()
+    if text: out, err = out.decode("utf-8", "replace"), err.decode("utf-8", "replace")
+    if code == 124: err = (err or "") + ("timeout" if text else b"timeout")
+    return subprocess.CompletedProcess(args, code, out, err)
+def _unstick_memuc():
+    """Khoá memuc bị giữ quá lâu (1 lệnh memuc treo) → tắt các memuc.exe đang treo + gỡ khoá, để đơn khách không bị huỷ."""
+    run(["powershell", "-NoProfile", "-Command",
+         "Get-CimInstance Win32_Process -Filter \"name='memuc.exe'\" | Where-Object { $_.CreationDate -lt (Get-Date).AddSeconds(-45) } | "
+         "ForEach-Object { Stop-Process -Id $_.ProcessId -Force }"], 60)
+    time.sleep(2)
+    try: os.remove(os.path.join(HOME, "redroid", "memuc.lock"))
+    except OSError: pass
+    print("   (lệnh MEmu bị treo → đã gỡ, làm tiếp)", flush=True)
 def memuc(*a, timeout=300):
     """memuc chỉ xử lý 1 lệnh một lúc (chạy chồng → "read failed: 233") → xếp hàng bằng khoá + thử lại."""
     r = None
     for i in range(4):
-        with _Lock("memuc", wait=min(max(120, timeout), 260)):
+        lk = _Lock("memuc", wait=min(max(120, timeout), 260))
+        try: lk.__enter__()
+        except RuntimeError:
+            _unstick_memuc(); lk = _Lock("memuc", wait=60); lk.__enter__()
+        try:
             r = run([os.path.join(MEMU, "memuc.exe")] + list(a), timeout)
+        finally: lk.__exit__()
         o = (r.stdout or "") + (r.stderr or "")
         if "read failed" not in o and "connect failed" not in o.lower(): return r
         time.sleep(2 + 2 * i)
@@ -662,7 +689,7 @@ def cmd_pool(a):
         print(f"DUNG_SAN {nm}: tạo + khởi động + cài sẵn…", flush=True)
         with _Lock("memu", wait=5):                     # không chờ: đang có việc MEmu khác (máy khách) → để lần sau
             before = set(vms())
-            r = memuc("create", "96", timeout=180)
+            r = memuc("create", "96", timeout=90)        # bình thường ~10–30 giây; treo → bỏ, không giữ khoá lâu
             m = re.search(r"index\D*(\d+)", r.stdout or "")
             idx = int(m.group(1)) if m else next(iter(sorted(set(vms()) - before)), None)
             if idx is None: print("LỖI dựng máy sẵn:", ((r.stdout or "") + (r.stderr or "")).strip()[-200:]); return

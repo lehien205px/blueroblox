@@ -1101,7 +1101,8 @@ html[data-theme] .card,html[data-theme] .side,html[data-theme] .panel,html[data-
 html[data-theme=dark] .card,html[data-theme=dark] .side,html[data-theme=dark] .panel,html[data-theme=dark] .f{box-shadow:0 0 0 2px var(--ring),0 10px 26px rgba(0,0,0,.35)}
 html[data-theme] .card:hover{box-shadow:0 0 0 3px var(--ring2),0 16px 34px rgba(43,110,240,.22)}
 html[data-theme] .thumb{background:linear-gradient(160deg,#2b6ef0,#0f3fb3)}
-html[data-theme] .thumb::after{background:linear-gradient(transparent,rgba(10,30,80,.45))}
+html[data-theme] .thumb::after{background:linear-gradient(transparent,rgba(10,30,80,.25))}
+html[data-theme=light] .thumb::after{display:none}
 html[data-theme] .thumb .tag{background:rgba(255,255,255,.92);color:#0f3fb3;border:0;font-weight:700}
 html[data-theme] .thumb .hot{background:linear-gradient(180deg,#ffe46b,#ffc400);color:#5a3a00}
 html[data-theme] .price,html[data-theme] .days-chip,html[data-theme] .sum b,html[data-theme] .kv b.hl{color:var(--money)}
@@ -1582,7 +1583,7 @@ window.BR_CONFIG = {
         <h3 id="pf-title" hidden>Thêm sản phẩm</h3>
         <label class="full">Tên sản phẩm<input id="pf-n" required maxlength="120" placeholder="VD: Clone aged 90 ngày"></label>
         <label>Chuyên mục<select id="pf-c" style="width:100%"><option value="clone">Clone Roblox</option><option value="vps">VPS GPU</option></select></label>
-        <label>Kiểu ảnh động<select id="pf-thumb" style="width:100%"><option value="">Theo chuyên mục</option><option value="clone">Khối Clone (3D)</option><option value="vps">Chip VPS</option></select></label>
+        <label>Kiểu ảnh động<select id="pf-thumb" style="width:100%"><option value="">Theo chuyên mục</option><option value="clone">Khối Clone (3D)</option><option value="vps">Card GPU (VPS)</option><option value="phone">Điện thoại đám mây</option></select></label>
         <label><span id="pf-vnd-l">Giá (VND)</span><input id="pf-vnd" type="number" min="0" step="100" required></label>
         <label>Thứ tự hiển thị<input id="pf-o" type="number" step="1" value="100"></label>
         <label class="chk"><input id="pf-h" type="checkbox"> Gắn nhãn HOT</label>
@@ -3644,7 +3645,7 @@ window.BRfxOn = !window.BR_LITE;   // chế độ nhẹ (máy yếu) → ảnh s
 
   function scan() {
     document.querySelectorAll(".thumb canvas[data-id]").forEach(c => {
-      if (c._fx) return; c._fx = 1; c._seed = seedOf(c.dataset.id); c._kind = c.dataset.c === "vps" ? "vps" : "clone";
+      if (c._fx) return; c._fx = 1; c._seed = seedOf(c.dataset.id); c._kind = (c.dataset.id === "cloudphone" || c.dataset.c === "phone") ? "phone" : c.dataset.c === "vps" ? "vps" : "clone";
       c._card = c.closest(".card"); if (io) io.observe(c); else vis.add(c); draw(c, performance.now());
     });
     for (const c of vis) if (!c.isConnected) vis.delete(c);
@@ -3714,38 +3715,125 @@ window.BRfxOn = !window.BR_LITE;   // chế độ nhẹ (máy yếu) → ảnh s
     x.restore();
   }
 
+  /* ===== Cloud Blue: ảnh sản phẩm kiểu logo (bảng bong bóng · viền trắng · xanh bóng) ===== */
+  const THEME = () => document.documentElement.dataset.theme === "light" ? "light" : "dark";
+  const bgCache = {};
+  const circ = (x, X, Y, r) => { x.beginPath(); x.arc(X, Y, r, 0, TAU); x.fill(); };
+  const rr = (x, X, Y, w, h, r) => { x.beginPath(); x.moveTo(X + r, Y); x.arcTo(X + w, Y, X + w, Y + h, r); x.arcTo(X + w, Y + h, X, Y + h, r); x.arcTo(X, Y + h, X, Y, r); x.arcTo(X, Y, X + w, Y, r); x.closePath(); };
+  function bgOf(th) {
+    if (bgCache[th]) return bgCache[th];
+    const c = document.createElement("canvas"); c.width = W; c.height = H; const x = c.getContext("2d"), L = th === "light";
+    const base = x.createLinearGradient(0, 0, 0, H); base.addColorStop(0, L ? "#eef5ff" : "#0d1f45"); base.addColorStop(1, L ? "#dbe9fb" : "#08152f");
+    x.fillStyle = base; x.fillRect(0, 0, W, H);
+    const S = 26;                                            // chấm bong bóng như bảng logo
+    for (let yy = S / 2; yy < H + S; yy += S) for (let xx = S / 2; xx < W + S; xx += S) {
+      x.fillStyle = L ? "rgba(12,40,100,.08)" : "rgba(0,0,0,.30)"; circ(x, xx + 1, yy + 2, 8.6);
+      x.fillStyle = L ? "#ffffff" : "rgba(120,180,255,.10)"; circ(x, xx, yy, 8);
+      x.fillStyle = L ? "rgba(255,255,255,.9)" : "rgba(160,205,255,.10)"; circ(x, xx - 2.4, yy - 2.6, 2.6);
+    }
+    if (window.drawDongSon) {                               // trống đồng mờ phía sau (vẽ 1 lần)
+      const R = H * .62; x.save(); x.globalAlpha = L ? .16 : .22; x.translate(W / 2, H / 2);
+      drawDongSon(x, R, { color: L ? "#2b6ef0" : "#8cc4ff", cut: true }); x.restore();
+    }
+    const g = x.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, H * .75);
+    g.addColorStop(0, L ? "rgba(120,190,255,.45)" : "rgba(70,150,255,.38)"); g.addColorStop(1, "rgba(70,150,255,0)");
+    x.fillStyle = g; x.fillRect(0, 0, W, H);
+    return (bgCache[th] = c);
+  }
+  /* cá voi HD lấy từ khung Cloud Blue ở đầu trang */
+  const WH = new Image(); let whOk = false;
+  const whSrc = (document.querySelector(".cb-cloud img") || {}).src;
+  if (whSrc) { WH.onload = () => { whOk = true; redrawAll(); }; WH.src = whSrc; }
+  function star(x, X, Y, s, a) { x.save(); x.globalAlpha = a; x.fillStyle = "#fff"; x.shadowColor = "rgba(140,200,255,.9)"; x.shadowBlur = 8; x.translate(X, Y);
+    x.beginPath(); for (let j = 0; j < 8; j++) { const r = j % 2 ? s * .28 : s, an = j * Math.PI / 4; x.lineTo(Math.cos(an) * r, Math.sin(an) * r); } x.closePath(); x.fill(); x.restore(); }
+  function shadow(x, cx, cy, rw) { const g = x.createRadialGradient(cx, cy, 0, cx, cy, rw); g.addColorStop(0, "rgba(10,30,80,.35)"); g.addColorStop(1, "rgba(10,30,80,0)");
+    x.save(); x.scale(1, .22); x.fillStyle = g; x.beginPath(); x.arc(cx, cy / .22, rw, 0, TAU); x.fill(); x.restore(); }
+  /* điện thoại đám mây: máy bóng xanh, màn hình có cá voi */
+  function phone(x, cx, cy, T) {
+    const w = 100, h = 170, X = cx - w / 2, Y = cy - h / 2 + 8;
+    shadow(x, cx, cy + h / 2 + 10, 70);
+    x.save(); x.translate(cx, cy); x.rotate(-.07); x.translate(-cx, -cy);
+    x.save(); x.shadowColor = "rgba(70,165,255,.75)"; x.shadowBlur = 22; rr(x, X - 5, Y - 5, w + 10, h + 10, 24); x.fillStyle = "#fff"; x.fill(); x.restore();
+    rr(x, X, Y, w, h, 20); const bg = x.createLinearGradient(X, Y, X + w, Y + h); bg.addColorStop(0, "#7cb4ff"); bg.addColorStop(.5, "#2b6ef0"); bg.addColorStop(1, "#1747c4"); x.fillStyle = bg; x.fill();
+    rr(x, X + 8, Y + 16, w - 16, h - 32, 12); const sc = x.createLinearGradient(0, Y, 0, Y + h); sc.addColorStop(0, "#ffffff"); sc.addColorStop(1, "#d6e8ff"); x.fillStyle = sc; x.fill();
+    x.save(); rr(x, X + 8, Y + 16, w - 16, h - 32, 12); x.clip();
+    x.fillStyle = "rgba(43,110,240,.08)"; for (let yy = Y + 22; yy < Y + h; yy += 13) for (let xx = X + 14; xx < X + w; xx += 13) circ(x, xx, yy, 4);
+    if (whOk) { const ww = w - 12, wh = ww * WH.height / WH.width, bob = Math.sin(T * .0025) * 3; x.drawImage(WH, cx - ww / 2, Y + h / 2 - wh / 2 - 6 + bob, ww, wh); }
+        for (let i = 0; i < 3; i++) { x.fillStyle = i === 1 ? "#2b6ef0" : "rgba(43,110,240,.3)"; circ(x, cx - 10 + i * 10, Y + h - 28, 2.6); }
+    x.restore();
+    rr(x, cx - 16, Y + 6, 32, 5, 3); x.fillStyle = "rgba(255,255,255,.55)"; x.fill();
+    x.save(); rr(x, X, Y, w, h, 20); x.clip(); const gl = x.createLinearGradient(X, Y, X + w, Y + h * .6);
+    gl.addColorStop(0, "rgba(255,255,255,.55)"); gl.addColorStop(.35, "rgba(255,255,255,0)"); x.fillStyle = gl; x.fillRect(X, Y, w, h); x.restore();
+    x.restore();
+  }
+  /* khối bong bóng (Clone): khối lập phương xanh, nút tròn trên mặt, viền trắng như sticker */
+  function bcube(x, cx, cy, s, studs) {
+    const k = .87, T0 = [cx, cy - s], Rr = [cx + k * s, cy - s / 2], C = [cx, cy], Ll = [cx - k * s, cy - s / 2];
+    const poly = (pts, fill) => { x.beginPath(); pts.forEach((p, i) => i ? x.lineTo(p[0], p[1]) : x.moveTo(p[0], p[1])); x.closePath(); x.fillStyle = fill; x.fill(); };
+    const hex = [[cx, cy - s], [cx + k * s, cy - s / 2], [cx + k * s, cy + s / 2], [cx, cy + s], [cx - k * s, cy + s / 2], [cx - k * s, cy - s / 2]];
+    x.save(); x.lineJoin = "round"; x.shadowColor = "rgba(70,165,255,.7)"; x.shadowBlur = s * .35; x.strokeStyle = "#fff"; x.lineWidth = Math.max(4, s * .12);
+    x.beginPath(); hex.forEach((p, i) => i ? x.lineTo(p[0], p[1]) : x.moveTo(p[0], p[1])); x.closePath(); x.stroke(); x.fillStyle = "#fff"; x.fill(); x.restore();
+    const gt = x.createLinearGradient(Ll[0], T0[1], Rr[0], C[1]); gt.addColorStop(0, "#b6dcff"); gt.addColorStop(1, "#5c9dff");
+    const gl = x.createLinearGradient(Ll[0], 0, C[0], 0); gl.addColorStop(0, "#4f90ff"); gl.addColorStop(1, "#2b6ef0");
+    const gr = x.createLinearGradient(C[0], 0, Rr[0], 0); gr.addColorStop(0, "#2160e6"); gr.addColorStop(1, "#1446b8");
+    poly([T0, Rr, C, Ll], gt); poly([Ll, C, [cx, cy + s], [cx - k * s, cy + s / 2]], gl); poly([C, Rr, [cx + k * s, cy + s / 2], [cx, cy + s]], gr);
+    const on = (A, B, D, u, v) => [A[0] + (B[0] - A[0]) * u + (D[0] - A[0]) * v, A[1] + (B[1] - A[1]) * u + (D[1] - A[1]) * v];
+    const n = s > 40 ? 3 : 2;
+    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {            // chấm bong bóng trên 2 mặt bên
+      const u = (i + .5) / n, v = (j + .5) / n, r = s * (n === 3 ? .1 : .14);
+      let p = on(Ll, C, [cx - k * s, cy + s / 2], u, v); x.fillStyle = "rgba(255,255,255,.18)"; circ(x, p[0], p[1], r); x.fillStyle = "rgba(255,255,255,.35)"; circ(x, p[0] - r * .3, p[1] - r * .3, r * .35);
+      p = on(C, Rr, [cx, cy + s], u, v); x.fillStyle = "rgba(255,255,255,.12)"; circ(x, p[0], p[1], r); x.fillStyle = "rgba(255,255,255,.28)"; circ(x, p[0] - r * .3, p[1] - r * .3, r * .35);
+    }
+    if (studs) for (let i = 0; i < 2; i++) for (let j = 0; j < 2; j++) {   // nút tròn trên đỉnh
+      const p = on(T0, Rr, Ll, .3 + i * .4, .3 + j * .4), rx = s * .2, ry = s * .115, hgt = s * .1;
+      x.fillStyle = "#3d7ff0"; x.beginPath(); x.ellipse(p[0], p[1], rx, ry, 0, 0, TAU); x.fill();
+      x.fillRect(p[0] - rx, p[1] - hgt, rx * 2, hgt);
+      const st = x.createLinearGradient(p[0] - rx, 0, p[0] + rx, 0); st.addColorStop(0, "#d6ecff"); st.addColorStop(1, "#7fb6ff");
+      x.fillStyle = st; x.beginPath(); x.ellipse(p[0], p[1] - hgt, rx, ry, 0, 0, TAU); x.fill();
+      x.fillStyle = "rgba(255,255,255,.85)"; x.beginPath(); x.ellipse(p[0] - rx * .35, p[1] - hgt - ry * .25, rx * .3, ry * .3, 0, 0, TAU); x.fill();
+    }
+    x.save(); x.strokeStyle = "rgba(255,255,255,.75)"; x.lineWidth = 2; x.lineCap = "round"; x.beginPath(); x.moveTo(Ll[0] + 4, Ll[1] + 4); x.lineTo(T0[0], T0[1] + 4); x.stroke(); x.restore();
+  }
+  function clone(x, cx, cy, T) {
+    const bob = Math.sin(T * .002) * 5;
+    shadow(x, cx, cy + 92, 80);
+    bcube(x, cx - 112, cy + 34 + Math.sin(T * .0024 + 1) * 4, 24, true);
+    bcube(x, cx + 114, cy + 26 + Math.sin(T * .0021 + 2) * 4, 28, true);
+    bcube(x, cx, cy + 6 + bob, 62, true);
+  }
+  /* VPS GPU: card đồ hoạ bóng, 2 quạt quay chậm */
+  function gpu(x, cx, cy, T) {
+    const w = 250, h = 124, X = cx - w / 2, Y = cy - h / 2 - 6;
+    shadow(x, cx, cy + h / 2 + 22, 130);
+    x.save(); x.fillStyle = "#c6d4ea"; rr(x, X - 14, Y + 6, 14, h - 12, 3); x.fill(); x.fillStyle = "#94a6c4"; for (let i = 0; i < 4; i++) x.fillRect(X - 10, Y + 20 + i * 24, 6, 12); x.restore();
+    x.fillStyle = "#e9b949"; rr(x, X + 40, Y + h - 2, 150, 12, 2); x.fill();
+    x.save(); x.shadowColor = "rgba(70,165,255,.75)"; x.shadowBlur = 22; rr(x, X - 5, Y - 5, w + 10, h + 10, 22); x.fillStyle = "#fff"; x.fill(); x.restore();
+    rr(x, X, Y, w, h, 18); const bg = x.createLinearGradient(X, Y, X, Y + h); bg.addColorStop(0, "#6aa6ff"); bg.addColorStop(.55, "#2b6ef0"); bg.addColorStop(1, "#1747c4"); x.fillStyle = bg; x.fill();
+    x.save(); rr(x, X, Y, w, h, 18); x.clip(); x.fillStyle = "rgba(255,255,255,.10)"; for (let yy = Y + 10; yy < Y + h; yy += 16) for (let xx = X + 10; xx < X + w; xx += 16) circ(x, xx, yy, 4.5); x.restore();
+    const fan = (fx, fy, r, rot) => {
+      x.fillStyle = "#0f3fb3"; circ(x, fx, fy, r + 6); x.strokeStyle = "rgba(255,255,255,.85)"; x.lineWidth = 3; x.beginPath(); x.arc(fx, fy, r + 6, 0, TAU); x.stroke();
+      x.save(); x.translate(fx, fy); x.rotate(rot);
+      for (let b = 0; b < 7; b++) { x.rotate(TAU / 7); x.beginPath(); x.moveTo(5, 0); x.quadraticCurveTo(r * .55, -r * .45, r, -r * .1); x.quadraticCurveTo(r * .6, r * .06, 5, 5); x.closePath();
+        const bg2 = x.createLinearGradient(0, 0, r, 0); bg2.addColorStop(0, "#cfe6ff"); bg2.addColorStop(1, "#ffffff"); x.fillStyle = bg2; x.fill(); }
+      x.restore(); const hub = x.createRadialGradient(fx - 3, fy - 3, 1, fx, fy, 11); hub.addColorStop(0, "#fff"); hub.addColorStop(1, "#7fb6ff"); x.fillStyle = hub; circ(x, fx, fy, 10);
+    };
+    const rot = T * .004; fan(X + 60, Y + h / 2, 34, rot); fan(X + w - 60, Y + h / 2, 34, -rot * 1.1);
+    x.fillStyle = "#fff"; x.font = "900 16px 'Be Vietnam Pro',system-ui,sans-serif"; x.textAlign = "center"; x.fillText("GPU", cx, Y + h / 2 + 6);
+    x.save(); rr(x, X, Y, w, h, 18); x.clip(); const gl = x.createLinearGradient(X, Y, X + w * .6, Y + h); gl.addColorStop(0, "rgba(255,255,255,.45)"); gl.addColorStop(.4, "rgba(255,255,255,0)"); x.fillStyle = gl; x.fillRect(X, Y, w, h); x.restore();
+  }
   function draw(c, t) {
     const x = c.getContext("2d"); if (c.width !== W) { c.width = W; c.height = H; }
-    const k = c._seed, vps = c._kind === "vps", hue = vps ? 248 : 220, fast = !!(c._card && c._card.matches(":hover"));
+    const k = c._seed, fast = !!(c._card && c._card.matches(":hover"));
     c._t = (c._t || 0) + (c._last ? (t - c._last) * (fast ? 2.4 : 1) : 0); c._last = t; const T = c._t + (k % 5000);
-    const g = x.createLinearGradient(0, 0, W, H); g.addColorStop(0, `hsl(${hue} 62% 19%)`); g.addColorStop(1, `hsl(${hue + 10} 70% 7%)`);
-    x.fillStyle = g; x.fillRect(0, 0, W, H);
-    // lưới phối cảnh chạy
-    x.save(); x.strokeStyle = `hsla(${hue + 10} 90% 70% / .12)`; x.lineWidth = 1;
-    const off = (T * .03) % 26; for (let i = -2; i < 14; i++) { const y = H * .62 + Math.pow((i * 26 + off) / 26, 1.6) * 9; if (y > H) break; x.beginPath(); x.moveTo(0, y); x.lineTo(W, y); x.stroke(); }
-    for (let i = -10; i <= 10; i++) { x.beginPath(); x.moveTo(W / 2 + i * 14, H * .62); x.lineTo(W / 2 + i * 70, H); x.stroke(); }
+    x.drawImage(bgOf(THEME()), 0, 0);
+    x.save(); x.translate(W / 2, H / 2 + 16); x.scale(.84, .84); x.translate(-W / 2, -H / 2);   // chừa chỗ cho nhãn ở góc trên
+    if (c._kind === "phone") phone(x, W / 2, H / 2, T); else if (c._kind === "vps") gpu(x, W / 2, H / 2, T); else clone(x, W / 2, H / 2 - 18, T);
     x.restore();
-    // trống đồng xoay phía sau
-    const m = getMedal();
-    if (m) { const R = H * .66; x.save(); x.globalAlpha = .42 + (fast ? .15 : 0); x.translate(W / 2, H / 2); x.rotate(T * .00035 * (k % 2 ? 1 : -1)); x.drawImage(m, -R, -R, R * 2, R * 2); x.restore(); }
-    // hào quang
-    const halo = x.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, H * .55); halo.addColorStop(0, `hsla(${hue} 100% 65% / ${fast ? .38 : .22})`); halo.addColorStop(1, `hsla(${hue} 100% 65% / 0)`);
-    x.fillStyle = halo; x.fillRect(0, 0, W, H);
-    if (vps) chip(x, W / 2, H / 2, T, k, fast);
-    else {
-      const bob = Math.sin(T * .002) * 7;
-      x.save(); x.fillStyle = "rgba(0,0,0,.35)"; x.beginPath(); x.ellipse(W / 2, H * .82, 52 - bob * 1.5, 9, 0, 0, TAU); x.fill(); x.restore();
-      for (let i = 0; i < 5; i++) { const a = T * .0011 + i * TAU / 5, ox = W / 2 + Math.cos(a) * 130, oy = H / 2 + Math.sin(a) * 42, front = Math.sin(a) > 0;
-        if (!front) cube(x, ox, oy, 9 + (i % 2) * 3, T * .002 + i, .6, hue + 25, 6); }
-      cube(x, W / 2, H / 2 + bob - 4, 44, T * .0012 + k, .55 + Math.sin(T * .0007) * .25, hue, fast ? 28 : 14);
-      for (let i = 0; i < 5; i++) { const a = T * .0011 + i * TAU / 5, ox = W / 2 + Math.cos(a) * 130, oy = H / 2 + Math.sin(a) * 42;
-        if (Math.sin(a) > 0) cube(x, ox, oy, 11 + (i % 2) * 3, T * .002 + i, .6, hue + 25, 8); }
-    }
-    // sao lấp lánh
-    for (let i = 0; i < 9; i++) { const sx = ((k >> (i % 13)) * 37 + i * 97) % W, sy = ((k >> (i % 11)) * 53 + i * 61) % H, a = .5 + .5 * Math.sin(T * .003 + i * 1.7), s = 2 + (i % 3);
-      x.save(); x.globalAlpha = a; x.fillStyle = i % 3 ? "#fff" : "#e6f0ff"; x.translate(sx, sy); x.rotate(T * .001);
-      x.beginPath(); for (let j = 0; j < 8; j++) { const r = j % 2 ? s * .3 : s * 1.6, an = j * Math.PI / 4; x.lineTo(Math.cos(an) * r, Math.sin(an) * r); } x.closePath(); x.fill(); x.restore(); }
+    for (let i = 0; i < 6; i++) { const sx = 30 + ((k >> (i % 13)) * 37 + i * 97) % (W - 60), sy = 20 + ((k >> (i % 11)) * 53 + i * 61) % (H - 40);
+      star(x, sx, sy, 5 + (i % 3) * 2, .45 + .55 * Math.abs(Math.sin(T * .0018 + i * 1.7))); }
   }
+  function redrawAll() { document.querySelectorAll(".thumb canvas[data-id]").forEach(c => { if (c._fx) draw(c, performance.now()); }); }
+  new MutationObserver(redrawAll).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
 
   const grid = document.getElementById("grid");
   if (grid) new MutationObserver(() => setTimeout(scan, 0)).observe(grid, { childList: true });

@@ -1264,6 +1264,18 @@ img.cb-wh{object-fit:contain;padding:8px 6px;border-radius:16px;background:linea
   .shop .bar h2{grid-column:1/-1;font-size:20px;margin:0}
   .shop .bar #sort{width:auto;min-width:118px}
 }
+/* admin: Máy thử GPU */
+.gpubox{display:grid;gap:10px;padding:16px;border-radius:20px;background:var(--card,var(--panel));box-shadow:0 0 0 2px var(--ring,rgba(90,175,255,.3))}
+.gph{display:flex;align-items:center;gap:10px;justify-content:space-between;flex-wrap:wrap}
+.gprow{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.gpgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-top:8px}
+.gpgrid>div{display:grid;gap:2px;padding:10px 12px;border-radius:14px;background:var(--sunk,rgba(0,0,0,.2))}
+.gpgrid>div.wide{grid-column:span 2}
+.gpgrid small{color:var(--muted);font-size:11.5px}.gpgrid b{font-size:17px}
+.gpgl{font:11.5px var(--mono,ui-monospace,monospace);word-break:break-word}
+.gpacts{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.gpver{display:inline-flex;gap:6px;align-items:center;margin-left:auto}.gpver select{width:auto}
+@media (max-width:600px){.gpver{margin-left:0;width:100%}.gpgrid>div.wide{grid-column:auto}}
 
 </style>
 <script>/* chế độ Sáng/Tối: nhớ lựa chọn (br_theme), lần đầu theo máy khách */(function(){var t=null;try{t=localStorage.getItem("br_theme")}catch(e){}if(t!=="light"&&t!=="dark")t=matchMedia&&matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t;})();</script>
@@ -1879,6 +1891,18 @@ window.BR_CONFIG = {
       <div class="hint">Công thức: <b>(RAM × giá RAM + CPU × giá CPU) × số ngày</b>. Bảng tự cập nhật khi bạn sửa ô giá phía trên.</div>
       <div class="tbl"><table><thead><tr><th>Cấu hình</th><th class="num">1 ngày</th><th class="num">7 ngày</th><th class="num">30 ngày</th><th class="num">90 ngày</th></tr></thead><tbody id="cpa-ana"></tbody></table></div>
       <div class="hint" id="cpa-sum"></div>
+      <div class="gpubox" id="gpubox">
+        <div class="gph"><h3 style="margin:0">🧪 Máy thử GPU <span class="hint">(GTX 1080 · chỉ admin)</span></h3><button class="btn ghost sm" type="button" id="gpu-reload">↻ Tải lại</button></div>
+        <div class="gpst" id="gpu-st"><div class="hint">Đang kiểm tra…</div></div>
+        <div class="gpacts">
+          <a class="btn sm" id="gpu-open" target="_blank" rel="noopener" hidden>▶ Mở màn hình</a>
+          <button class="btn sm" type="button" data-gpu="start">⏻ Bật máy</button>
+          <button class="btn ghost sm" type="button" data-gpu="chrome">🌐 Thử Chrome</button>
+          <button class="btn danger sm" type="button" data-gpu="stop">⏹ Tắt máy</button>
+          <span class="gpver"><select id="gpu-ver" aria-label="Bản Android"><option value="9">Android 9</option><option value="10">Android 10</option><option value="11" selected>Android 11</option><option value="12">Android 12</option></select><button class="btn ghost sm" type="button" data-gpu="android">Đổi sang bản này</button></span>
+        </div>
+        <div class="hint" id="gpu-msg"></div>
+      </div>
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><h3 style="margin:0">📋 Máy khách đang thuê <span class="hint">(chỉ admin thấy)</span></h3><span class="hint" id="cpa-count" style="margin-left:auto"></span></div>
       <div class="cpabar">
         <input class="search" id="cpa-q" placeholder="Tìm tên máy, tên khách, cổng…">
@@ -4758,6 +4782,7 @@ function cpaAnalyze() {
 }
 async function loadCloudAdm() {
   if (!isAdmin()) return;
+  gpuLoad();
   CPpricing = null; const pr = await cpLoadPricing(), c = cpCard();
   $("cpa-cname").value = c.name; $("cpa-cfeats").value = c.feats.join(", "); $("cpa-cdesc").value = c.desc; $("cpa-cname-en").value = pr.card_name_en || ""; $("cpa-cfeats-en").value = pr.card_feats_en || ""; $("cpa-cdesc-en").value = pr.card_desc_en || "";
   $("cpa-ram").value = pr.price_ram_gb_day; $("cpa-cpu").value = pr.price_cpu_day;
@@ -5688,6 +5713,45 @@ $("cpa-rootall") && ($("cpa-rootall").onclick = () => {
   busy($("cpa-rootall"), async () => { try { const hs = [...new Set(Object.values(await cpNodeHosts()))], out = [];
     for (const h of hs) out.push((hs.length > 1 ? h.replace(/^https:\/\//, "").split(".")[0] + ": " : "") + await cpRunJob("admin/rootall", "Đang root các máy", h));
     toast(out.join(" · "), 0); } catch (err) { toast(err.message, 1); } });
+});
+
+/* ===== Máy thử GPU (admin): trạng thái + bật/tắt/đổi bản Android, gọi cpapi trên server chính ===== */
+let gpuBusy = false;
+async function gpuLoad() {
+  const box = $("gpu-st"); if (!box || !isAdmin()) return;
+  let d; try { d = await cpapiCall("admin/gputest"); }
+  catch (e) { box.innerHTML = `<div class="hint">${esc(e.message)}${e.status === 404 ? " (cập nhật cpapi.py rồi khởi động lại)" : ""}</div>`; return; }
+  const g = d.gpu || {}, pill = (ok, t) => `<span class="pill ${ok ? "ok" : "bad"}">${t}</span>`;
+  const st = !d.installed ? pill(false, "Chưa cài") : !d.running ? `<span class="pill">⏸ Đang tắt</span>` : !d.booted ? `<span class="pill wt">⏳ Đang khởi động…</span>` : pill(true, "● Đang chạy");
+  box.innerHTML = `<div class="gprow">${st}${d.android ? `<b>Android ${esc(d.android)}</b>` : ""}${d.running ? (d.on_gpu ? pill(true, "GPU: GTX 1080 ✓") : pill(false, "Chưa dùng GPU")) : ""}</div>
+    <div class="gpgrid">
+      ${d.running ? `<div><small>CPU máy thử</small><b>${d.cpu != null ? Math.round(d.cpu) + "%" : "?"}</b><small>400% = 4 nhân kín</small></div><div><small>RAM máy thử</small><b>${d.ram_gb != null ? d.ram_gb + " GB" : "?"}</b></div>` : ""}
+      ${g.name ? `<div><small>Card ${esc(g.name.replace("NVIDIA GeForce ", ""))}</small><b>${g.util}%</b><small>${g.mem} / ${g.total} MB</small></div>` : ""}
+      ${d.abi ? `<div class="wide"><small>Chạy được app</small><b>${/arm64/.test(d.abi) ? "ARM + x86 ✓ (game ARM chạy được)" : "chỉ x86 ⚠ (game ARM có thể không cài được)"}</b></div>` : ""}
+    </div>${d.gles ? `<div class="hint gpgl">${esc(d.gles)}</div>` : ""}`;
+  const o = $("gpu-open"); o.hidden = !d.stream_url; if (d.stream_url) o.href = d.stream_url;
+  if (d.android && $("gpu-ver").querySelector(`option[value="${d.android}"]`) && !gpuBusy) $("gpu-ver").value = d.android;
+}
+$("gpu-reload") && ($("gpu-reload").onclick = () => gpuLoad());
+$("gpubox") && $("gpubox").addEventListener("click", async e => {
+  const b = e.target.closest("[data-gpu]"); if (!b || gpuBusy) return;
+  const doit = b.dataset.gpu, v = $("gpu-ver").value;
+  if (doit === "android" && !confirm(`Đổi máy thử sang Android ${v}? Máy thử hiện tại bị xoá (máy khách không ảnh hưởng). Mất 5–15 phút.`)) return;
+  if (doit === "stop" && !confirm("Tắt máy thử GPU?")) return;
+  gpuBusy = true; document.querySelectorAll("#gpubox [data-gpu]").forEach(x => x.disabled = true);
+  const msg = $("gpu-msg"); msg.textContent = "Đang gửi lệnh…";
+  try {
+    const r = await cpapiCall("admin/gputest", { method: "POST", json: { do: doit, v } });
+    for (let i = 0; ; i++) {
+      await new Promise(z => setTimeout(z, 3000));
+      const j = await cpapiCall("job?id=" + encodeURIComponent(r.job));
+      msg.textContent = j.msg || "Đang chạy…";
+      if (i % 4 === 0) gpuLoad();
+      if (j.state === "done") { toast(j.msg || "Xong"); break; }
+      if (j.state === "error") throw new Error(j.msg || "Lỗi");
+    }
+  } catch (er) { msg.textContent = "⚠ " + er.message; toast(er.message, 1); }
+  gpuBusy = false; document.querySelectorAll("#gpubox [data-gpu]").forEach(x => x.disabled = false); gpuLoad();
 });
 
 </script>

@@ -61,7 +61,6 @@ def win_caps(st):
     c_r = a_r + max(0.0, av_r - WIN_RESERVE)
     c_c = a_c + cpu_t * CPU_OVER
     c_c = max(a_c, min(c_c, cpu_t * WIN_VCPU_OVER))          # TỰ GIỚI HẠN: tổng nhân ảo không vượt số luồng thật
-    if t_r: c_r = max(a_r, min(c_r, t_r - WIN_RESERVE))      # tổng RAM cấp không vượt RAM thật (không cho thuê lố)
     if (cpu_avg5() or 0) >= CPU_BUSY: c_c = a_c
     if t_r and 100 * (1 - av_r / t_r) >= RAM_BUSY: c_r = a_r
     if disk_full(): c_r = a_r

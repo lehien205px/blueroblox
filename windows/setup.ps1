@@ -7,6 +7,7 @@
 # =====================================================================
 param([string]$Node = "win1", [string]$PubHost = "phone.blueroblox.shop")
 $ErrorActionPreference = "Stop"
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12   # Windows cũ mặc định TLS 1.0 → GitHub/Google từ chối
 $B = "C:\blue"
 $RAW = "https://raw.githubusercontent.com/lehien205px/blueroblox/main"   # thêm ?t=… để luôn lấy bản mới nhất (không bị giới hạn lượt như api.github.com)
 function Ok($m)  { Write-Host "  [OK] $m" -ForegroundColor Green }
@@ -27,15 +28,37 @@ if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
 New-Item -ItemType Directory -Force -Path $B, "$B\redroid", "$B\wstmp", "$B\apk-cai-san", "$B\logs" | Out-Null
 Set-Location $B
 $env:Path = [Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [Environment]::GetEnvironmentVariable("Path", "User")
+function Dl($url, $out) { Invoke-WebRequest -UseBasicParsing -UserAgent "BlueRoblox-setup" -Uri $url -OutFile $out }
+function RefreshPath { $env:Path = [Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [Environment]::GetEnvironmentVariable("Path", "User") }
+$WG = [bool](Get-Command winget -ErrorAction SilentlyContinue)   # Windows 10 bản cũ / Server không có winget → tải thẳng bộ cài chính thức
+
+# Windows 10 bản cũ (trước 1803) không có sẵn curl.exe → tải curl chính thức (curl.se) vào C:\blue\bin + thêm vào PATH
+if (-not (Get-Command curl.exe -ErrorAction SilentlyContinue)) {
+  Step "0/7 curl (Windows nay chua co)"
+  New-Item -ItemType Directory -Force "$B\bin" | Out-Null
+  Dl "https://curl.se/windows/latest.cgi?p=win64-mingw.zip" "$B\curl.zip"
+  if (Test-Path "$B\curltmp") { Remove-Item -Recurse -Force "$B\curltmp" }
+  Expand-Archive -Force "$B\curl.zip" "$B\curltmp"
+  $cb = (Get-ChildItem "$B\curltmp" -Recurse -Filter curl.exe | Select-Object -First 1).Directory.FullName
+  Copy-Item -Force "$cb\*" "$B\bin\"
+  Remove-Item -Recurse -Force "$B\curltmp", "$B\curl.zip"
+  $mp = [Environment]::GetEnvironmentVariable("Path", "Machine")
+  if ($mp -notlike "*$B\bin*") { [Environment]::SetEnvironmentVariable("Path", "$mp;$B\bin", "Machine") }
+  RefreshPath; Ok "curl $((& curl.exe --version | Select-Object -First 1) -replace ' \(.*','')" }
 
 Step "1/7 Python"
 $PY = "C:\Program Files\Python312\python.exe"
-if (-not (Test-Path $PY)) { winget install -e --id Python.Python.3.12 --scope machine --accept-source-agreements --accept-package-agreements | Out-Null }
+if (-not (Test-Path $PY)) {
+  if ($WG) { winget install -e --id Python.Python.3.12 --scope machine --accept-source-agreements --accept-package-agreements | Out-Null }
+  else { Get "https://www.python.org/ftp/python/3.12.7/python-3.12.7-amd64.exe" "$B\py-setup.exe"
+         Start-Process -Wait "$B\py-setup.exe" -ArgumentList '/quiet InstallAllUsers=1 PrependPath=1 Include_test=0 TargetDir="C:\Program Files\Python312"'
+         Remove-Item "$B\py-setup.exe" } }
 if (-not (Test-Path $PY)) { throw "Chua co Python 3.12" }; Ok $PY
 
 Step "2/7 Node.js (de chay trinh phat hinh ws-scrcpy)"
 if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
-  winget install -e --id OpenJS.NodeJS.LTS --scope machine --accept-source-agreements --accept-package-agreements | Out-Null
+  if ($WG) { winget install -e --id OpenJS.NodeJS.LTS --scope machine --accept-source-agreements --accept-package-agreements | Out-Null }
+  else { Get "https://nodejs.org/dist/v20.18.0/node-v20.18.0-x64.msi" "$B\node.msi"; Start-Process -Wait msiexec.exe -ArgumentList "/i `"$B\node.msi`" /qn /norestart"; Remove-Item "$B\node.msi" }
   $env:Path = [Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [Environment]::GetEnvironmentVariable("Path", "User") }
 $NODE = (Get-Command node).Source; Ok "node $(node --version)"
 
@@ -55,7 +78,8 @@ Ok "MEmu: $MEMU (da dung chung adb cua Google)"
 
 Step "4/7 cloudflared (duong ham phone.blueroblox.shop)"
 if (-not (Get-Command cloudflared -ErrorAction SilentlyContinue) -and -not (Test-Path "C:\Program Files (x86)\cloudflared\cloudflared.exe")) {
-  winget install -e --id Cloudflare.cloudflared --scope machine --accept-source-agreements --accept-package-agreements | Out-Null }
+  if ($WG) { winget install -e --id Cloudflare.cloudflared --scope machine --accept-source-agreements --accept-package-agreements | Out-Null }
+  else { Get "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.msi" "$B\cf.msi"; Start-Process -Wait msiexec.exe -ArgumentList "/i `"$B\cf.msi`" /qn /norestart"; Remove-Item "$B\cf.msi" } }
 Ok "cloudflared da cai"
 
 Step "5/7 ws-scrcpy (trinh phat hinh may len web) — 3-8 phut"

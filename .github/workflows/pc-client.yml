@@ -1,0 +1,60 @@
+# Build app PC cho khách (Python → exe) → GitHub Release "pc-latest" → web tải ở /download/BlueRobloxPC.zip
+name: Build PC client
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "pc-client/**"
+      - ".github/workflows/pc-client.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pc-client
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build exe
+        shell: pwsh
+        working-directory: pc-client
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller av pygame-ce numpy pillow
+          python -m py_compile bluepc.py brstream.py
+          $icon = @()
+          if (Test-Path icon.png) { $icon = @("--icon", "icon.png", "--add-data", "icon.png;.") }
+          python -m PyInstaller --noconfirm --clean --windowed --name BlueRobloxPC --collect-submodules av @icon bluepc.py
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          # thử bản exe: đủ thư viện giải mã + cửa sổ chưa (thiếu → báo lỗi, KHÔNG đưa bản hỏng cho khách)
+          $st = Join-Path $PWD "selftest.txt"
+          Start-Process -FilePath dist/BlueRobloxPC/BlueRobloxPC.exe -ArgumentList "--selftest", "`"$st`"" -Wait -NoNewWindow
+          if (-not (Test-Path $st)) { Write-Error "exe không chạy được"; exit 1 }
+          Get-Content $st
+          if ((Get-Content $st -TotalCount 1) -ne "OK") { exit 1 }
+          Compress-Archive -Force -Path dist/BlueRobloxPC -DestinationPath dist/BlueRobloxPC.zip
+          Get-Item dist/BlueRobloxPC.zip | Select-Object Name, Length
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BlueRobloxPC
+          path: pc-client/dist/BlueRobloxPC.zip
+
+      - name: Publish (GitHub Release pc-latest)
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view pc-latest >/dev/null 2>&1 || gh release create pc-latest --title "BlueRoblox PC (bản mới nhất)" --notes "App máy tính cho khách. Tải BlueRobloxPC.zip, giải nén, chạy BlueRobloxPC.exe." --latest=false
+          gh release upload pc-latest pc-client/dist/BlueRobloxPC.zip --clobber

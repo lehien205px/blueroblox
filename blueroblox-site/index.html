@@ -536,14 +536,6 @@ h1 em::after{background:linear-gradient(90deg,rgba(143,208,255,0),#8fd0ff 15%,#f
 .vpill.exp{color:var(--bad);border-color:rgba(255,107,129,.5);background:rgba(255,107,129,.08)}
 .vpill.off{color:var(--muted);border-color:var(--line)}
 .vmi .acts{display:flex;gap:8px;flex-wrap:wrap}
-.vmi .live{display:flex;gap:12px;align-items:flex-start}
-.vmshot{position:relative;flex:none;width:96px;aspect-ratio:9/16;border-radius:10px;overflow:hidden;border:1px solid var(--line);background:#02040c;padding:0;cursor:pointer}
-.vmshot img{width:100%;height:100%;object-fit:contain;display:block;opacity:0;transition:opacity .25s}
-.vmshot img.on{opacity:1}
-.vmshot .lv{position:absolute;left:4px;bottom:4px;font-size:10.5px;font-weight:700;color:#fff;background:rgba(0,0,0,.55);border-radius:6px;padding:1px 5px}
-.vmshot .lv b{color:#ff5d6c}
-.vmshot .wait{position:absolute;inset:0;display:grid;place-items:center;font-size:11px;color:var(--muted);text-align:center;padding:4px}
-.vmi .live .info{flex:1;min-width:0;display:grid;gap:8px;align-content:start}
 
 
 /* ===== quản lý nội bộ ===== */
@@ -1292,6 +1284,22 @@ img.cb-wh{object-fit:contain;padding:8px 6px;border-radius:16px;background:linea
 .upchips button.on{background:linear-gradient(180deg,#5c9dff,#2b6ef0);color:#fff;box-shadow:none}
 .dlg.cpup .row2{display:grid;grid-template-columns:1fr 1.4fr;gap:10px}
 .vmi .acts{display:flex!important;flex-wrap:wrap;gap:8px}.vmi .acts .btn{flex:1 1 auto;min-width:max-content}
+/* ===== Web chỉ để thuê / cấu hình máy — điều khiển bằng app (máy tính Windows + Android) ===== */
+/* thẻ "Tải app" gọn ở đầu "Máy của tôi" */
+.cpappdl{display:flex;align-items:center;gap:10px 14px;flex-wrap:wrap;padding:12px 14px;border-radius:14px;border:1px solid rgba(110,160,255,.4);background:rgba(61,123,255,.08)}
+.cpappdl .t{flex:1;min-width:200px}
+.cpappdl .t b{display:block;font-size:15px}
+.cpappdl .t span{display:block;margin-top:2px;font-size:12.5px;color:var(--muted);line-height:1.45}
+.cpappdl .b{display:flex;gap:8px;flex-wrap:wrap}
+.cpappdl .btn small,.cpopen .btn small{font-size:11px;font-weight:600;opacity:.8}
+@media (max-width:560px){.cpappdl .b{width:100%}.cpappdl .b .btn{flex:1 1 100%}}
+/* hộp "Mở trong app" */
+.dlg.cpopen{width:min(480px,100%)}
+.cpopen .shsec{margin-top:0}
+.cpopen .shsec .btn.sm{justify-self:start}
+/* chọn hệ điều hành: bản hết chỗ / bảo trì → mờ, không bấm được */
+.cpand button[disabled]{opacity:.45;cursor:not-allowed;filter:grayscale(.7)}
+html .cpand button.off small{background:rgba(255,107,129,.16);color:var(--bad)}
 
 </style>
 <script>/* chế độ Sáng/Tối: nhớ lựa chọn (br_theme), lần đầu theo máy khách */(function(){var t=null;try{t=localStorage.getItem("br_theme")}catch(e){}if(t!=="light"&&t!=="dark")t=matchMedia&&matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t;})();</script>
@@ -1880,7 +1888,7 @@ window.BR_CONFIG = {
           <span style="display:flex;gap:8px;align-items:center"><input id="cpa-stock" type="number" min="0" inputmode="numeric" placeholder="Không giới hạn" style="max-width:200px;font-size:18px;font-weight:700">
           <button class="btn ghost sm" type="button" data-stockadd="10">+10</button><button class="btn ghost sm" type="button" data-stockadd="50">+50</button><span class="hint" id="cpa-stockhint"></span></span></label>
         <label class="full">Tên sản phẩm<input id="cpa-cname" maxlength="80" placeholder="Điện thoại đám mây (Cloud Phone)"></label>
-        <label class="full">Điểm nổi bật (cách nhau bằng dấu phẩy, tối đa 4)<input id="cpa-cfeats" maxlength="160" placeholder="Android 24/7, Chạy game, Điều khiển web"></label>
+        <label class="full">Điểm nổi bật (cách nhau bằng dấu phẩy, tối đa 4)<input id="cpa-cfeats" maxlength="160" placeholder="Android 24/7, Chạy game, App PC + Android"></label>
         <label class="full">Mô tả / Nội dung<textarea id="cpa-cdesc" rows="4" maxlength="1200" placeholder="Giới thiệu sản phẩm cho khách…"></textarea></label>
         <div class="full tr-box"><div class="tr-head"><b>🇬🇧 Bản tiếng Anh</b><span class="hint">Để trống thì web tự dịch.</span><button class="btn ghost sm" type="button" id="cpa-tr">🌐 Tự dịch từ tiếng Việt</button></div>
           <label class="full">Name (English)<input id="cpa-cname-en" maxlength="80" placeholder="Cloud Phone (Android)"></label>
@@ -2001,7 +2009,7 @@ window.BR_CONFIG = {
       <button class="btn sm" id="cp-new" style="margin-left:auto">+ Thuê máy mới</button>
       <button class="btn ghost sm" id="cp-close">Đóng</button>
     </div>
-    <div class="note">Máy Android chạy trên cloud 24/7. Bấm <b>Điều khiển</b> để mở máy trong trình duyệt. Hết hạn máy sẽ tạm dừng — gia hạn trong <b>30 phút</b>, quá thời gian đó máy và toàn bộ dữ liệu bị xoá.</div>
+    <div class="note" id="cp-mnote">Máy Android chạy trên cloud 24/7. Bấm <b>Mở trong app</b> để điều khiển máy bằng app máy tính (Windows) hoặc app Android. Hết hạn máy sẽ tạm dừng — gia hạn trong <b>30 phút</b>, quá thời gian đó máy và toàn bộ dữ liệu bị xoá.</div>
     <div class="cpapphelp"></div>
     <div class="cpcode"><span>🔑</span><input id="cp-code" maxlength="12" autocomplete="off" placeholder="Có mã chia sẻ / chuyển nhượng? Nhập vào đây"><button class="btn sm" type="button" id="cp-claim">Nhập mã</button></div>
     <div class="olist" id="cp-list"></div>
@@ -2033,7 +2041,7 @@ window.BR_CONFIG = {
     <div class="cphead"><div class="cpht"><h3 id="cpo-title">Thuê điện thoại đám mây</h3><div class="hint" id="cp-rate"></div></div><div class="cpapphelp" data-compact="1"></div></div>
     <div class="cpfree" id="cp-free" hidden></div>
     <div class="cpbody"><div class="cpmain">
-    <div class="cpf cpandf"><span class="cpl">Phiên bản Android</span><div class="cpand" id="cp-and"></div></div>
+    <div class="cpf cpandf"><span class="cpl" id="cp-and-l">Hệ điều hành</span><div class="cpand" id="cp-and" role="group" aria-labelledby="cp-and-l"></div></div>
     <div class="cpguide" id="cp-guide"></div>
     <div class="cpgrid">
       <div class="cpf"><label class="cpl" for="cp-ram-x">RAM (GB)</label><div class="amts" id="cp-ram"></div>
@@ -4393,14 +4401,14 @@ const CP_RAM = [1, 2, 3, 4, 5, 6, 7, 8], CP_CPU = [1, 2, 3, 4, 5, 6, 7, 8], CP_D
 const CP_RES = [["540x960", "Nhẹ máy"], ["720x1280", "HD"], ["720x1600", "HD+ dài"], ["1080x1920", "Full HD"]];
 const CP_GRACE_MIN = 30;
 const CP_DEF = { price_ram_gb_day: 2500, price_cpu_day: 2000, min_ram: 1, max_ram: 16, min_cpu: 1, max_cpu: 8, min_days: 1, max_days: 90, min_fps: 10, max_fps: 120 };
-const CP_CARD_DEF = { name: "Điện thoại đám mây (Cloud Phone)", feats: "Android 24/7, Chạy game, Điều khiển web",
-  desc: "Thuê điện thoại Android chạy trên cloud — tự chọn RAM, CPU, số ngày. Cài game, treo acc, điều khiển mọi nơi qua trình duyệt." };
-let CPpricing = null, cpSel = { ram: 2, cpu: 2, days: 7, res: "720x1280", fps: 30, qty: 1 }, myCloud = [], cpPollT = null;
+const CP_CARD_DEF = { name: "Điện thoại đám mây (Cloud Phone)", feats: "Android 24/7, Chạy game, App PC + Android mượt",
+  desc: "Thuê điện thoại Android chạy trên cloud — tự chọn RAM, CPU, số ngày. Cài game, treo acc, điều khiển mượt bằng app máy tính (Windows) hoặc app Android." };
+let CPpricing = null, cpSel = { ram: 2, cpu: 2, days: 7, res: "720x1280", fps: 30, qty: 1, android: "9" }, myCloud = [], cpPollT = null;
 Object.assign(ERR, { BAD_RAM: "RAM nằm ngoài giới hạn cho phép.", BAD_CPU: "Số nhân CPU nằm ngoài giới hạn cho phép.", BAD_DAYS: "Số ngày nằm ngoài giới hạn cho phép.",
   BAD_RES: "Độ phân giải không hợp lệ (dạng 720x1280).", BAD_FPS: "FPS nằm ngoài giới hạn cho phép.", BAD_QTY: "Số lượng không hợp lệ.", PHONE_LOCKED: "Máy đang bị khoá, không gia hạn được. Liên hệ hỗ trợ.", BAD_DISCOUNT: "Chiết khấu phải từ 0 đến 90%.", NOT_ADMIN: "Chỉ admin mới làm được việc này.", MAINTENANCE: "Hệ thống đang bảo trì, vui lòng quay lại sau.",
   MAX_PER_USER: "Mỗi tài khoản chỉ được thuê tối đa số máy cho phép — bạn đã đủ máy. Gia hạn máy đang có hoặc xoá máy cũ để thuê máy khác.",
   FREE_OFF: "Ưu đãi miễn phí đã kết thúc.", FREE_LIMIT: "Máy miễn phí vượt cấu hình tối đa cho phép.", FREE_USED: "Mỗi tài khoản chỉ được dùng thử 1 máy miễn phí — bạn đã nhận rồi.", FREE_ONE: "Máy miễn phí chỉ nhận 1 máy mỗi lần.", FREE_NO_RENEW: "Máy miễn phí không gia hạn được — hãy thuê máy mới.",
-  OUT_OF_CAPACITY: "Máy chủ đã hết chỗ cho cấu hình này. Chọn cấu hình nhỏ hơn hoặc quay lại sau.", SERVER_OFFLINE: "Máy chủ điện thoại đang tạm ngưng, vui lòng quay lại sau.", PHONE_GONE: "Máy đã bị xoá vì hết hạn quá 30 phút — hãy thuê máy mới.", NO_PHONE: "Không tìm thấy máy." });
+  OUT_OF_CAPACITY: "Máy chủ đã hết chỗ cho cấu hình này. Chọn cấu hình nhỏ hơn hoặc quay lại sau.", SERVER_OFFLINE: "Máy chủ bản Android này đang bảo trì.", PHONE_GONE: "Máy đã bị xoá vì hết hạn quá 30 phút — hãy thuê máy mới.", NO_PHONE: "Không tìm thấy máy." });
 
 let CPstatus = null;
 async function cpLoadStatus() {
@@ -4460,6 +4468,15 @@ function cpCheck() {
   if (!isAdmin() && window.__cpLeft != null && cpSel.qty > window.__cpLeft) return L(`Tài khoản của bạn chỉ còn được thuê thêm ${window.__cpLeft} máy.`, `Your account can only rent ${window.__cpLeft} more phone(s).`);
   if (p.stock != null && cpSel.qty > +p.stock && !isAdmin()) return +p.stock <= 0 ? L("Đã hết hàng.", "Sold out.") : L(`Chỉ còn ${p.stock} máy — chọn số lượng nhỏ hơn.`, `Only ${p.stock} left — choose a smaller quantity.`);
   const s = CPstatus;
+  // HỆ ĐIỀU HÀNH (bắt buộc) + chỗ trống riêng của bản Android đã chọn
+  if (!cpAndList().includes(cpSel.android)) return L("Hãy chọn hệ điều hành (bản Android).", "Choose an operating system (Android version).");
+  const am = cpAndMap(), as = am && am[cpSel.android];
+  if (am && !isAdmin()) {
+    if (!as || as.online === false) return L("Máy chủ bản Android này đang bảo trì — chọn bản khác.", "The server for this Android version is under maintenance — pick another one.");
+    if (cpSel.ram * cpSel.qty > +as.free_ram || cpSel.cpu * cpSel.qty > +as.free_cpu)
+      return L(`Máy chủ Android ${cpSel.android} chỉ còn trống ${Math.floor(+as.free_ram)}GB RAM và ${Math.floor(+as.free_cpu)} nhân CPU — chọn ít máy hơn, cấu hình nhỏ hơn hoặc bản Android khác.`,
+        `The Android ${cpSel.android} server only has ${Math.floor(+as.free_ram)}GB RAM and ${Math.floor(+as.free_cpu)} CPU cores free — choose fewer phones, a smaller setup or another Android version.`);
+  }
   if (s && !isAdmin() && (cpSel.ram * cpSel.qty > +s.free_ram || cpSel.cpu * cpSel.qty > +s.free_cpu))
     return `Máy chủ chỉ còn trống ${Math.floor(+s.free_ram)}GB RAM và ${Math.floor(+s.free_cpu)} nhân CPU — chọn ít máy hơn hoặc cấu hình nhỏ hơn.`;
   const m = /^(\d{3,4})x(\d{3,4})$/.exec(cpSel.res);
@@ -4467,20 +4484,7 @@ function cpCheck() {
   return "";
 }
 
-/* ---- Link điều khiển: thêm tham số ws= (thiếu nó trang điều khiển bị đen) ---- */
-function cpLinks(p) {
-  try {
-    const u = new URL(p.stream_url);
-    const hp = new URLSearchParams(u.hash.replace(/^#!?/, ""));
-    const udid = hp.get("udid"); if (!udid) return { main: p.stream_url };
-    if (hp.get("ws")) return { main: p.stream_url };
-    const ws = (u.protocol === "https:" ? "wss:" : "ws:") + "//" + u.host + "/?action=proxy-adb&remote=" + encodeURIComponent("tcp:8886") + "&udid=" + encodeURIComponent(udid);
-    const mk = pl => u.origin + "/#!action=stream&udid=" + encodeURIComponent(udid) + "&player=" + pl + "&ws=" + encodeURIComponent(ws);
-    return /:56\d\d$/.test(udid) ? { main: mk("tinyh264"), alt: mk("broadway") } : { main: mk("webcodecs"), alt: mk("broadway") };   // máy GPU: tinyh264
-  } catch (e) { return { main: p.stream_url }; }
-}
-
-/* ---- Danh sách máy của khách ---- */
+/* ---- Danh sách máy của khách (web chỉ thuê / cấu hình — điều khiển & xem màn hình bằng app, xem "Mở trong app") ---- */
 function cpGraceLeft(p) { if (!p.expires_at) return null; return Math.ceil((new Date(p.expires_at).getTime() + CP_GRACE_MIN * 60000 - Date.now()) / 60000); }
 function cpPill(p) {
   const m = { pending: ["wt", "⏳ Đang tạo…"], active: ["ok", "● Đang chạy"], error: ["bad", "⚠ Lỗi"], expired: ["bad", "⏸ Hết hạn"], cancelling: ["wt", "Đang huỷ…"], cancelled: ["", "Đã huỷ"] };
@@ -4488,11 +4492,13 @@ function cpPill(p) {
 }
 async function openCloud() {
   if (!profile) { openAuth("login"); return; }
+  const mn = $("cp-mnote"); if (mn) mn.innerHTML = L("Máy Android chạy trên cloud 24/7. Bấm <b>Mở trong app</b> để điều khiển máy bằng app máy tính (Windows) hoặc app Android. Hết hạn máy sẽ tạm dừng — gia hạn trong <b>30 phút</b>, quá thời gian đó máy và toàn bộ dữ liệu bị xoá.",
+    "Android phones running in the cloud 24/7. Tap <b>Open in app</b> to control a phone with the PC app (Windows) or the Android app. When a phone expires it pauses — renew within <b>30 minutes</b>, after that the phone and all its data are deleted.");
   $("cp-list").innerHTML = `<div class="empty">${L("Đang tải…", "Loading…")}</div>`; show("cpdlg");
   const [{ data }, , sh] = await Promise.all([sb.from("cloud_phones").select("*").eq("user_id", profile.id).order("created_at", { ascending: false }), cpLoadPricing(),
     sb.rpc("cp_shared_with_me").then(r => r, () => ({}))]);
   myCloud = (data || []).filter(p => p.status !== "cancelled").concat(Array.isArray(sh && sh.data) ? sh.data : []);
-  renderCloud(); setTimeout(cpShotTick, 50);
+  renderCloud();
   clearTimeout(cpPollT);
   if (myCloud.some(p => ["pending", "cancelling", "expired"].includes(p.status))) cpPollT = setTimeout(() => { if (!$("cpdlg").hidden) openCloud(); }, 6000);
 }
@@ -4503,19 +4509,18 @@ function renderCloud() {
     const left = !exp || ms <= 0 ? "" : `${L("còn", "")} <b class="cd-left" data-cd="${esc(p.expires_at)}">${cdText(p.expires_at)}</b>${L("", " left")}`;
     const g = cpGraceLeft(p);
     const locked = cpLocked(p);
-    const lk = p.status === "active" && p.stream_url && !locked ? cpLinks(p) : null;
+    const run = p.status === "active" && !locked;          // máy đang chạy → mở được bằng app máy tính / app Android
+    const lk = run && !!p.stream_url;                      // (giữ điều kiện cũ cho nút Root máy)
     const canRenew = !p.shared && !p.is_free && !locked && (p.status === "active" || (p.status === "expired" && g > 0));
-    const shot = lk ? `<button class="vmshot" type="button" data-shotid="${esc(p.id)}" data-shothost="${esc(cpHost(p))}" title="${L("Màn hình trực tiếp — bấm để điều khiển", "Live screen — tap to control")}">${CP_SHOT[p.id] ? `<img alt="" class="on" src="${CP_SHOT[p.id]}">` : `<img alt=""><span class="wait">${L("Đang lấy hình…", "Loading…")}</span>`}<span class="lv"><b>●</b> ${L("Trực tiếp", "Live")}</span></button>` : "";
-    return `<div class="vmi">${shot ? `<div class="live">${shot}<div class="info">` : ""}<div class="top"><div class="nm">📱 ${esc(p.name)}<small>${p.is_free ? "🎁 " + L("Miễn phí", "Free") + " · " : ""}Android ${esc(p.android || "11")} · ${p.ram}GB · ${p.cpu} nhân · ${esc(p.res || "")} · ${p.fps || 30} FPS</small></div>${cpPill(p)}</div>
+    return `<div class="vmi"><div class="top"><div class="nm">📱 ${esc(p.name)}<small>${p.is_free ? "🎁 " + L("Miễn phí", "Free") + " · " : ""}Android ${esc(p.android || "9")} · ${p.ram}GB · ${p.cpu} nhân · ${esc(p.res || "")} · ${p.fps || 30} FPS</small></div>${cpPill(p)}</div>
       ${exp ? `<div class="exp">${L("Hết hạn", "Expires")}: ${exp.toLocaleString(LANG === "en" ? "en-GB" : "vi-VN")}${left ? " · " + left : ""}</div>` : ""}
       ${p.status === "expired" ? `<div class="exp" style="color:var(--bad)">${g > 0 ? `Máy đã tạm dừng. Gia hạn trong <b>${g} phút</b> nữa để giữ dữ liệu, quá hạn máy sẽ bị xoá.` : "Đã quá 30 phút — máy đang bị xoá."}</div>` : ""}
       ${p.status === "pending" ? `<div class="exp">Máy đang khởi động (khoảng 2–3 phút), trang tự cập nhật.</div>` : ""}
       ${locked ? `<div class="exp" style="color:var(--bad)">🔒 Máy bị khoá${p.locked_until ? " đến " + new Date(p.locked_until).toLocaleString("vi-VN") : " vĩnh viễn"}${p.lock_reason ? ": " + esc(p.lock_reason) : ""}. Liên hệ hỗ trợ nếu cần.</div>` : ""}
       ${p.status === "error" && p.error ? `<div class="exp" style="color:var(--bad)">${esc(p.error)}</div>` : ""}
-      ${shot ? `</div></div>` : ""}
       ${p.shared ? `<div class="shby">👥 ${L("Được chia sẻ bởi", "Shared by")} <b>${esc(p.owner_name || "?")}</b> · ${p.share_expires ? L("đến ", "until ") + new Date(p.share_expires).toLocaleString(LANG === "en" ? "en-GB" : "vi-VN") : L("theo hạn máy", "until the phone expires")}</div>` : ""}
       <div class="acts">
-        ${lk ? `<a class="btn sm" href="/phone.html?id=${encodeURIComponent(p.id)}" target="_blank" rel="noopener">▶ Điều khiển</a>`
+        ${run ? `<button class="btn sm" type="button" data-cpopen="${esc(p.id)}">📲 ${L("Mở trong app", "Open in app")}</button>`
            : `<button class="btn sm" disabled>${locked ? "🔒 Bị khoá" : p.status === "pending" ? "Đang tạo…" : p.status === "expired" ? "Đã tạm dừng" : "Chưa sẵn sàng"}</button>`}
         ${canRenew ? `<button class="btn ghost sm" data-cprenew="${p.id}">🔄 Gia hạn</button>` : ""}
         ${canRenew && p.status === "active" ? (p.pending_ram || p.pending_cpu ? `<button class="btn ghost sm" disabled>⏳ ${L("Đang nâng cấp…", "Upgrading…")}</button>` : `<button class="btn ghost sm" data-cpup="${p.id}">⬆️ ${L("Nâng RAM/CPU", "Upgrade")}</button>`) : ""}
@@ -4528,31 +4533,41 @@ function renderCloud() {
   }).join("");
 }
 
-/* ---- MÀN HÌNH TRỰC TIẾP: ảnh nhỏ cập nhật mỗi ~4 giây trong danh sách máy (xem acc có đang chạy không, khỏi mở điều khiển) ---- */
-const cpShotBusy = new Set(), CP_SHOT = {};
-async function cpShotOne(el) {
-  const id = el.dataset.shotid; if (cpShotBusy.has(id)) return;
-  const tk = session && session.access_token; if (!tk) return;
-  cpShotBusy.add(id);
-  try {
-    const r = await fetch(el.dataset.shothost + "/cpapi/" + encodeURIComponent(id) + "/shot?w=270", { headers: { Authorization: "Bearer " + tk }, cache: "no-store" });
-    const w = el.querySelector(".wait");
-    if (!r.ok) { if (w) w.textContent = r.status === 409 ? L("Máy chưa chạy", "Not running") : L("Chưa lấy được hình", "No image yet"); return; }
-    const url = URL.createObjectURL(await r.blob()), img = el.querySelector("img"), old = CP_SHOT[id];
-    img.onload = () => { img.classList.add("on"); if (w) w.remove(); if (old && old !== url) URL.revokeObjectURL(old); };
-    CP_SHOT[id] = url; img.src = url;
-  } catch (e) {} finally { cpShotBusy.delete(id); }
+/* ---- MỞ TRONG APP: web không còn điều khiển / xem màn hình máy — mở bằng app máy tính (Windows) hoặc app Android ---- */
+const CP_PC_DL = "/download/BlueRobloxPC.zip", CP_APK_DL = "/download/blueroblox-cloud.apk";
+const IS_ANDROID = /Android/i.test(navigator.userAgent);
+function cpAppLinks(id) {
+  const pid = encodeURIComponent(id);
+  return { pc: "blueroblox://phone/" + pid,
+    // Android (Chrome): mở app qua intent; máy chưa cài app → tải APK (thay vì mở CH Play — app không có trên CH Play)
+    and: "intent://phone/" + pid + "#Intent;scheme=blueroblox;package=shop.blueroblox.app;S.browser_fallback_url=" + encodeURIComponent(location.origin + CP_APK_DL) + ";end" };
 }
-function cpShotTick() {
-  if ($("cpdlg").hidden || document.hidden) return;
-  document.querySelectorAll("#cp-list .vmshot").forEach(cpShotOne);
+function cpOpenApp(id) {
+  const p = myCloud.find(x => x.id === id); if (!p) return;
+  let m = $("cpopendlg");
+  if (!m) { m = document.createElement("div"); m.className = "modal"; m.id = "cpopendlg"; m.hidden = true; document.body.appendChild(m);
+    m.addEventListener("click", e => { if (e.target === m || e.target.closest("[data-opx]")) m.hidden = true; }); }
+  const lk = cpAppLinks(p.id);
+  const pc = `<div class="shsec"><b>💻 ${L("App máy tính (Windows)", "PC app (Windows)")}</b>
+      <a class="btn${IS_ANDROID ? " ghost" : ""}" href="${esc(lk.pc)}">▶ ${L("Mở bằng app máy tính (Windows)", "Open with the PC app (Windows)")}</a>
+      <a class="btn ghost sm" href="${CP_PC_DL}" download>⬇️ ${L("Tải app máy tính", "Download the PC app")}</a></div>`;
+  const an = `<div class="shsec"><b>📱 ${L("App Android", "Android app")}</b>${IS_ANDROID
+      ? `<a class="btn" href="${esc(lk.and)}">▶ ${L("Mở bằng app Android", "Open with the Android app")}</a>
+      <a class="btn ghost sm" href="${CP_APK_DL}" download>⬇️ ${L("Tải app Android", "Download the Android app")}</a>`
+      : `<a class="btn ghost" href="${CP_APK_DL}" download>⬇️ ${L("Tải app Android", "Download the Android app")}</a>`}</div>`;
+  m.innerHTML = `<div class="dlg cpopen" role="dialog" aria-modal="true" aria-labelledby="cpopen-t">
+    <div style="display:flex;align-items:center;gap:10px"><h3 id="cpopen-t" style="margin:0">📲 ${L("Mở trong app", "Open in app")}</h3><button class="btn ghost sm" type="button" data-opx="1" style="margin-left:auto">${L("Đóng", "Close")}</button></div>
+    <div class="hint">📱 <b>${esc(p.name)}</b> · Android ${esc(p.android || "9")} · ${p.ram}GB · ${p.cpu} ${L("nhân", "cores")}</div>
+    ${IS_ANDROID ? an + pc : pc + an}
+    <p class="hint" style="margin:0">💡 ${L("Chưa có app? Tải về, đăng nhập cùng tài khoản là thấy máy.", "No app yet? Download it and sign in with the same account to see your phones.")}</p></div>`;
+  m.hidden = false;
 }
-setInterval(cpShotTick, 4000);
-document.addEventListener("click", e => {
-  const b = e.target.closest(".vmshot"); if (!b) return;
-  window.open("/phone.html?id=" + encodeURIComponent(b.dataset.shotid), "_blank", "noopener");
-});
-document.addEventListener("visibilitychange", cpShotTick);
+/* Thẻ "Tải app" gọn (app máy tính + app Android) ở đầu "Máy của tôi" — vẽ trong renderAppHelp() */
+function cpAppDlCard(v) {
+  const pc = `<a class="btn${IS_ANDROID ? " ghost" : ""}" href="${CP_PC_DL}" download>💻 ${L("Tải app máy tính (Windows)", "PC app (Windows)")}</a>`;
+  const an = `<a class="btn${IS_ANDROID ? "" : " ghost"}" href="${CP_APK_DL}" download>📱 ${L("Tải app Android", "Android app")}${v ? ` <small>${esc(v.split(" ")[0])}</small>` : ""}</a>`;
+  return `<div class="cpappdl"><div class="t"><b>📲 ${L("Tải app", "Get the app")}</b><span>${L("Điều khiển và xem màn hình máy bằng app máy tính (Windows) hoặc app Android — đăng nhập cùng tài khoản là thấy máy.", "Control and view your phones with the PC app (Windows) or the Android app — sign in with the same account to see them.")}</span></div><div class="b">${IS_ANDROID ? an + pc : pc + an}</div></div>`;
+}
 
 /* ---- Form thuê máy mới ---- */
 function cpChips(id, arr, key, suf) {
@@ -4561,7 +4576,20 @@ function cpChips(id, arr, key, suf) {
 function cpResChips() {
   $("cp-resq").innerHTML = CP_RES.map(r => `<button type="button" data-v="${r[0]}" class="${cpSel.res === r[0] ? "on" : ""}" title="${r[0]}">${r[1]}<small>${r[0]}</small></button>`).join("");
 }
-const cpAndList = () => String((CPpricing && CPpricing.android_versions) || "11").split(",").map(s => s.trim()).filter(v => /^\d{1,2}$/.test(v));
+// HỆ ĐIỀU HÀNH: bản Android đang bán — đúng thứ tự admin nhập ở cloudphone_pricing.android_versions (VD "9,12,7"); trống → Android 9
+const cpAndList = () => { const l = String((CPpricing && CPpricing.android_versions) || "9").split(",").map(s => s.trim()).filter((v, i, a) => /^\d{1,2}$/.test(v) && a.indexOf(v) === i); return l.length ? l : ["9"]; };
+const CP_AND_HINT = { "9": ["LDPlayer 9 · ổn định", "LDPlayer 9 · stable"], "12": ["MuMu · mới nhất", "MuMu · newest"], "7": ["MuMu · nhẹ", "MuMu · light"] };
+/* Chỗ trống từng bản Android — RPC cloudphone_status trả android: {"9": {online, free_ram, free_cpu}, "12": {…}} */
+const cpAndMap = () => CPstatus && CPstatus.android && typeof CPstatus.android === "object" ? CPstatus.android : null;
+function cpAndWhy(v) {        // "" = còn chỗ · "off" = máy chủ bản này bảo trì / chưa có · "full" = không đủ RAM/CPU cho cấu hình đang chọn
+  const m = cpAndMap(); if (!m) return "";            // máy chủ chưa báo theo từng bản → không chặn (SQL vẫn kiểm tra)
+  const a = m[v]; if (!a || a.online === false) return "off";
+  return +a.free_ram < cpSel.ram || +a.free_cpu < cpSel.cpu ? "full" : "";
+}
+function cpAndPick() {        // mặc định Android 9; bản 9 hết chỗ / bảo trì → bản đầu tiên còn chỗ
+  const l = cpAndList(), ok = l.filter(v => !cpAndWhy(v));
+  return ok.includes("9") ? "9" : ok[0] || (l.includes("9") ? "9" : l[0]);
+}
 /* Gợi ý cấu hình theo nhu cầu (bấm để điền sẵn) */
 const CP_GUIDE = [
   { k: "app", i: "💬", vi: "Treo app · nuôi acc", en: "Apps · account farming", dvi: "Zalo, Facebook, TikTok, Telegram, tool treo…", den: "Social apps, idle tools…", ram: 2, cpu: 2, fps: 30 },
@@ -4582,12 +4610,19 @@ document.addEventListener("click", e => {
   [["cp-ram", "ram"], ["cp-cpu", "cpu"], ["cp-fps", "fps"]].forEach(([id, k]) => { $(id).querySelectorAll("button").forEach(z => z.classList.toggle("on", +z.dataset.v === cpSel[k])); $(id + "-x").value = ""; });
   cpOrderUpd(); toast(L("Đã chọn cấu hình: ", "Selected: ") + L(x.vi, x.en));
 });
-function cpAndChips() {
-  const L0 = cpAndList().sort((a, b) => (a === "12" ? -1 : b === "12" ? 1 : 0));      // Android 12 chạy ổn nhất → ưu tiên, đứng đầu
-  if (!L0.includes(cpSel.android)) cpSel.android = L0.includes("12") ? "12" : L0.includes("11") ? "11" : L0[0];
-  $("cp-and").innerHTML = L0.map(v => `<button type="button" data-and="${v}" class="${v === cpSel.android ? "on" : ""}">Android ${v}${v === "9" ? ` <small>🎮 64-bit · ${L("chạy Roblox", "runs Roblox")}</small>` : v === "12" ? ` <small>⭐ ${L("Khuyên dùng", "Recommended")}</small>` : v === "10" ? ` <small>⚡ GPU · ${L("app x86, không chạy game ARM", "x86 apps, no ARM games")}</small>` : v !== "11" ? ` <small>${L("Mới", "New")}</small>` : ""}</button>`).join("");
+function cpAndChips() {       // vẽ lại mỗi lần đổi cấu hình (cpOrderUpd) → bản không đủ RAM/CPU cho cấu hình mới tự mờ "Hết chỗ"
+  const box = $("cp-and"); if (!box) return;
+  const l0 = cpAndList();
+  if (!l0.includes(cpSel.android)) cpSel.android = l0.includes("9") ? "9" : l0[0];
+  const lb = $("cp-and-l"); if (lb) lb.textContent = L("Hệ điều hành", "Operating system");
+  box.innerHTML = l0.map(v => {
+    const why = cpAndWhy(v), h = CP_AND_HINT[v], on = v === cpSel.android, a = (cpAndMap() || {})[v] || {};
+    const tip = why === "off" ? L("Máy chủ bản Android này đang bảo trì", "The server for this Android version is under maintenance")
+      : why === "full" ? L(`Chỉ còn trống ${Math.floor(+a.free_ram || 0)}GB RAM · ${Math.floor(+a.free_cpu || 0)} nhân`, `Only ${Math.floor(+a.free_ram || 0)}GB RAM · ${Math.floor(+a.free_cpu || 0)} cores free`) : "";
+    return `<button type="button" data-and="${v}" class="${on ? "on" : ""}${why ? " off" : ""}" aria-pressed="${on}"${why && !isAdmin() ? " disabled" : ""}${tip ? ` title="${esc(tip)}"` : ""}>Android ${v}${why ? ` <small>${L("Hết chỗ", "Unavailable")}</small>` : h ? ` <small>${L(h[0], h[1])}</small>` : ""}</button>`;
+  }).join("");
 }
-document.addEventListener("click", e => { const b = e.target.closest("[data-and]"); if (!b) return; cpSel.android = b.dataset.and; cpAndChips(); cpOrderUpd(); });
+document.addEventListener("click", e => { const b = e.target.closest("[data-and]"); if (!b || b.disabled) return; cpSel.android = b.dataset.and; cpOrderUpd(); });
 async function openCpOrder(wantFree) {
   if (!profile) { openAuth("login"); return; }
   CPpricing = null; await Promise.all([cpLoadPricing(), cpLoadStatus()]);
@@ -4610,7 +4645,8 @@ async function openCpOrder(wantFree) {
     if (own.trim()) nt.innerHTML = esc(own.trim()).replace(/\n/g, "<br>");
     else nt.innerHTML = LANG === "en" ? "Every phone is a <b>brand-new</b> Android device with no one else's data or Gmail account. When it expires it pauses; renew within <b>30 minutes</b> or the phone and all its data are deleted." : nt.dataset.def; } } catch (e) {}
   const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
-  cpSel = { ram: clamp(2, p.min_ram, p.max_ram), cpu: clamp(2, p.min_cpu, p.max_cpu), days: clamp(7, p.min_days, p.max_days), res: "720x1280", fps: clamp(30, p.min_fps, p.max_fps), qty: 1, android: cpAndList().includes("12") ? "12" : "11" };
+  cpSel = { ram: clamp(2, p.min_ram, p.max_ram), cpu: clamp(2, p.min_cpu, p.max_cpu), days: clamp(7, p.min_days, p.max_days), res: "720x1280", fps: clamp(30, p.min_fps, p.max_fps), qty: 1, android: "9" };
+  cpSel.android = cpAndPick();                       // hệ điều hành mặc định Android 9 (hết chỗ / bảo trì → bản đầu tiên còn chỗ)
   cpChips("cp-ram", CP_RAM.filter(v => v >= p.min_ram && v <= p.max_ram), "ram", "GB");
   cpChips("cp-cpu", CP_CPU.filter(v => v >= p.min_cpu && v <= p.max_cpu), "cpu", "");
   cpChips("cp-days", CP_DAYS.filter(v => v >= p.min_days && v <= p.max_days), "days", " ngày");
@@ -4629,6 +4665,7 @@ async function openCpOrder(wantFree) {
   $("cp-err").textContent = ""; cpOrderUpd(); show("cporderdlg");
 }
 function cpOrderUpd() {
+  cpAndChips();                                      // chỗ trống từng bản Android phụ thuộc RAM/CPU đang chọn
   const price = cpPrice(), p = CPpricing || CP_DEF, bad = cpCheck();
   if (cpSel.free) {
     $("cp-calc").textContent = L(`🎁 Miễn phí ${p.free_days} ngày`, `🎁 Free for ${p.free_days} day(s)`) + (cpSel.qty > 1 ? ` × ${cpSel.qty} máy` : "");
@@ -4650,12 +4687,12 @@ async function cpBuy() {
   const bad = cpCheck(); if (bad) { $("cp-err").textContent = bad; return; }
   const price = cpPrice();
   if (!cpSel.free && profile.balance < price) { show("cporderdlg", false); openTopup(Math.max(+SITE.minTop || 10000, Math.ceil((price - profile.balance) / 1000) * 1000)); return; }
-  const { error } = await sb.rpc("cloudphone_order_custom", { p_ram: cpSel.ram, p_cpu: cpSel.cpu, p_days: cpSel.days, p_res: cpSel.res, p_name: null, p_fps: cpSel.fps, p_qty: cpSel.qty, ...(cpSel.android && cpSel.android !== "11" ? { p_android: cpSel.android } : {}), ...(cpSel.free ? { p_free: true } : {}) });
+  const { error } = await sb.rpc("cloudphone_order_custom", { p_ram: cpSel.ram, p_cpu: cpSel.cpu, p_days: cpSel.days, p_res: cpSel.res, p_name: null, p_fps: cpSel.fps, p_qty: cpSel.qty, p_android: cpSel.android || "9", ...(cpSel.free ? { p_free: true } : {}) });
   if (error) { $("cp-err").textContent = errMsg(error); return; }
   show("cporderdlg", false); await loadProfile(); renderUser();
   CPpricing = null; cpLoadPricing().then(() => { try { renderGrid(); } catch (e) {} });
   toast(cpSel.qty > 1 ? `Đã tạo đơn ${cpSel.qty} máy! Các máy đang khởi tạo (khoảng 2–3 phút mỗi máy).` : L("Đã tạo đơn! Máy đang khởi tạo (khoảng 2–3 phút).", "Order placed! Creating…"));
-  notifyTg && notifyTg(`📱 <b>Đơn ĐT đám mây mới${cpSel.free ? " (🎁 MIỄN PHÍ)" : ""}</b>\n${cpSel.qty} máy × Android ${cpSel.android || 11} · ${cpSel.ram}GB / ${cpSel.cpu} nhân / ${cpSel.days} ngày / ${cpSel.res} / ${cpSel.fps} FPS\nGiá: ${vnd(price)}`);
+  notifyTg && notifyTg(`📱 <b>Đơn ĐT đám mây mới${cpSel.free ? " (🎁 MIỄN PHÍ)" : ""}</b>\n${cpSel.qty} máy × Android ${cpSel.android || 9} · ${cpSel.ram}GB / ${cpSel.cpu} nhân / ${cpSel.days} ngày / ${cpSel.res} / ${cpSel.fps} FPS\nGiá: ${vnd(price)}`);
   openCloud();
 }
 
@@ -4674,6 +4711,7 @@ document.addEventListener("click", e => {
     const x = key === "res" ? $("cp-res") : $("cp-" + key + "-x"); if (x) x.value = "";
     cpOrderUpd(); return;
   }
+  const op = t.closest("[data-cpopen]"); if (op) { cpOpenApp(op.dataset.cpopen); return; }
   const rn = t.closest("[data-cprenew]"), rm = t.closest("[data-cprename]"), cc = t.closest("[data-cpcancel]");
   if (rn) cpRenew(rn.dataset.cprenew); else if (rm) cpRename(rm.dataset.cprename); else if (cc) cpCancel(cc.dataset.cpcancel);
   const up = t.closest("[data-cpup]"); if (up) cpUpgrade(up.dataset.cpup);
@@ -4714,11 +4752,11 @@ async function cpRenew(id) {
 /* ===== CHIA SẺ / CHUYỂN NHƯỢNG MÁY (SQL v9) ===== */
 Object.assign(ERR, { BAD_CODE: "Mã không đúng, đã bị huỷ hoặc đã hết hạn.", CODE_USED: "Mã này đã có người dùng rồi.", OWN_PHONE: "Đây là máy của chính bạn.",
   ALREADY_SHARED: "Bạn đã được chia sẻ máy này rồi.", SHARE_LIMIT: "Máy này đã có quá nhiều mã chia sẻ (tối đa 20). Thu hồi bớt rồi tạo lại.",
-  PHONE_NOT_ACTIVE: "Máy phải đang chạy mới chia sẻ được.", FPS_TOO_HIGH: "Máy dưới 4 nhân chỉ chọn tối đa 60 FPS.", BAD_ANDROID: "Phiên bản Android này chưa mở bán.", NOT_ALLOWED: "Bạn không có quyền làm việc này." });
+  PHONE_NOT_ACTIVE: "Máy phải đang chạy mới chia sẻ được.", FPS_TOO_HIGH: "Máy dưới 4 nhân chỉ chọn tối đa 60 FPS.", BAD_ANDROID: "Bản Android này chưa bán.", NOT_ALLOWED: "Bạn không có quyền làm việc này." });
 Object.assign(ERR_EN, { MAX_PER_USER: "Your account has reached the maximum number of phones. Renew or delete an existing phone to rent another." });
 Object.assign(ERR_EN, { BAD_CODE: "Wrong, cancelled or expired code.", CODE_USED: "This code has already been used.", OWN_PHONE: "This is your own phone.",
   ALREADY_SHARED: "This phone is already shared with you.", SHARE_LIMIT: "Too many share codes for this phone (max 20). Revoke some first.",
-  PHONE_NOT_ACTIVE: "The phone must be running to share it.", FPS_TOO_HIGH: "Phones with under 4 cores are limited to 60 FPS.", BAD_ANDROID: "This Android version isn't available yet.", NOT_ALLOWED: "You are not allowed to do this." });
+  PHONE_NOT_ACTIVE: "The phone must be running to share it.", FPS_TOO_HIGH: "Phones with under 4 cores are limited to 60 FPS.", BAD_ANDROID: "This Android version isn't available yet.", SERVER_OFFLINE: "The server for this Android version is under maintenance.", NOT_ALLOWED: "You are not allowed to do this." });
 const shErr = e => /cp_share|cp_shared|function .* does not exist|schema cache/i.test(String(e && e.message)) ? L("Tính năng chia sẻ chưa bật (admin cần chạy SQL cloud-phones-v9).", "Sharing is not enabled yet.") : errMsg(e);
 let shPhone = null, shDays = 7;
 function shCodeBox(code, note) {
@@ -4814,7 +4852,7 @@ function cloudGridCard() {
     ${APP_INFO ? (APP_INFO.ios ? `<a class="btn ghost appdl" href="#" data-iosguide="1">📱 ${L("Cài app lên iPhone", "Install on iPhone")}</a>` : `<a class="btn ghost appdl" href="/download/blueroblox-cloud.apk" download>📱 ${L("Tải app Android", "Get Android app")}</a>`) : ""}</div></article>`;
 }
 Promise.all([cpLoadPricing(), cpLoadStatus()]).then(() => { try { renderGrid(); } catch (e) {} });
-setInterval(() => { if (document.visibilityState === "visible") cpLoadStatus().then(() => { try { renderGrid(); } catch (e) {} }); }, 60000);
+setInterval(() => { if (document.visibilityState === "visible") cpLoadStatus().then(() => { try { renderGrid(); } catch (e) {} try { if (!$("cporderdlg").hidden) cpAndChips(); } catch (e) {} }); }, 60000);
 
 /* ===== ADMIN: thẻ sản phẩm + giá + phân tích + máy khách ===== */
 function cpaStatus(p) {
@@ -4850,7 +4888,7 @@ async function loadCloudAdm() {
   $("cpa-mincpu").value = pr.min_cpu; $("cpa-maxcpu").value = pr.max_cpu;
   $("cpa-mindays").value = pr.min_days; $("cpa-maxdays").value = pr.max_days;
   $("cpa-minfps").value = pr.min_fps; $("cpa-maxfps").value = pr.max_fps;
-  if ($("cpa-andv")) $("cpa-andv").value = pr.android_versions || "11";
+  if ($("cpa-andv")) $("cpa-andv").value = pr.android_versions || "9,12,7";
   if ($("cpa-onote")) { $("cpa-onote").value = pr.order_note || ""; $("cpa-onote-en").value = pr.order_note_en || ""; }
   if ($("cpa-maxuser")) $("cpa-maxuser").value = pr.max_per_user == null ? 1 : pr.max_per_user;
   $("cpa-stock").value = pr.stock == null ? "" : pr.stock;
@@ -4867,7 +4905,7 @@ $("cpa-save") && ($("cpa-save").onclick = () => busy($("cpa-save"), async () => 
   const sv = $("cpa-stock").value.trim();
   if (sv !== "" && !(+sv >= 0)) return toast("Số lượng phải là số từ 0 trở lên (hoặc để trống = không giới hạn).", 1);
   body.stock = sv === "" ? null : Math.floor(+sv);
-  if ($("cpa-andv")) { const av = $("cpa-andv").value.split(",").map(s => s.trim()).filter(v => /^\d{1,2}$/.test(v)); body.android_versions = (av.length ? av : ["11"]).join(","); }
+  if ($("cpa-andv")) { const av = $("cpa-andv").value.split(",").map(s => s.trim()).filter(v => /^\d{1,2}$/.test(v)); body.android_versions = (av.length ? av : ["9"]).join(","); }
   const { error } = await sb.from("cloudphone_pricing").update(body).eq("id", 1);
   if (error) {
     if (/stock/.test(error.message || "")) return toast("Chưa chạy file SQL cloud-phones-v8.sql trên Supabase.", 1);
@@ -4967,6 +5005,14 @@ function nRow(label, val, pct, mark) {
   const p = Math.max(0, Math.min(100, pct || 0)), cls = p >= (mark || 85) ? "r" : p >= 70 ? "y" : "";
   return `<div class="nr"><span>${label}</span><em>${val}</em><div class="nbar"><i class="${cls}" style="width:${p}%"></i>${mark ? `<b style="left:${mark}%" title="Ngưỡng ${mark}%"></b>` : ""}</div></div>`;
 }
+/* Giả lập + bản Android của server (cột engine / androids của cloud_nodes, hoặc trong metrics) — chỉ để xem */
+const NODE_ENGINE = { ld: "LDPlayer 9", mumu: "MuMu", memu: "MEmu" };
+function nodeEmu(n, m) {
+  const e = String(n.engine ?? m.engine ?? "").trim(), a = n.androids ?? m.androids;
+  const av = (Array.isArray(a) ? a : String(a ?? "").split(",")).map(x => String(x).trim()).filter(Boolean);
+  if (!e && !av.length) return "";
+  return `<div class="nr"><span>Giả lập · Android</span><em>${esc([e ? NODE_ENGINE[e.toLowerCase()] || e : "", av.length ? "Android " + av.join(", ") : ""].filter(Boolean).join(" · "))}</em></div>`;
+}
 function renderNodes() {
   const box = $("cpa-nodes"); if (!box) return;
   if (!NODES.length) { box.innerHTML = `<div class="empty">Chưa có máy chủ nào gửi báo cáo. Cập nhật cloudphoned.py trên server rồi khởi động lại dịch vụ.</div>`; $("cpa-nodesum").textContent = ""; return; }
@@ -4982,6 +5028,7 @@ function renderNodes() {
     return `<div class="node${full ? " full" : ""}${off ? " off" : ""}">
       <div class="nh"><b>${esc(n.name)}</b><span class="hint">${esc(n.id)}</span>
         <span class="pill ${off ? "bad" : full ? "bad" : "ok"}">${off ? "Mất kết nối " + Math.round(age) + " phút" : full ? (m.cpu_busy ? "CPU nóng " + Math.round(m.cpu_avg5) + "%" : m.ram_busy ? "RAM đầy " + Math.round(m.ram_pct) + "%" : m.disk_busy ? "Ổ cứng sắp đầy" : "Đầy") : "Đang chạy"}</span></div>
+      ${nodeEmu(n, m)}
       ${nRow("CPU đang dùng thật", (m.cpu_pct ?? "?") + "%", m.cpu_pct)}
       ${m.cpu_over ? nRow("CPU thật TB 5 phút (ngừng nhận khi ≥ " + (m.cpu_busy_pct || 85) + "%)", (m.cpu_avg5 ?? "?") + "%", m.cpu_avg5, m.cpu_busy_pct || 85) : ""}
       ${nRow(m.cpu_over ? `CPU đã cấp (dùng chung ×${m.cpu_over})` : "CPU đã cấp cho khách", m.cpu_over ? `${+n.alloc_cpu}/${Math.round(+n.cpu_total * m.cpu_over)} nhân ảo` : `${+n.alloc_cpu}/${+n.cpu_total} luồng`, +n.alloc_cpu / (+n.cpu_total * (m.cpu_over || 1)) * 100, m.cpu_over ? 100 : lim)}
@@ -5515,11 +5562,11 @@ const HELP = [
    `<ul><li>Bấm <b>Đăng nhập</b> ở góc trên (đăng ký bằng email nếu chưa có tài khoản).</li><li>Bấm <b>Nạp tiền</b> → chọn chuyển khoản / thẻ cào / USDT… → làm theo hướng dẫn, tiền vào tài khoản tự động.</li><li>Khi có <b>ưu đãi miễn phí</b>, bạn nhận máy 0đ không cần nạp (mỗi tài khoản 1 máy).</li></ul>`,
    `<ul><li>Tap <b>Sign in</b> at the top (register with email if you're new).</li><li>Tap <b>Top up</b> → pick a method → follow the steps; your balance updates automatically.</li><li>During a <b>free trial</b> promo you can get a phone for free (one per account).</li></ul>`],
   ["Thuê máy", "Rent a phone",
-   `<ul><li>Bấm <b>Thuê điện thoại đám mây</b> (hoặc tab <b>Thuê máy</b> trong app).</li><li>Chọn <b>phiên bản Android</b> — khuyên dùng <b>Android 12</b>.</li><li>Bấm 1 <b>gợi ý cấu hình</b> cho nhanh: treo app 2GB · Roblox tối thiểu 4GB · 4 nhân · treo 2–4 tab Roblox nên 8GB · 6–8 nhân.</li><li>Chọn số ngày, số máy → bấm <b>Thuê</b>. Máy được tạo trong <b>2–3 phút</b>, trang tự cập nhật.</li></ul>`,
-   `<ul><li>Tap <b>Rent a cloud phone</b> (or the <b>Rent</b> tab in the app).</li><li>Pick an <b>Android version</b> — <b>Android 12</b> is recommended.</li><li>Tap a <b>preset</b>: apps 2GB · Roblox at least 4GB · 4 cores · 2–4 Roblox tabs 8GB · 6–8 cores.</li><li>Choose days and quantity → <b>Rent</b>. The phone is ready in <b>2–3 minutes</b>.</li></ul>`],
+   `<ul><li>Bấm <b>Thuê điện thoại đám mây</b> (hoặc tab <b>Thuê máy</b> trong app).</li><li>Chọn <b>hệ điều hành</b>: <b>Android 9</b> (LDPlayer 9 · ổn định), <b>Android 12</b> (MuMu · mới nhất) hoặc <b>Android 7</b> (MuMu · nhẹ).</li><li>Bấm 1 <b>gợi ý cấu hình</b> cho nhanh: treo app 2GB · Roblox tối thiểu 4GB · 4 nhân · treo 2–4 tab Roblox nên 8GB · 6–8 nhân.</li><li>Chọn số ngày, số máy → bấm <b>Thuê</b>. Máy được tạo trong <b>2–3 phút</b>, trang tự cập nhật.</li></ul>`,
+   `<ul><li>Tap <b>Rent a cloud phone</b> (or the <b>Rent</b> tab in the app).</li><li>Pick an <b>operating system</b>: <b>Android 9</b> (LDPlayer 9 · stable), <b>Android 12</b> (MuMu · newest) or <b>Android 7</b> (MuMu · light).</li><li>Tap a <b>preset</b>: apps 2GB · Roblox at least 4GB · 4 cores · 2–4 Roblox tabs 8GB · 6–8 cores.</li><li>Choose days and quantity → <b>Rent</b>. The phone is ready in <b>2–3 minutes</b>.</li></ul>`],
   ["Mở & điều khiển máy", "Open & control your phone",
-   `<ul><li>Vào <b>Máy của tôi</b> → bấm <b>Điều khiển</b>. Dùng được trên web (máy tính, điện thoại) và <b>app Android</b>.</li><li>Bấm / kéo trên màn hình như điện thoại thật. Trên máy tính gõ phím trực tiếp, <kbd>Ctrl</kbd>+<kbd>V</kbd> để dán chữ (có dấu).</li><li>Nút bên cạnh: Quay lại · Màn chính · Đa nhiệm · Âm lượng · Xoay · Chụp màn · Toàn màn.</li><li>Máy chạy <b>24/7</b> — bạn tắt trình duyệt / tắt máy vẫn chạy.</li></ul>`,
-   `<ul><li>Go to <b>My phones</b> → <b>Control</b>. Works on the web (PC, phone) and the <b>Android app</b>.</li><li>Tap / swipe like a real phone. On PC you can type directly and paste with <kbd>Ctrl</kbd>+<kbd>V</kbd>.</li><li>Side buttons: Back · Home · Recents · Volume · Rotate · Screenshot · Full screen.</li><li>The phone runs <b>24/7</b> — it keeps going when you close the browser.</li></ul>`],
+   `<ul><li>Vào <b>Máy của tôi</b> → bấm <b>Mở trong app</b> → mở bằng <b>app máy tính (Windows)</b> hoặc <b>app Android</b>. Chưa có app? Tải về, đăng nhập cùng tài khoản là thấy máy.</li><li>Bấm / kéo trên màn hình như điện thoại thật. Trên máy tính gõ phím trực tiếp, <kbd>Ctrl</kbd>+<kbd>V</kbd> để dán chữ (có dấu).</li><li>Nút bên cạnh: Quay lại · Màn chính · Đa nhiệm · Âm lượng · Xoay · Chụp màn · Toàn màn.</li><li>Máy chạy <b>24/7</b> — bạn tắt trình duyệt / tắt máy vẫn chạy.</li></ul>`,
+   `<ul><li>Go to <b>My phones</b> → <b>Open in app</b> → open it with the <b>PC app (Windows)</b> or the <b>Android app</b>. No app yet? Download it and sign in with the same account to see your phones.</li><li>Tap / swipe like a real phone. On PC you can type directly and paste with <kbd>Ctrl</kbd>+<kbd>V</kbd>.</li><li>Side buttons: Back · Home · Recents · Volume · Rotate · Screenshot · Full screen.</li><li>The phone runs <b>24/7</b> — it keeps going when you close the browser.</li></ul>`],
   ["Đăng nhập Google / CH Play", "Google sign-in / Play Store",
    `<ul><li>Mở <b>Play Store</b> trong máy và đăng nhập Google như bình thường.</li><li>Báo "thiết bị chưa được chứng nhận"? Bấm nút <b>Lỗi Google</b> → copy mã → đăng ký ở trang Google theo hướng dẫn → đợi 5–10 phút → bấm <b>Làm mới Google Play</b>.</li></ul>`,
    `<ul><li>Open <b>Play Store</b> on the phone and sign in to Google.</li><li>"Device not certified"? Tap <b>Google sign-in</b> → copy the ID → register it on Google's page → wait 5–10 min → tap <b>Refresh Google Play</b>.</li></ul>`],
@@ -5559,9 +5606,8 @@ function openHelp() {
 function renderAppHelp() {
   const inApp = /BlueRobloxApp\//.test(navigator.userAgent) || IS_STANDALONE || !!window.__BR_PC;
   const v = APP_INFO && APP_INFO.version ? "v" + APP_INFO.version + (APP_INFO.size ? " · " + (APP_INFO.size / 1048576).toFixed(1) + "MB" : "") : "";
-  const app = inApp ? "" : IS_IOS
-    ? `<div class="appbig"><img class="cb-wh" src="${(document.querySelector('.cb-cloud img') || {}).src || '/apple-touch-icon.png'}" alt=""><div class="t"><b>📱 ${L("Dùng như app trên iPhone", "Use it like an app on iPhone")}</b><span>${L("Thêm BlueRoblox vào màn hình chính — mở toàn màn hình, thuê và điều khiển máy ngay trên iPhone.", "Add BlueRoblox to your Home Screen — full screen, rent and control phones on iPhone.")}</span></div><a class="btn" href="#" data-iosguide="1">${L("Xem cách cài", "How to install")}</a></div>`
-    : `<div class="appbig"><img class="cb-wh" src="${(document.querySelector('.cb-cloud img') || {}).src || '/apple-touch-icon.png'}" alt=""><div class="t"><b>📲 ${L("Tải app BlueRoblox Cloud cho Android", "Get the BlueRoblox Cloud Android app")}</b><span>${L("Thuê, gia hạn và điều khiển máy ngay trên điện thoại — mượt hơn web, báo trước khi hết hạn. Miễn phí.", "Rent, renew and control your phones on the go — smoother than the web, with expiry reminders. Free.")}</span>${v ? `<small>${v}</small>` : ""}</div><a class="btn" href="/download/blueroblox-cloud.apk" download>⬇️ ${L("Tải app miễn phí", "Download free")}</a></div>`;
+  // "Máy của tôi": thẻ "Tải app" gọn — app máy tính (Windows) + app Android, vì web không còn điều khiển máy (ẩn khi đang ở trong app Android)
+  const app = /BlueRobloxApp\//.test(navigator.userAgent) ? "" : cpAppDlCard(v);
   const help = `<button class="helpbtn" type="button" data-help="1"><span class="i">📖</span><span class="t"><b>${L("Hướng dẫn sử dụng từ A đến Z", "Step-by-step guide (A to Z)")}</b><small>${L("Thuê máy · điều khiển · cài app · Roblox · clone · macro · gia hạn… bấm để xem", "Renting · controlling · apps · Roblox · clone · macro · renewing… tap to read")}</small></span><span class="go">›</span></button>`;
   const capp = inApp ? "" : IS_IOS
     ? `<a class="cpchip app" href="#" data-iosguide="1">📱 <b>${L("Cài lên iPhone", "Install on iPhone")}</b></a>`

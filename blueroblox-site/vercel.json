@@ -37,12 +37,22 @@
     }
   ],
   "rewrites": [
-    { "source": "/admin", "destination": "/index.html" }
+    {
+      "source": "/admin",
+      "destination": "/index.html"
+    }
   ],
   "crons": [
     {
       "path": "/api/vps-expiry-cron",
       "schedule": "0 1 * * *"
+    }
+  ],
+  "redirects": [
+    {
+      "source": "/download/BlueRobloxPC.zip",
+      "destination": "https://github.com/lehien205px/blueroblox/releases/download/pc-latest/BlueRobloxPC.zip",
+      "permanent": false
     }
   ]
 }

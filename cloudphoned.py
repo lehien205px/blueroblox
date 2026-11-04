@@ -5,7 +5,7 @@
 #   SUPABASE_SERVICE_KEY=eyJ...            (service_role key — bí mật)
 #   PUBLIC_BASE=https://xxxx.trycloudflare.com   (link ws-scrcpy ra internet)
 # Chạy:  python3 ~/cloudphoned.py           (vòng lặp mỗi 15s)
-import json, os, sys, time, subprocess, urllib.request, urllib.parse, datetime, socket, shutil, threading
+import json, os, sys, time, subprocess, urllib.request, urllib.parse, urllib.error, datetime, socket, shutil, threading
 GRACE_MIN = 30          # hết hạn quá 30 phút không gia hạn → xoá máy + dữ liệu
 
 HOME = os.path.expanduser("~")
@@ -99,17 +99,85 @@ def node_enabled():
         _en["t"] = time.time()
     return _en["v"]
 
+# ---------- LOẠI GIẢ LẬP + BẢN ANDROID của máy chủ này (LDPlayer 9 = Android 9 · MuMu/MEmu = Android 12, 7) ----------
+_eng = {"emu": "", "androids": []}
+def engine():
+    if not _eng["emu"]:
+        try:
+            r = phonectl(["engine"]); j = json.loads((r.stdout or "").strip().splitlines()[-1])
+            _eng.update(emu=j.get("emu") or "", androids=[str(x) for x in j.get("androids") or []])
+        except Exception:
+            _eng.update(emu=CFG.get("EMU", "") or "", androids=[x.strip() for x in (CFG.get("ANDROIDS") or "").split(",") if x.strip()])
+    return _eng
+def android_ok(row):
+    """Đơn này đúng bản Android máy chủ này bán? (đơn cũ không ghi bản / máy chủ chưa khai báo → nhận như cũ)"""
+    av = engine()["androids"]
+    if not av: return True
+    v = str(row.get("android") or "").strip()
+    return (not v) or v in av or (v not in ("7", "9", "12") and PRIMARY)   # bản lạ (đơn cũ 11…) → máy chủ chính lo
+
+# ---------- các máy chủ KHÁC (đọc bảng cloud_nodes 30 giây/lần) → máy chủ chính biết lúc nào nên hoàn tiền ----------
+_nodes = {"t": 0, "rows": []}
+def live_nodes():
+    """Máy chủ đang bật nhận đơn và vừa báo cáo trong 3 phút gần nhất."""
+    if time.time() - _nodes["t"] > 30:
+        cols = "id,enabled,updated_at,cap_ram,alloc_ram,cap_cpu,alloc_cpu"
+        try: _nodes["rows"] = sb("GET", f"cloud_nodes?select={cols},engine,androids") or []
+        except urllib.error.HTTPError as e:
+            if e.code == 400:                                 # web chưa chạy SQL v20 (chưa có cột engine/androids)
+                try: _nodes["rows"] = sb("GET", f"cloud_nodes?select={cols}") or []
+                except Exception: pass
+        except Exception: pass
+        _nodes["t"] = time.time()
+    out = []
+    for r in _nodes["rows"]:
+        try:
+            if r.get("enabled") is False or (now() - parse_dt(r.get("updated_at"))).total_seconds() > 180: continue
+            out.append(r)
+        except Exception: pass
+    return out
+def node_sells(r, v):
+    av = [x.strip() for x in str(r.get("androids") or "").split(",") if x.strip()] or ["9"]   # máy chủ cũ chưa khai báo = Android 9
+    return v in av
+def others_for(row):
+    """(còn máy chủ KHÁC đang chạy bán đúng bản Android của đơn?, trong đó có máy còn đủ chỗ cho đơn?)"""
+    v = str(row.get("android") or "").strip() or "9"; wr, wc = want(row); live = room = False
+    for r in live_nodes():
+        if r.get("id") == NODE_ID or not node_sells(r, v): continue
+        live = True
+        try:
+            if float(r.get("cap_ram") or 0) - float(r.get("alloc_ram") or 0) + 0.01 >= wr and \
+               float(r.get("cap_cpu") or 0) - float(r.get("alloc_cpu") or 0) + 0.01 >= wc: room = True
+        except (TypeError, ValueError): pass
+    return live, room
+def refund_unserved(row):
+    """Máy chủ chính: đơn chưa ai nhận → chỉ hoàn tiền khi chắc chắn không máy chủ nào nhận được.
+       Còn máy chủ khác đúng bản Android, đang chạy, còn chỗ (có thể đang bận tạo máy khác) → chờ nó tới 10 phút."""
+    age = age_s(row); v = str(row.get("android") or "").strip() or "9"
+    live, room = others_for(row)
+    if age < (600 if room else 90 if android_ok(row) else 120): return
+    if room:
+        msg = f"Máy chủ Android {v} chưa nhận đơn — đã hoàn tiền, thử lại sau"
+        why = "máy chủ đúng bản còn chỗ nhưng 10 phút không nhận đơn (kiểm tra cloudphoned trên máy đó)"
+    elif android_ok(row) or live:
+        msg = "Máy chủ đã đầy, chưa tạo được máy"; why = f"mọi máy chủ Android {v} đều đã đầy"
+    else:
+        msg = f"Máy chủ Android {v} đang bảo trì — đã hoàn tiền, thử lại sau"; why = f"không máy chủ Android {v} nào đang chạy"
+    refund(row, msg); notify(f"⚠️ <b>Đơn Android {v} bị hoàn tiền</b>: {why}.")
+
 def claim(row):
     """Giành đơn mới cho server này. Server còn trống nhiều nhận trước; không đủ chỗ thì nhường server khác.
     Trả về True nếu server này được làm đơn đó."""
     n = row.get("node")
     if n: return n == NODE_ID                       # đã có server nhận rồi
     if not node_enabled(): return False
+    if not android_ok(row):                          # đơn Android 12/7 → máy chủ MuMu/MEmu; Android 9 → máy chủ LDPlayer
+        if PRIMARY: refund_unserved(row)
+        return False
     load, fr, fc = local_load(); age = age_s(row)
     wr, wc = want(row)
-    if wr > fr + 0.01 or wc > fc + 0.01:
-        if age > 90 and PRIMARY:                    # không server nào nhận nổi sau 90 giây → hoàn tiền
-            refund(row, "Máy chủ đã đầy, chưa tạo được máy"); notify("⚠️ <b>Đơn ĐT đám mây bị hoàn tiền</b> vì mọi máy chủ đều đã đầy.")
+    if wr > fr + 0.01 or wc > fc + 0.01:             # máy này hết chỗ → nhường máy chủ khác
+        if PRIMARY: refund_unserved(row)
         return False
     if age < load * 5: return False                 # server đang bận hơn chờ thêm vài giây để server trống hơn nhận trước
     try:
@@ -344,6 +412,7 @@ def cpu_temp():
     return best
 
 _alert = {"full": None}
+_hb_old = {"v": False}
 def heartbeat():
     try:
         st = json.load(open(PHONES_JSON)).get("phones", [])
@@ -375,7 +444,16 @@ def heartbeat():
     body = {"id": NODE_ID, "cpu_total": cpu_t, "ram_total": round(ram_t, 1), "cap_cpu": round(c_cpu, 1), "cap_ram": round(c_ram, 1),
             "alloc_cpu": a_cpu, "alloc_ram": a_ram, "phones": len(st), "limit_pct": LIMIT_PCT, "metrics": metrics,
             "updated_at": now().isoformat()}
-    sb("POST", "cloud_nodes", body, {"Prefer": "resolution=merge-duplicates,return=minimal"})
+    eng = engine()
+    if eng["emu"] and not _hb_old["v"]: body.update(engine=eng["emu"], androids=",".join(eng["androids"]))
+    try:
+        sb("POST", "cloud_nodes", body, {"Prefer": "resolution=merge-duplicates,return=minimal"})
+    except urllib.error.HTTPError as e:
+        if e.code == 400 and "engine" in body:      # web chưa chạy SQL v20 (chưa có cột engine/androids) → báo như cũ
+            _hb_old["v"] = True; body.pop("engine", None); body.pop("androids", None)
+            print("   (web chưa chạy SQL v20 — chưa báo được loại giả lập / bản Android)")
+            sb("POST", "cloud_nodes", body, {"Prefer": "resolution=merge-duplicates,return=minimal"})
+        else: raise
     # Báo Telegram 1 lần khi chạm ngưỡng (và khi có chỗ trở lại)
     full = a_ram >= c_ram - 1 or a_cpu >= c_cpu - 1
     if _alert["full"] is not None and full != _alert["full"]:
@@ -484,6 +562,7 @@ if __name__ == "__main__":
         r = phonectl(["memfix"]); print(r.stdout.strip())
     except Exception as e: print("lỗi memfix:", e)
     print(f"Server: {NODE_ID} ({'CHÍNH' if PRIMARY else 'phụ'}) · {BASE}")
+    e = engine(); print(f"Giả lập: {e['emu'] or '?'} · nhận đơn Android: {', '.join(e['androids']) or 'mọi bản'}")
     adopt_old()
     n = 0; last = 0.0; _rootjob = [None]
     while True:

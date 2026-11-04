@@ -47,7 +47,7 @@ def _f(k, d):
     except (TypeError, ValueError): return float(d)
 MEMU_MAX_RAM, MEMU_MAX_CPU = _f("MEMU_MAX_RAM", 16), _f("MEMU_MAX_CPU", 8)
 WIN_RESERVE = _f("WIN_RAM_RESERVE", 4)
-MEMU_MAX_VMS = int(_f("MEMU_MAX_VMS", 12))     # Windows: tối đa bao nhiêu máy ảo (MEmu chạy quá nhiều máy là lag CẢ máy chủ)
+MEMU_MAX_VMS = int(_f("MEMU_MAX_VMS", 0))      # Windows: giới hạn SỐ máy (0 = không giới hạn số máy, chỉ tính theo tổng nhân + RAM)
 WIN_VCPU_OVER = _f("WIN_VCPU_OVER", 1.0)        # tổng nhân ảo cấp cho các máy ≤ số luồng thật × hệ số này (72 luồng × 1 = 72 nhân)
 def want(row):
     """RAM/CPU THẬT sẽ cấp cho đơn: Windows/MEmu tối đa 16GB · 16 nhân mỗi máy (gói to hơn vẫn nhận, chạy mức tối đa)."""

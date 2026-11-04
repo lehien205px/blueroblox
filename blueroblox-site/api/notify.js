@@ -1,8 +1,8 @@
 // Supabase gọi vào đây mỗi khi có đơn mới, đơn được giao, hoặc nạp tiền thành công.
 // Cài trong Supabase › Database › Webhooks (xem HUONG-DAN.md, bước 9).
-// URL: https://blueroblox.shop/api/notify   Header: x-webhook-secret = NOTIFY_SECRET
+// URL: https://cloudblue.vn/api/notify   Header: x-webhook-secret = NOTIFY_SECRET
 const { userOf, esc, vnd, body, tg, mail } = require("./_lib");
-const SITE = process.env.SITE_URL || "https://blueroblox.shop";
+const SITE = process.env.SITE_URL || "https://cloudblue.vn";
 
 module.exports = async (req, res) => {
   if (req.method !== "POST") return res.status(405).end();

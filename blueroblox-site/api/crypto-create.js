@@ -2,7 +2,7 @@
 // Frontend gọi: POST /api/crypto-create  body { order_id }  (order_id = memo của lệnh nạp đã tạo)
 // Biến môi trường Vercel: NOWPAYMENTS_API_KEY, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, (SITE_URL)
 const { sb, body, rateLimit } = require("./_lib");
-const SITE = process.env.SITE_URL || "https://www.blueroblox.shop";
+const SITE = process.env.SITE_URL || "https://cloudblue.vn";
 const PAY_CURRENCY = process.env.CRYPTO_PAY_CURRENCY || "usdttrc20"; // USDT mạng TRC20
 
 module.exports = async (req, res) => {

@@ -794,14 +794,20 @@ class Link:
 
 class DirectLink(Link):
     kind = "direct"
-    def __init__(self, reader, writer):
-        self.r, self.w = reader, writer
+    def __init__(self, reader, writer, pre=b""):
+        self.r, self.w, self.pre = reader, writer, pre                 # pre: 4 byte đầu đã đọc để phân biệt app ↔ công cụ (HTTP)
         _small_buffers(writer)
 
+    async def _read(self, n):
+        if self.pre:
+            b, self.pre = self.pre[:n], self.pre[n:]
+            return b + (await self.r.readexactly(n - len(b)) if len(b) < n else b"")
+        return await self.r.readexactly(n)
+
     async def recv(self):
-        n = struct.unpack(">I", await self.r.readexactly(4))[0]
+        n = struct.unpack(">I", await self._read(4))[0]
         if n < 1 or n > 8 * 1024 * 1024: raise ValueError("bad frame")
-        b = await self.r.readexactly(n)
+        b = await self._read(n)
         return b[0], b[1:]
 
     def write(self, t, payload=b""):
@@ -1195,8 +1201,57 @@ async def serve_link(link):
         log("lỗi phiên:", repr(e)); await link.close()
 
 
+CPAPI_LOCAL = ("127.0.0.1", int(C.get("CPAPI_PORT") or 8010))
+HTTP_VERBS = (b"GET ", b"POST", b"PUT ", b"HEAD", b"OPTI", b"DELE", b"PATC")
+
+
+async def http_to_cpapi(head, reader, writer):
+    """CÔNG CỤ MÁY qua chính cổng TLS này (cài APK, clone tab, khởi động lại, chụp màn…): chuyển thẳng tới cpapi 127.0.0.1:8010.
+       App không cần tên miền / Cloudflare. cpapi tự kiểm phiên đăng nhập + quyền với từng máy như khi đi qua web."""
+    uw = None
+    try:
+        line = head + await asyncio.wait_for(reader.readuntil(b"\r\n"), 15)
+        parts = line.split(b" ")
+        if len(parts) != 3 or not parts[1].startswith(b"/cpapi/"):
+            writer.write(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"); await writer.drain(); return
+        ur, uw = await asyncio.wait_for(asyncio.open_connection(*CPAPI_LOCAL), 5)
+        uw.write(line)
+        async def pipe(r, w):
+            while True:
+                b = await r.read(256 * 1024)
+                if not b: return
+                w.write(b); await w.drain()
+        tasks = {asyncio.ensure_future(pipe(reader, uw)), asyncio.ensure_future(pipe(ur, writer))}
+        done, pend = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)   # 1 chiều xong (cpapi trả lời xong / app đóng) → đóng cả 2
+        for t in pend: t.cancel()
+        for t in done:
+            try: t.exception()
+            except BaseException: pass
+    except (ConnectionRefusedError, OSError, asyncio.TimeoutError) as e:
+        if uw is None:                                        # cpapi (đèn "Cổng bảo vệ :8010") đang tắt
+            try:
+                body = json.dumps({"error": "Công cụ máy đang tắt trên máy chủ (cổng bảo vệ :8010) — thử lại sau ít phút."}, ensure_ascii=False).encode()
+                writer.write(b"HTTP/1.1 503 Service Unavailable\r\nContent-Type: application/json; charset=utf-8\r\nConnection: close\r\n"
+                             + f"Content-Length: {len(body)}\r\n\r\n".encode() + body)
+                await writer.drain()
+            except Exception: pass
+    except Exception as e:
+        log("công cụ (HTTP) lỗi:", repr(e))
+    finally:
+        for w in (uw, writer):
+            if w is None: continue
+            try: w.close()
+            except Exception: pass
+
+
 async def on_direct(reader, writer):
-    await serve_link(DirectLink(reader, writer))
+    try: head = await asyncio.wait_for(reader.readexactly(4), 20)
+    except Exception:
+        try: writer.close()
+        except Exception: pass
+        return
+    if head in HTTP_VERBS: return await http_to_cpapi(head, reader, writer)     # app gọi công cụ máy (HTTP)
+    await serve_link(DirectLink(reader, writer, head))                          # app xem / điều khiển (BRS2)
 
 
 async def on_ws(reader, writer):

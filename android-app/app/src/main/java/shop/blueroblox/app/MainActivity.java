@@ -106,6 +106,8 @@ public class MainActivity extends Activity {
         return p;
     }
     boolean isAdmin() { return "admin".equals(prof.optString("role")); }
+    /** Đang bảo trì và người dùng KHÔNG phải admin → khoá điều khiển (admin luôn toàn quyền, giống web). */
+    boolean maintBlocks() { return status.optBoolean("maint", false) && !isAdmin(); }
     /** Ưu đãi miễn phí đang mở (admin bật + chưa hết giờ). */
     boolean freeLive() {
         if (!price.optBoolean("free_on", false)) return false;
@@ -282,7 +284,9 @@ public class MainActivity extends Activity {
             m.setBackground(Ui.round(Color.argb(30, 255, 200, 97), 18, Color.argb(120, 255, 200, 97)));
             m.addView(Ui.text(this, "🛠 " + Ui.L("Đang bảo trì", "Under maintenance"), 15, Ui.WAIT, true));
             String msg = status.optString("maint_msg", "");
-            m.addView(Ui.muted(this, msg.isEmpty() || msg.equals("null") ? Ui.L("Máy của bạn vẫn được giữ, không bị tính hết hạn trong lúc bảo trì.", "Your phones are kept during maintenance.") : msg));
+            m.addView(Ui.muted(this, isAdmin() ? Ui.L("Khách đang không dùng được. Tài khoản admin vẫn toàn quyền: điều khiển, thuê, gia hạn, công cụ.",
+                    "Customers are blocked. Admin keeps full access: control, rent, renew, tools.")
+                    : msg.isEmpty() || msg.equals("null") ? Ui.L("Máy của bạn vẫn được giữ, không bị tính hết hạn trong lúc bảo trì.", "Your phones are kept during maintenance.") : msg));
             body.addView(m, Ui.fill());
         }
         LinearLayout head = Ui.row(this, 10);
@@ -330,7 +334,7 @@ public class MainActivity extends Activity {
     /** Ô tĩnh thay cho ảnh màn hình trực tiếp (không chụp màn hình định kỳ nữa cho nhẹ máy chủ): biểu tượng điện thoại + trạng thái. */
     private View phoneTile(JSONObject p, float iconSp) {
         String st = p.optString("status");
-        boolean lk = locked(p), live = "active".equals(st) && !lk && !status.optBoolean("maint", false);
+        boolean lk = locked(p) && !isAdmin(), live = "active".equals(st) && !lk && !maintBlocks();
         LinearLayout t = Ui.col(this, 4);
         t.setGravity(Gravity.CENTER);
         t.setPadding(Ui.dp(8), Ui.dp(8), Ui.dp(8), Ui.dp(8));
@@ -386,7 +390,7 @@ public class MainActivity extends Activity {
             final JSONObject p = phones.optJSONObject(i);
             if (i % cols == 0) { row = Ui.row(this, gap); grid.addView(row, Ui.fill()); }
             final String pid = p.optString("id"), st = p.optString("status");
-            boolean live = "active".equals(st) && !locked(p) && !status.optBoolean("maint", false);
+            boolean live = "active".equals(st) && (!locked(p) || isAdmin()) && !maintBlocks();
             LinearLayout cell = Ui.col(this, 4);
             FrameLayout box = new FrameLayout(this);
             box.setBackground(Ui.round(Color.rgb(2, 4, 12), 10, live ? Color.argb(90, 61, 220, 132) : Color.argb(70, 255, 93, 108)));
@@ -463,7 +467,7 @@ public class MainActivity extends Activity {
                     + (se > 0 ? Ui.L(" · đến ", " · until ") + fdate(se) : Ui.L(" · theo hạn máy", " · until expiry")), 13, Ui.SKY, false), Ui.fill());
         }
 
-        boolean canCtl = "active".equals(st) && !lk && !status.optBoolean("maint", false);
+        boolean canCtl = "active".equals(st) && (!lk || isAdmin()) && !maintBlocks();
         if (canCtl) {                                    // ô tĩnh (biểu tượng + trạng thái, không chụp màn hình) — bấm vào để điều khiển
             final String pid = p.optString("id");
             FrameLayout box = new FrameLayout(this);

@@ -319,6 +319,7 @@ public class ControlActivity extends Activity {
             JSONObject s = ep.optJSONObject("stream");
             String a = s == null || s.isNull("api") ? "" : s.optString("api", "").trim();
             api = a.startsWith("https://") ? a : "";
+            Api.direct(api, s);                          // công cụ máy (cài APK, clone, khởi động lại…) đi thẳng tới máy chủ, không cần tên miền
         }
 
         @Override public void onWelcome(JSONObject w, boolean direct) {
@@ -868,16 +869,35 @@ public class ControlActivity extends Activity {
                     op.setOnClickListener(v -> { try { cpPost("clone", new JSONObject().put("pkg", pkg).put("open", ci), Ui.L("Đang mở bản clone ", "Opening clone ") + ci + "…"); if (d[0] != null) d[0].dismiss(); } catch (Exception ignored) { } });
                     w.addView(op);
                 }
-                Button add = Ui.button(this, k > 0 ? Ui.L("+ Thêm 1 bản", "+ 1 more") : "Clone", Ui.GHOST);
+                // SỐ BẢN CLONE muốn có (tổng): chọn 1…mx rồi bấm Tạo
+                final int[] want = {Math.min(mx, k + 1)};
+                Ui.Wrap qn = new Ui.Wrap(this, 6);
+                Button add = Ui.button(this, "", Ui.PRIMARY);
                 add.setMinWidth(0);
+                Runnable paint = () -> {
+                    for (int z = 0; z < qn.getChildCount(); z++) Ui.setChip((TextView) qn.getChildAt(z), (int) qn.getChildAt(z).getTag() == want[0]);
+                    boolean more = want[0] > k;
+                    add.setText(more ? Ui.L("Tạo " + want[0] + " bản clone", "Make " + want[0] + " clone(s)") : Ui.L("Đã có " + k + " bản", k + " already"));
+                    add.setEnabled(more); add.setAlpha(more ? 1f : .5f);
+                };
+                for (int q = 1; q <= mx; q++) {
+                    TextView ch = Ui.chip(this, q + Ui.L(" bản", ""), q == want[0]);
+                    ch.setTag(q);
+                    ch.setOnClickListener(v -> { want[0] = (int) v.getTag(); paint.run(); });
+                    qn.addView(ch);
+                }
+                card.addView(Ui.text(this, Ui.L("Số bản clone muốn có (tổng, tối đa " + mx + ")", "Total clones wanted (max " + mx + ")"), 12, Ui.MUTED, false), Ui.fill());
+                card.addView(qn, Ui.fill());
                 add.setOnClickListener(v -> {
                     if (d[0] != null) d[0].dismiss();
-                    Dialog[] p2 = progress(Ui.L("Đang tạo bản clone (~20 giây)…", "Creating clone (~20s)…"));
+                    final int nWant = want[0];
+                    Dialog[] p2 = progress(Ui.L("Đang tạo " + nWant + " bản clone (mỗi bản ~20 giây)…", "Creating " + nWant + " clone(s) (~20s each)…"));
                     Api.bg(() -> {
-                        JSONObject j = Api.cpAt(base, "POST", pid + "/clone", new JSONObject().put("pkg", pkg).put("n", Math.min(mx, k + 1)));
+                        JSONObject j = Api.cpAt(base, "POST", pid + "/clone", new JSONObject().put("pkg", pkg).put("n", nWant));
                         return waitJob(base, j.optString("job"), p2);
                     }, msg -> { p2[0].dismiss(); Ui.toast(this, msg); }, m -> { p2[0].dismiss(); Ui.toast(this, m); });
                 });
+                paint.run();
                 w.addView(add);
                 if (k > 0) {
                     Button rm = Ui.button(this, Ui.L("Bỏ clone", "Remove"), Ui.DANGER);

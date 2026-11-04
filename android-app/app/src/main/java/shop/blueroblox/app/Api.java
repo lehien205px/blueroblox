@@ -269,22 +269,113 @@ public final class Api {
         return b.endsWith("/cpapi") ? b : b + "/cpapi";
     }
 
+    // ---- đường THẲNG tới máy chủ cho công cụ máy (cùng cổng TLS với phát hình, ghim chứng chỉ) — không cần tên miền / Cloudflare ----
+    private static final java.util.Map<String, JSONObject> DIRECT = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final java.util.Map<String, String> GOOD = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /** Màn điều khiển gọi khi đọc cloudphone_endpoint: base = stream.api, st = stream {direct:[{host,port,lan}], cert}. */
+    public static void direct(String base, JSONObject st) {
+        if (st != null && st.optString("cert", "").replace(":", "").length() >= 32) DIRECT.put(base == null ? "" : base, st);
+    }
+
+    private static final class RouteDown extends java.io.IOException { RouteDown(Exception e) { super(e); } }
+
+    /** Chỉ nhận đúng chứng chỉ có SHA-256 (DER) = stream.cert (máy chủ tự ký). */
+    private static final class Pin implements javax.net.ssl.X509TrustManager {
+        private final String want;
+        Pin(String hex) { want = hex.trim().toLowerCase(java.util.Locale.ROOT).replace(":", ""); }
+        @Override public void checkClientTrusted(java.security.cert.X509Certificate[] c, String a) throws java.security.cert.CertificateException {
+            throw new java.security.cert.CertificateException("no client certs");
+        }
+        @Override public void checkServerTrusted(java.security.cert.X509Certificate[] c, String a) throws java.security.cert.CertificateException {
+            if (c == null || c.length == 0) throw new java.security.cert.CertificateException("no server cert");
+            try {
+                byte[] d = java.security.MessageDigest.getInstance("SHA-256").digest(c[0].getEncoded());
+                StringBuilder sb = new StringBuilder();
+                for (byte x : d) sb.append(String.format(java.util.Locale.ROOT, "%02x", x));
+                if (!sb.toString().equals(want)) throw new java.security.cert.CertificateException("wrong server cert");
+            } catch (java.security.NoSuchAlgorithmException e) { throw new java.security.cert.CertificateException(e); }
+        }
+        @Override public java.security.cert.X509Certificate[] getAcceptedIssuers() { return new java.security.cert.X509Certificate[0]; }
+    }
+
+    private static Res pinned(String url, String cert, int connectMs, String method, String ctype, byte[] body, String[][] headers) throws Exception {
+        javax.net.ssl.HttpsURLConnection c = (javax.net.ssl.HttpsURLConnection) new URL(url).openConnection();
+        javax.net.ssl.SSLContext ctx = javax.net.ssl.SSLContext.getInstance("TLS");
+        ctx.init(null, new javax.net.ssl.TrustManager[]{new Pin(cert)}, null);
+        c.setSSLSocketFactory(ctx.getSocketFactory());
+        c.setHostnameVerifier((h, s) -> true);           // đã ghim đúng chứng chỉ bằng SHA-256 → không cần tên miền
+        c.setConnectTimeout(connectMs);
+        c.setReadTimeout(300000);
+        c.setRequestMethod(method);
+        c.setRequestProperty("Accept", "application/json");
+        c.setRequestProperty("Connection", "close");
+        c.setRequestProperty("User-Agent", "BlueRobloxApp/" + version);
+        if (headers != null) for (String[] h : headers) if (h[1] != null) c.setRequestProperty(h[0], h[1]);
+        if (body != null) {
+            c.setDoOutput(true);
+            if (ctype != null) c.setRequestProperty("Content-Type", ctype);
+            c.setFixedLengthStreamingMode(body.length);
+        }
+        try { c.connect(); } catch (java.io.IOException e) { c.disconnect(); throw new RouteDown(e); }   // chưa gửi gì → thử đường khác được
+        try {
+            if (body != null) try (OutputStream o = c.getOutputStream()) { o.write(body); }
+            Res r = new Res();
+            r.code = c.getResponseCode();
+            InputStream in = r.code >= 400 ? c.getErrorStream() : c.getInputStream();
+            ByteArrayOutputStream bo = new ByteArrayOutputStream();
+            if (in != null) {
+                byte[] buf = new byte[16384]; int n;
+                while ((n = in.read(buf)) > 0) bo.write(buf, 0, n);
+                in.close();
+            }
+            r.body = bo.toByteArray();
+            return r;
+        } finally { c.disconnect(); }
+    }
+
+    /** Gọi cpapi: thử đường thẳng (mạng nhà trước, rồi IP ngoài) → không được mới qua tên miền của máy chủ. */
+    private static Res cpHttp(String base, String method, String path, String ctype, byte[] body) throws Exception {
+        String[][] h = {{"Authorization", "Bearer " + token()}};
+        String key = base == null ? "" : base;
+        JSONObject st = DIRECT.get(key);
+        if (st != null) {
+            JSONArray d = st.optJSONArray("direct");
+            java.util.List<JSONObject> rs = new java.util.ArrayList<>();
+            if (d != null) for (int i = 0; i < d.length(); i++) { JSONObject x = d.optJSONObject(i); if (x != null && !x.optString("host").isEmpty()) rs.add(x); }
+            java.util.Collections.sort(rs, (a, b) -> {
+                String g = GOOD.get(key);
+                int ga = (a.optString("host") + ":" + a.optInt("port")).equals(g) ? 0 : 1, gb = (b.optString("host") + ":" + b.optInt("port")).equals(g) ? 0 : 1;
+                if (ga != gb) return ga - gb;
+                return (a.optBoolean("lan") ? 0 : 1) - (b.optBoolean("lan") ? 0 : 1);
+            });
+            for (JSONObject x : rs) {
+                String hp = x.optString("host") + ":" + x.optInt("port");
+                try {
+                    Res r = pinned("https://" + hp + "/cpapi/" + path, st.optString("cert"), x.optBoolean("lan") ? 900 : 4000, method, ctype, body, h);
+                    GOOD.put(key, hp);
+                    return r;
+                } catch (RouteDown e) { /* đường này chưa nối được → thử đường sau */ }
+            }
+        }
+        return http(method, cpRoot(base) + "/" + path, ctype, body, h);
+    }
+
     public static JSONObject cpAt(String base, String method, String path, JSONObject body) throws Exception {
-        Res r = http(method, cpRoot(base) + "/" + path, "application/json", body == null ? null : js(body),
-                new String[][]{{"Authorization", "Bearer " + token()}});
+        Res r = cpHttp(base, method, path, "application/json", body == null ? null : js(body));
         if (r.code >= 300) throw new ApiError(r.code, errorText(r));
         String t = r.text().trim();
         return t.startsWith("{") ? new JSONObject(t) : new JSONObject();
     }
 
     public static byte[] cpBytesAt(String base, String path) throws Exception {
-        Res r = http("GET", cpRoot(base) + "/" + path, null, null, new String[][]{{"Authorization", "Bearer " + token()}});
+        Res r = cpHttp(base, "GET", path, null, null);
         if (r.code >= 300) throw new ApiError(r.code, errorText(r));
         return r.body;
     }
 
     public static JSONObject cpUploadAt(String base, String path, byte[] chunk) throws Exception {
-        Res r = http("POST", cpRoot(base) + "/" + path, "application/octet-stream", chunk, new String[][]{{"Authorization", "Bearer " + token()}});
+        Res r = cpHttp(base, "POST", path, "application/octet-stream", chunk);
         JSONObject o;
         try { o = new JSONObject(r.text()); } catch (Exception e) { o = new JSONObject(); }
         if (r.code == 409 && o.has("size")) return o;

@@ -228,6 +228,11 @@ TUNE = (# CLONE TAB cần Android cho phép nhiều người dùng (máy ảo m�
         "if pm path com.google.android.setupwizard >/dev/null 2>&1 && [ \"$(settings get secure user_setup_complete)\" != 1 ]; then "
         "settings put global device_provisioned 1; settings put secure user_setup_complete 1; "
         "pm disable com.google.android.setupwizard >/dev/null 2>&1; am start -a android.intent.action.MAIN -c android.intent.category.HOME >/dev/null 2>&1; fi; "
+        # MÁY NHẸ: tắt app Google chạy ngầm khách không dùng (chuyển máy, sao lưu, khảo sát, đọc chữ, đồng bộ lịch/danh bạ) — tắt 1 lần, bật lại được
+        "[ -f /data/local/tmp/.br_lite ] || { for p in com.google.android.apps.pixelmigrate com.google.android.apps.restore com.google.android.backuptransport "
+        "com.google.android.carriersetup com.google.android.feedback com.google.android.partnersetup com.google.android.tts "
+        "com.google.android.syncadapters.calendar com.google.android.syncadapters.contacts com.google.android.onetimeinitializer; do "
+        "pm disable-user --user 0 $p >/dev/null 2>&1; done; touch /data/local/tmp/.br_lite; }; "
         # tắt hẳn hiệu ứng chuyển cảnh → CPU không phải vẽ thêm
         "settings put global window_animation_scale 0; settings put global transition_animation_scale 0; "
         "settings put global animator_duration_scale 0; settings put global package_verifier_enable 0; "

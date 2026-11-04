@@ -180,7 +180,7 @@ class App:
         self.svcs = {n: Svc(n, self) for n in SERVICES}
         top = tk.Frame(r, bg=BG); top.pack(fill="x", padx=14, pady=(12, 6))
         tk.Label(top, text="🐋 BlueRoblox", fg=BLUE, bg=BG, font=("Segoe UI", 18, "bold")).pack(side="left")
-        tk.Label(top, text="  máy chủ Windows · MEmu", fg=MUTED, bg=BG, font=("Segoe UI", 11)).pack(side="left", pady=(6, 0))
+        tk.Label(top, text="  máy chủ Windows · LDPlayer / MEmu", fg=MUTED, bg=BG, font=("Segoe UI", 11)).pack(side="left", pady=(6, 0))
         self.adm = tk.Label(top, text="", bg=BG, font=("Segoe UI", 10)); self.adm.pack(side="right")
         # dòng tổng: đủ đèn xanh = OK
         self.banner = tk.Label(r, text="⏳ Đang kiểm tra…", fg="#1a1300", bg=WARN, font=("Segoe UI", 13, "bold"), anchor="w", padx=14, pady=6)
@@ -188,7 +188,7 @@ class App:
         # đèn trạng thái
         self.lights = {}
         grid = tk.Frame(r, bg=BG); grid.pack(fill="x", padx=14)
-        items = [("memu", "MEmu"), ("adb", "adb (Google)"), ("key", "Khoá Supabase"), ("ws", "Trình phát hình :8000"),
+        items = [("memu", "Giả lập"), ("adb", "adb (Google)"), ("key", "Khoá Supabase"), ("ws", "Trình phát hình :8000"),
                  ("api", "Cổng bảo vệ :8010"), ("daemon", "Nhận đơn (cloudphoned)"), ("cf", "Đường hầm Cloudflare"), ("web", pub_host())]
         for i, (k, t) in enumerate(items):
             c = tk.Frame(grid, bg=CARD, highlightbackground=LINE, highlightthickness=1); c.grid(row=i // 4, column=i % 4, sticky="nsew", padx=4, pady=4)
@@ -254,7 +254,7 @@ class App:
         except queue.Empty: pass
         self.root.after(150, self._drain)
 
-    NAMES = {"memu": "MEmu", "adb": "adb", "key": "Khoá Supabase", "ws": "Trình phát hình", "api": "Cổng bảo vệ",
+    NAMES = {"memu": "Giả lập", "adb": "adb", "key": "Khoá Supabase", "ws": "Trình phát hình", "api": "Cổng bảo vệ",
              "daemon": "Nhận đơn", "cf": "Đường hầm Cloudflare", "web": "Web"}
     def light(self, k, ok, text):
         dot, sub = self.lights[k]
@@ -483,10 +483,12 @@ Write-Host '[OK] Khong ngu, khong tat man hinh'
         n = 0
         while True:
             c = conf()
-            memu = next((d for d in [c.get("MEMU_DIR", ""), r"C:\Program Files\Microvirt\MEmu", r"D:\Program Files\Microvirt\MEmu"]
+            memu = next((d for d in [c.get("LD_DIR", ""), r"C:\LDPlayer\LDPlayer9", r"D:\LDPlayer\LDPlayer9", r"C:\leidian\LDPlayer9"]
+                         if d and os.path.isfile(os.path.join(d, "ldconsole.exe"))), "") or \
+                   next((d for d in [c.get("MEMU_DIR", ""), r"C:\Program Files\Microvirt\MEmu", r"D:\Program Files\Microvirt\MEmu"]
                          if d and os.path.isfile(os.path.join(d, "memuc.exe"))), "")
             L = self.root.after
-            L(0, self.light, "memu", bool(memu), memu or "chưa thấy memuc.exe")
+            L(0, self.light, "memu", bool(memu), memu or "chưa thấy LDPlayer 9 / MEmu")
             adb = os.path.isfile(os.path.join(B, "platform-tools", "adb.exe"))
             L(0, self.light, "adb", adb, "đã có" if adb else "chưa cài — bấm ①")
             key = c.get("SUPABASE_SERVICE_KEY", "")

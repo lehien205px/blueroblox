@@ -67,14 +67,16 @@ if (-not (Test-Path "$B\platform-tools\adb.exe")) {
   Get "https://dl.google.com/android/repository/platform-tools-latest-windows.zip" "$B\pt.zip"
   Expand-Archive -Force "$B\pt.zip" $B; Remove-Item "$B\pt.zip" }
 Ok "$B\platform-tools\adb.exe"
-# MEmu kèm adb.exe cũ → 2 bản adb tranh nhau làm rớt máy. Thay bằng bản của Google (giữ bản cũ .bak)
+# Giả lập: LDPlayer 9 (ưu tiên) hoặc MEmu. Chúng kèm adb.exe cũ → 2 bản adb tranh nhau làm rớt máy → thay bằng bản của Google (giữ bản cũ .bak)
+$LDP = @("C:\LDPlayer\LDPlayer9", "D:\LDPlayer\LDPlayer9", "C:\Program Files\LDPlayer\LDPlayer9", "C:\leidian\LDPlayer9") | Where-Object { Test-Path "$_\ldconsole.exe" } | Select-Object -First 1
 $MEMU = @("C:\Program Files\Microvirt\MEmu", "D:\Program Files\Microvirt\MEmu", "C:\Microvirt\MEmu", "D:\Microvirt\MEmu") | Where-Object { Test-Path "$_\memuc.exe" } | Select-Object -First 1
-if (-not $MEMU) { throw "Khong thay MEmu (memuc.exe). Cai MEmu Play truoc." }
+if ($LDP) { $MEMU = $LDP }
+if (-not $MEMU) { throw "Khong thay gia lap. Cai LDPlayer 9 (ldplayer.net) truoc." }
 Get-Process adb -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 foreach ($f in "adb.exe", "AdbWinApi.dll", "AdbWinUsbApi.dll") {
   if ((Test-Path "$MEMU\$f") -and -not (Test-Path "$MEMU\$f.bak")) { Copy-Item "$MEMU\$f" "$MEMU\$f.bak" }
   Copy-Item -Force "$B\platform-tools\$f" "$MEMU\$f" }
-Ok "MEmu: $MEMU (da dung chung adb cua Google)"
+Ok "Gia lap: $MEMU (da dung chung adb cua Google)"
 
 Step "4/7 cloudflared (duong ham phone.blueroblox.shop)"
 if (-not (Get-Command cloudflared -ErrorAction SilentlyContinue) -and -not (Test-Path "C:\Program Files (x86)\cloudflared\cloudflared.exe")) {
@@ -114,6 +116,7 @@ foreach ($f in "cloudphoned.py", "cpapi.py") { Get "$RAW/$f" "$B\$f" }
 foreach ($f in "phonectl.py", "run.py", "remake.py", "keep.bat", "start-blue.bat", "panel.py", "wallpaper.png", "donweb.py", "kiemtra.py", "suachua.ps1") { Get "$RAW/windows/$f" "$B\$f" }
 if (-not (Test-Path "$B\cloudphone.conf")) {
 $PRI = if ($Node -eq "win1") { "1" } else { "0" }
+$MAXR = if ($LDP) { "8" } else { "16" }
 @"
 SUPABASE_URL=https://nprftgodswlpzomcttal.supabase.co
 SUPABASE_SERVICE_KEY=DAN_SERVICE_ROLE_KEY_VAO_DAY
@@ -126,7 +129,7 @@ CPU_OVER=1
 WIN_VCPU_OVER=1
 WIN_RAM_RESERVE=3
 RAM_BUSY_PCT=98
-MEMU_MAX_RAM=16
+MEMU_MAX_RAM=$MAXR
 MEMU_MAX_CPU=8
 MEMU_RENDER=1
 MEMU_GMEM_OPT=1

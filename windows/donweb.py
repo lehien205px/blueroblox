@@ -28,12 +28,10 @@ def sb(method, path, body=None):
     with urllib.request.urlopen(req, timeout=30) as r: t = r.read().decode(); return json.loads(t) if t else None
 
 def memu_names():
-    for d in (C.get("MEMU_DIR", ""), r"C:\Program Files\Microvirt\MEmu", r"D:\Program Files\Microvirt\MEmu"):
-        exe = os.path.join(d, "memuc.exe")
-        if d and os.path.isfile(exe):
-            out = subprocess.run([exe, "listvms"], capture_output=True, text=True, timeout=60).stdout or ""
-            return {ln.split(",")[1].strip() for ln in out.splitlines() if ln.count(",") >= 3 and ln.split(",")[0].strip().isdigit()}
-    sys.exit("Không thấy memuc.exe")
+    """Tên các máy trong giả lập (MEmu hoặc LDPlayer) — lấy qua phonectl vmlist."""
+    r = subprocess.run([sys.executable, os.path.join(B, "phonectl.py"), "vmlist"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=300)
+    if r.returncode != 0: sys.exit("Không đọc được danh sách máy giả lập: " + (r.stderr or "")[-200:])
+    return {ln.split(",")[1].strip() for ln in (r.stdout or "").splitlines() if ln.count(",") >= 3 and ln.split(",")[0].strip().isdigit()}
 
 def age_min(r):
     t = r.get("created_at") or r.get("updated_at")          # updated_at có lúc bị ghi giờ VN không kèm múi giờ → lệch 7 tiếng

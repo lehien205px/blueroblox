@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# kiemtra.py — CHỈ XEM (không đổi gì): đối chiếu máy trong MEmu ↔ danh sách BlueRoblox ↔ trạng thái trên web
+# kiemtra.py — CHỈ XEM (không đổi gì): đối chiếu máy trong giả lập (MEmu / LDPlayer) ↔ danh sách BlueRoblox ↔ trạng thái trên web
 #   python C:\blue\kiemtra.py
 import json, os, subprocess, sys, urllib.request
 sys.stdout.reconfigure(encoding="utf-8")
@@ -8,15 +8,13 @@ C = {}
 for l in open(os.path.join(B, "cloudphone.conf"), encoding="utf-8-sig"):
     l = l.strip()
     if "=" in l and not l.startswith("#"): k, v = l.split("=", 1); C[k.strip()] = v.strip()
-MC = next(os.path.join(d, "memuc.exe") for d in (C.get("MEMU_DIR", ""), r"C:\Program Files\Microvirt\MEmu", r"D:\Program Files\Microvirt\MEmu")
-          if d and os.path.isfile(os.path.join(d, "memuc.exe")))
-mem = {}
-for ln in (subprocess.run([MC, "listvms"], capture_output=True, text=True, timeout=90).stdout or "").splitlines():
+# danh sách máy lấy qua phonectl (chạy được cả MEmu lẫn LDPlayer)
+PY = sys.executable
+mem, cpus = {}, {}
+for ln in (subprocess.run([PY, os.path.join(B, "phonectl.py"), "vmlist"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=300).stdout or "").splitlines():
     p = ln.split(",")
-    if len(p) >= 4 and p[0].strip().isdigit(): mem[p[1].strip()] = (int(p[0]), p[3].strip() == "1")
-def cfg(i, k):
-    o = subprocess.run([MC, "getconfigex", "-i", str(i), k], capture_output=True, text=True, timeout=60).stdout or ""
-    return o.split(":")[-1].strip() if ":" in o else "?"
+    if len(p) >= 4 and p[0].strip().isdigit(): mem[p[1].strip()] = (int(p[0]), p[2].strip() == "1"); cpus[p[1].strip()] = p[3].strip()
+def cfg(n): return cpus.get(n, "?")
 ph = {p["name"]: p for p in json.load(open(os.path.join(B, "redroid", "phones.json"), encoding="utf-8")).get("phones", [])}
 web = {}
 try:
@@ -28,14 +26,14 @@ try:
         if r.get("node") == NODE or (not r.get("node") and PRI): web[r["container"]] = r   # chỉ máy của máy chủ này
 except Exception as e: print("(không đọc được web:", e, ")")
 names = sorted(set(mem) | set(ph))
-print(f"{'MÁY':16} {'MEmu':10} {'NHÂN THẬT':9} {'DS BLUE':8} {'WEB':10} {'CỔNG':6}  GHI CHÚ")
+print(f"{'MÁY':16} {'GIẢ LẬP':10} {'NHÂN THẬT':9} {'DS BLUE':8} {'WEB':10} {'CỔNG':6}  GHI CHÚ")
 ports = {}
 for n in names:
     if n in ph and ph[n].get("port"): ports.setdefault(ph[n]["port"], []).append(n)
 tot = 0
 for n in names:
     m = mem.get(n); p = ph.get(n); w = web.get(n, {})
-    cpu = cfg(m[0], "cpus") if m else "-"
+    cpu = cfg(n) if m else "-"
     if m and m[1] and cpu.isdigit(): tot += int(cpu)
     note = []
     if m and not p and not n.startswith("spare_"): note.append("MÁY THỪA (không có trong danh sách)")

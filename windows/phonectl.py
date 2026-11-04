@@ -30,6 +30,12 @@ RESERVE = float(CONF.get("WIN_RAM_RESERVE", "4") or 4)          # GB RAM Windows
 MEMU_DIRS = [CONF.get("MEMU_DIR", ""), os.environ.get("MEMU_DIR", ""), r"C:\Program Files\Microvirt\MEmu", r"D:\Program Files\Microvirt\MEmu",
              r"C:\Microvirt\MEmu", r"D:\Microvirt\MEmu", r"C:\Program Files (x86)\Microvirt\MEmu"]
 MEMU = next((d for d in MEMU_DIRS if d and os.path.isfile(os.path.join(d, "memuc.exe"))), "")
+# ---------- LDPlayer 9 (thay MEmu): có ldconsole.exe mà KHÔNG có MEmu, hoặc conf EMU=ld ----------
+LD_DIRS = [CONF.get("LD_DIR", ""), r"C:\LDPlayer\LDPlayer9", r"D:\LDPlayer\LDPlayer9", r"C:\Program Files\LDPlayer\LDPlayer9",
+           r"C:\leidian\LDPlayer9", r"D:\leidian\LDPlayer9"]
+LD = next((d for d in LD_DIRS if d and os.path.isfile(os.path.join(d, "ldconsole.exe"))), "")
+EMU = "ld" if LD and (CONF.get("EMU", "").lower() == "ld" or not MEMU) else "memu"
+if EMU == "ld": MEMU = LD                  # các chỗ kiểm tra "có giả lập chưa" dùng chung biến MEMU
 NOWIN = 0x08000000
 
 def run(args, timeout=180, text=True):
@@ -42,7 +48,7 @@ def run(args, timeout=180, text=True):
         except OSError as e: return subprocess.CompletedProcess(args, 127, "", str(e))
         try: code = p.wait(timeout=timeout)
         except subprocess.TimeoutExpired:
-            tree = ["/T"] if args[0].lower().endswith("memuc.exe") else []      # adb: KHÔNG /T (adb server có thể là "con" → chết theo)
+            tree = ["/T"] if args[0].lower().endswith(("memuc.exe", "ldconsole.exe")) else []      # adb: KHÔNG /T (adb server có thể là "con" → chết theo)
             subprocess.run(["taskkill", "/PID", str(p.pid)] + tree + ["/F"], capture_output=True, creationflags=NOWIN)
             try: p.wait(timeout=10)
             except subprocess.TimeoutExpired: pass
@@ -54,7 +60,7 @@ def run(args, timeout=180, text=True):
 def _unstick_memuc():
     """Khoá memuc bị giữ quá lâu (1 lệnh memuc treo) → tắt các memuc.exe đang treo + gỡ khoá, để đơn khách không bị huỷ."""
     run(["powershell", "-NoProfile", "-Command",
-         "Get-CimInstance Win32_Process -Filter \"name='memuc.exe'\" | Where-Object { $_.CreationDate -lt (Get-Date).AddSeconds(-45) } | "
+         "Get-CimInstance Win32_Process | Where-Object { $_.Name -in 'memuc.exe','ldconsole.exe' } | Where-Object { $_.CreationDate -lt (Get-Date).AddSeconds(-45) } | "
          "ForEach-Object { Stop-Process -Id $_.ProcessId -Force }"], 60)
     # chương trình đang GIỮ khoá (vd connect-all cũ treo từ lâu) → tắt nó; Windows không cho xoá file khoá khi nó còn mở
     lf = os.path.join(HOME, "redroid", "memuc.lock")
@@ -67,8 +73,79 @@ def _unstick_memuc():
     try: os.remove(lf)
     except OSError: pass
     print("   (lệnh MEmu bị treo → đã gỡ, làm tiếp)", flush=True)
+def _ld_cfgfile(i): return os.path.join(LD, "vms", "config", f"leidian{int(i)}.config")
+def ld_cfg(i, **kv):
+    """Ghi thẳng file cài đặt máy LDPlayer (chỉ khi máy đang TẮT): luôn bật ADB nội bộ + root (không có → adb 'offline')."""
+    f = _ld_cfgfile(i)
+    try: d = json.load(open(f, encoding="utf-8-sig"))
+    except Exception: d = {}
+    d.update({"basicSettings.adbDebug": 1, "basicSettings.rootMode": True}); d.update(kv)
+    try:
+        os.makedirs(os.path.dirname(f), exist_ok=True)
+        with open(f, "w", encoding="utf-8") as fo: json.dump(d, fo, ensure_ascii=False, indent=4)
+    except OSError: pass
+def _ldrun(args, timeout):
+    return run([os.path.join(LD, "ldconsole.exe")] + [str(x) for x in args], timeout)
+def _ldlist():
+    r = _ldrun(["list2"], 60); out = {}
+    for ln in (r.stdout or "").splitlines():
+        q = ln.strip().split(",")
+        if len(q) >= 5 and q[0].isdigit() and int(q[0]) < 99999:      # 99999 = trình quản lý nhiều máy, không phải máy
+            out[int(q[0])] = {"name": q[1].strip(), "running": q[4].strip() == "1", "pid": q[5] if len(q) > 5 else "-1"}
+    return out
+def _ok(out=""): return subprocess.CompletedProcess([], 0, out, "")
+def _ld(a, timeout):
+    """Dịch lệnh memuc → ldconsole (LDPlayer 9). Trả kết quả GIỐNG memuc để phần còn lại của tool dùng y nguyên."""
+    a = [str(x) for x in a]; c = a[0]
+    def ix(): return a[a.index("-i") + 1] if "-i" in a else "0"
+    if c == "listvms":
+        L = _ldlist(); run_only = "--running" in a
+        return _ok("\n".join(f"{i},{x['name']},0,{1 if x['running'] else 0},{x['pid']}" for i, x in sorted(L.items()) if x["running"] or not run_only))
+    if c == "create":
+        before = set(_ldlist()); tmp = f"new_{int(time.time())}"
+        r = _ldrun(["add", "--name", tmp], timeout)
+        new = sorted(set(_ldlist()) - before)
+        if not new: return subprocess.CompletedProcess([], 1, r.stdout, (r.stderr or "") + " LDPlayer không tạo được máy")
+        ld_cfg(new[-1]); return _ok(f"index: {new[-1]}")
+    if c == "rename": return _ldrun(["rename", "--index", ix(), "--title", a[-1]], timeout)
+    if c == "start":
+        if not (_ldlist().get(int(ix())) or {}).get("running"): ld_cfg(ix())
+        r = _ldrun(["launch", "--index", ix()], timeout); time.sleep(3)
+        if not (_ldlist().get(int(ix())) or {}).get("running"): time.sleep(10)
+        if not (_ldlist().get(int(ix())) or {}).get("running"): return subprocess.CompletedProcess([], 1, r.stdout, "start vm failed")
+        return _ok("start ok")
+    if c == "stop":
+        r = _ldrun(["quit", "--index", ix()], timeout)
+        for _ in range(20):
+            if not (_ldlist().get(int(ix())) or {}).get("running"): break
+            time.sleep(2)
+        return _ok("stop ok")
+    if c == "stopall": return _ldrun(["quitall"], timeout)
+    if c == "remove":
+        r = _ldrun(["remove", "--index", ix()], timeout)
+        return _ok("remove ok") if int(ix()) not in _ldlist() else subprocess.CompletedProcess([], 1, r.stdout, "remove failed")
+    if c == "setconfigex":
+        k, v = a[-2], a[-1]
+        if k == "memory": return _ldrun(["modify", "--index", ix(), "--memory", v], timeout)
+        if k == "cpus": return _ldrun(["modify", "--index", ix(), "--cpu", v], timeout)
+        if k == "enable_su": return _ldrun(["modify", "--index", ix(), "--root", "1"], timeout)
+        if k == "fps": return _ldrun(["globalsetting", "--fps", v, "--audio", "0"], timeout)
+        return _ok()                                                     # chế độ vẽ, gmem… LDPlayer không có → bỏ qua
+    if c == "getconfigex":
+        k = a[-1]
+        if k == "cpus":
+            try: return _ok("Value: " + str(json.load(open(_ld_cfgfile(ix()), encoding="utf-8-sig")).get("advancedSettings.cpuCount", "?")))
+            except Exception: return _ok("Value: ?")
+        return _ok("Value: 1")
+    return _ok()
 def memuc(*a, timeout=300):
     """memuc chỉ xử lý 1 lệnh một lúc (chạy chồng → "read failed: 233") → xếp hàng bằng khoá + thử lại."""
+    if EMU == "ld":
+        lk = _Lock("memuc", wait=min(max(120, timeout), 260))
+        try: lk.__enter__()
+        except RuntimeError: _unstick_memuc(); lk = _Lock("memuc", wait=60); lk.__enter__()
+        try: return _ld(a, timeout)
+        finally: lk.__exit__()
     r = None
     for i in range(4):
         lk = _Lock("memuc", wait=min(max(120, timeout), 260))
@@ -99,7 +176,7 @@ def now(): return datetime.datetime.now().astimezone()
 def parse_dt(s):
     d = datetime.datetime.fromisoformat(str(s).replace("Z", "+00:00")); return d if d.tzinfo else d.astimezone()
 def fmt(dt): return dt.strftime("%d/%m/%Y %H:%M")
-def port_of(idx): return 21503 + 10 * int(idx)
+def port_of(idx): return (5555 + 2 * int(idx)) if EMU == "ld" else (21503 + 10 * int(idx))   # LDPlayer: máy N ⇄ 127.0.0.1:5555+2N
 
 def _pid_alive(pid):
     try:
@@ -316,10 +393,21 @@ def clamp_fps(v):
     except Exception: v = 30
     return min(max(v, 10), 120)
 
-MAX_RAM = float(CONF.get("MEMU_MAX_RAM", "16") or 16)     # MEmu KHÔNG khởi động được máy > 16GB (báo "The computer memory is low")
-MAX_CPU = int(float(CONF.get("MEMU_MAX_CPU", "8") or 8))       # MEmu: máy > 8 nhân không khởi động được
+MAX_RAM = float(CONF.get("MEMU_MAX_RAM", "8" if EMU == "ld" else "16") or 16)     # MEmu tối đa 16GB/máy · LDPlayer 9 tối đa 8GB
+MAX_CPU = int(float(CONF.get("MEMU_MAX_CPU", "8") or 8))                           # MEmu / LDPlayer 9: tối đa 8 nhân
+LD_MEM = (256, 512, 768, 1024, 1536, 2048, 3072, 4096, 6144, 8192, 12288, 16384)
 def configure(idx, ram, cpu, res, dpi):
     w, h = res.lower().split("x")
+    if EMU == "ld":
+        if float(ram) > MAX_RAM: print(f"   (gói {float(ram):g}GB → LDPlayer chạy tối đa {MAX_RAM:g}GB/máy, đặt {MAX_RAM:g}GB)", flush=True)
+        mb = int(min(float(ram), MAX_RAM) * 1024); mb = max([m for m in LD_MEM if m <= mb] or [1024])
+        c = max(1, int(round(min(float(cpu), MAX_CPU))))
+        d = int(dpi or auto_dpi(res))
+        _ldrun(["modify", "--index", idx, "--resolution", f"{w},{h},{d}", "--cpu", min(c, 4), "--memory", min(mb, 8192), "--root", "1"], 60)
+        ld_cfg(idx, **{"advancedSettings.cpuCount": c, "advancedSettings.memorySize": mb,
+                       "advancedSettings.resolution": {"width": int(w), "height": int(h)}, "advancedSettings.resolutionDpi": d})
+        _ldrun(["globalsetting", "--audio", "0", "--fps", 30], 60)
+        return
     if float(ram) > MAX_RAM: print(f"   (gói {float(ram):g}GB → MEmu chỉ chạy tối đa {MAX_RAM:g}GB/máy, đặt {MAX_RAM:g}GB)", flush=True)
     ram = min(float(ram), MAX_RAM); cpu = min(float(cpu), MAX_CPU)
     for k, v in (("memory", int(float(ram) * 1024)), ("cpus", max(1, int(round(float(cpu))))), ("is_customed_resolution", 1),
@@ -473,10 +561,11 @@ def cmd_stop(a):
 def _start_failed(r): return "fail" in ((r.stdout or "") + (r.stderr or "")).lower() or r.returncode not in (0, None)
 def memu_unstick():
     """MEmu bị kẹt (mọi máy 'start vm failed') → tắt hẳn tiến trình MEmu chạy ngầm. Chỉ làm khi KHÔNG có máy nào đang chạy."""
-    r = run([os.path.join(MEMU, "memuc.exe"), "listvms", "--running"], 30)
+    r = memuc("listvms", "--running", timeout=30) if EMU == "ld" else run([os.path.join(MEMU, "memuc.exe"), "listvms", "--running"], 30)
     if r.returncode not in (0, None) or any(ln.strip() and ln[0].isdigit() for ln in (r.stdout or "").splitlines()):
         return False
-    for im in ("MEmuConsole.exe", "MEmuHeadless.exe", "MEmu.exe", "MemuService.exe", "MEmuSVC.exe"):
+    for im in (("dnplayer.exe", "Ld9BoxHeadless.exe", "LdBoxHeadless.exe", "Ld9BoxSVC.exe", "LdBoxSVC.exe", "ldconsole.exe") if EMU == "ld" else
+               ("MEmuConsole.exe", "MEmuHeadless.exe", "MEmu.exe", "MemuService.exe", "MEmuSVC.exe")):
         run(["taskkill", "/F", "/T", "/IM", im], 30)
     time.sleep(5); print("   (MEmu bị kẹt → đã tự khởi động lại phần chạy ngầm của MEmu)", flush=True); return True
 def memu_start(idx):
@@ -574,6 +663,13 @@ def cmd_perms(a):
     for p in load()["phones"]:
         if is_running(p["name"], p, v): grant_perms(p["name"])
 
+def cmd_vmlist(a):
+    """In mọi máy trong giả lập (MEmu hoặc LDPlayer): số,tên,đang chạy(1/0),số nhân — cho kiemtra.py / donweb.py."""
+    for i, x in sorted(vms().items()):
+        o = memuc("getconfigex", "-i", i, "cpus", timeout=30).stdout or ""
+        m = re.search(r"Value:\s*(\S+)", o)
+        print(f"{i},{x['name']},{1 if x['running'] else 0},{m.group(1) if m else '?'}")
+
 def cmd_tuneall(a):
     """Tối ưu lại MỌI máy đang chạy (máy nhẹ, tắt hiệu ứng…) + in kết quả từng máy."""
     v = vms()
@@ -669,6 +765,7 @@ def _cleanup(v=None, quiet=False, all_=False):
     for i in sorted(v, reverse=True):          # xoá từ số lớn xuống → số máy còn lại ít bị đổi
         nm = v[i]["name"]
         if nm == tpl or (nm in mine and not all_) or (nm.startswith("spare_") and not all_): continue
+        if EMU == "ld" and i == 0: continue                  # LDPlayer: giữ máy gốc số 0 (LDPlayer cần)
         if quiet and not nm.startswith("cp_"): continue     # tự động: chỉ dọn máy do BlueRoblox tạo (cp_…)
         print(f"XOA_THUA {nm} (MEmu #{i})", flush=True)
         def _at(n):                                          # số máy HIỆN TẠI của máy tên n (MEmu đổi số khi xoá máy khác) — KHÔNG BAO GIỜ đụng máy khác tên
@@ -777,7 +874,7 @@ def cmd_pool(a):
                 memuc("remove", "-i", ix, timeout=180)
             if idx is None:
                 for ix in reversed(new):
-                    if re.match(r"^MEmu\d*$", v2[ix]["name"]): _drop(ix)
+                    if re.match(r"^(MEmu\d*|new_\d+)$", v2[ix]["name"]): _drop(ix)
                 print("LỖI dựng máy sẵn:", ((r.stdout or "") + (r.stderr or "")).strip()[-200:]); return
             for _t in range(4):
                 memuc("rename", "-i", idx, nm, timeout=60)
@@ -879,6 +976,7 @@ def main():
     cl = s.add_parser("cleanup"); cl.add_argument("--all", action="store_true"); cl.add_argument("--yes", action="store_true"); cl.set_defaults(f=cmd_cleanup)
     s.add_parser("pool").set_defaults(f=cmd_pool)
     s.add_parser("tuneall").set_defaults(f=cmd_tuneall)
+    s.add_parser("vmlist").set_defaults(f=cmd_vmlist)
     ba = s.add_parser("bootall"); ba.add_argument("--quiet", action="store_true"); ba.set_defaults(f=cmd_bootall)
     for nm, fn in (("connect-all", cmd_connect_all), ("reap", cmd_reap), ("perms", cmd_perms), ("capacity", cmd_capacity), ("list", cmd_list),
                    ("memfix", cmd_noop), ("boost", cmd_noop), ("gpuinfo", cmd_noop)):

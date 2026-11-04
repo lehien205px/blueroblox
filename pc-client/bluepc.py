@@ -9,7 +9,7 @@
 #  Mỗi cửa sổ máy là 1 tiến trình riêng (mở nhiều máy cùng lúc không giật nhau).
 #  Không chứa khoá bí mật nào: chỉ khoá công khai Supabase (giống web/app Android) + phiên đăng nhập của chính khách.
 # =====================================================================================================
-import datetime, json, os, queue, re, subprocess, sys, threading, time, traceback, urllib.error, urllib.parse, urllib.request, webbrowser
+import datetime, hashlib, json, os, queue, re, secrets, subprocess, sys, threading, time, traceback, urllib.error, urllib.parse, urllib.request, webbrowser
 
 APP_VER = "1.0.0"
 SB = "https://nprftgodswlpzomcttal.supabase.co"
@@ -176,6 +176,107 @@ class Auth:
         except Exception: return {}
 
 
+class CpClient:
+    """CÔNG CỤ MÁY (cpapi trên máy chủ đang giữ máy: cài APK, clone tab, khởi động lại…).
+       Đi THẲNG tới máy chủ qua cổng phát hình (TLS, ghim đúng chứng chỉ như cửa sổ máy) — không cần tên miền / Cloudflare;
+       không nối được mới đi qua tên miền của máy chủ (stream.api)."""
+    def __init__(self, auth, pid):
+        self.auth, self.pid = auth, str(pid); self.ep = None; self.good = None
+
+    def endpoint(self):
+        if self.ep is None: self.ep = self.auth.rpc("cloudphone_endpoint", {"p_id": self.pid}) or {}
+        return self.ep
+
+    def _routes(self):
+        st = self.endpoint().get("stream") or {}; cert = str(st.get("cert") or "").lower().replace(":", "")
+        rs = []
+        if cert:
+            for d in sorted(st.get("direct") or [], key=lambda d: 0 if d.get("lan") else 1):
+                if d.get("host") and d.get("port"): rs.append(("d", str(d["host"]), int(d["port"]), cert, 0.8 if d.get("lan") else 4.0))
+        api = str(st.get("api") or PHONE_API).rstrip("/")
+        rs.append(("w", api if api.startswith("https://") else PHONE_API, 443, "", 12.0))
+        if self.good in rs: rs.remove(self.good); rs.insert(0, self.good)
+        return rs
+
+    @staticmethod
+    def _open(r):
+        import http.client, ssl
+        kind, host, port, cert, cto = r
+        if kind == "w":
+            u = urllib.parse.urlparse(host)
+            c = http.client.HTTPSConnection(u.hostname, u.port or 443, timeout=cto, context=ssl.create_default_context()); c.connect()
+            return c, (u.path.rstrip("/")[:-6] if u.path.rstrip("/").endswith("/cpapi") else u.path.rstrip("/"))
+        ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT); ctx.check_hostname = False; ctx.verify_mode = ssl.CERT_NONE
+        c = http.client.HTTPSConnection(host, port, timeout=cto, context=ctx); c.connect()
+        if hashlib.sha256(c.sock.getpeercert(binary_form=True) or b"").hexdigest() != cert:      # không đúng máy chủ → không gửi gì
+            c.close(); raise ssl.SSLError("sai chứng chỉ máy chủ")
+        return c, ""
+
+    def request(self, method, path, body=None, ctype="application/json", timeout=120):
+        """path: 'reboot', 'clone', 'apps', 'upload?…' (theo máy này) hoặc '/job?id=…'. Trả (mã HTTP, bytes)."""
+        sub = path.lstrip("/") if path.startswith("/") else f"{self.pid}/{path}"
+        data = json.dumps(body).encode() if isinstance(body, (dict, list)) else body
+        hdr = {"Authorization": "Bearer " + self.auth.token(), "Accept": "application/json", "User-Agent": f"BlueRobloxPC/{APP_VER}", "Connection": "close"}
+        if data is not None: hdr["Content-Type"] = ctype
+        last = None
+        for r in self._routes():
+            try: c, prefix = self._open(r)
+            except Exception as e:                       # chưa nối được (chưa gửi gì) → thử đường sau
+                last = e; continue
+            try:
+                c.sock.settimeout(timeout)
+                c.request(method, f"{prefix}/cpapi/{sub}", body=data, headers=hdr); res = c.getresponse(); raw = res.read()
+            except OSError as e:
+                raise ApiError(0, "Mất kết nối tới máy chủ, thử lại.") from e
+            finally:
+                c.close()
+            self.good = r
+            return res.status, raw
+        log("cpapi: không nối được", repr(last))
+        raise ApiError(0, "Không nối được tới máy chủ của máy này — kiểm tra mạng rồi thử lại.")
+
+    def json(self, method, path, body=None, ctype="application/json", timeout=120):
+        code, raw = self.request(method, path, body, ctype, timeout)
+        try: j = json.loads(raw.decode("utf-8") or "{}")
+        except Exception: j = {}
+        if not isinstance(j, dict): j = {"data": j}
+        if code >= 300 and not (code == 409 and "size" in j):
+            if code == 401: raise ApiError(401, "Phiên đăng nhập hết hạn, hãy đăng nhập lại.")
+            raise ApiError(code, j.get("error") or err_text(code, raw))
+        return j
+
+    def wait_job(self, jid, on_msg=None, limit=1800):
+        t0 = time.time()
+        while time.time() - t0 < limit:
+            try: j = self.json("GET", f"/job?id={jid}", timeout=30)
+            except ApiError as e:
+                if e.code in (0, 502, 503, 504): time.sleep(3); continue
+                raise
+            if on_msg and j.get("msg") and j.get("state") == "running": on_msg(j["msg"])
+            if j.get("state") == "done": return j.get("msg") or "Xong."
+            if j.get("state") == "error": raise ApiError(0, j.get("msg") or "Có lỗi.")
+            time.sleep(2)
+        raise ApiError(0, "Việc chạy quá lâu — kiểm tra lại máy sau ít phút.")
+
+    def upload(self, fpath, on_prog=None):
+        """Tải file lên máy chủ từng phần 8MB (đứt mạng thì nối tiếp đúng chỗ) → trả mã việc nền (cài / chép vào máy)."""
+        name = os.path.basename(fpath); total = os.path.getsize(fpath); upid = secrets.token_hex(8); off = 0; CH = 8 * 1024 * 1024
+        if total <= 0: raise ApiError(0, "File rỗng.")
+        with open(fpath, "rb") as f:
+            while True:
+                f.seek(off); chunk = f.read(min(CH, total - off))
+                q = urllib.parse.urlencode({"id": upid, "name": name, "total": total, "off": off})
+                for tries in range(4):
+                    try: j = self.json("POST", f"upload?{q}", chunk, "application/octet-stream", timeout=300); break
+                    except ApiError as e:
+                        if e.code not in (0, 502, 503, 504) or tries == 3: raise
+                        time.sleep(2 + tries * 2)
+                off = int(j.get("size", off + len(chunk)))
+                if on_prog: on_prog(min(off, total), total)
+                if j.get("job"): return j["job"]
+                if off >= total: raise ApiError(0, "Máy chủ chưa nhận đủ file — thử lại.")
+
+
 # ================================================================ Windows: đăng ký link blueroblox:// + bộ nhớ copy
 def register_protocol():
     if os.name != "nt": return
@@ -232,11 +333,16 @@ def clip_put(text):
     except Exception: pass
 
 
-def spawn_viewer(pid):
-    args = [sys.executable, "--view", pid] if FROZEN else [sys.executable, os.path.abspath(__file__), "--view", pid]
+def spawn_viewer(pid, mode="--view"):
+    args = [sys.executable, mode, pid] if FROZEN else [sys.executable, os.path.abspath(__file__), mode, pid]
     kw = {}
     if os.name == "nt": kw["creationflags"] = 0x00000008 | 0x00000200       # DETACHED_PROCESS | NEW_PROCESS_GROUP
     subprocess.Popen(args, close_fds=True, **kw)
+
+
+def spawn_tools(pid):
+    """Cửa sổ Công cụ (cài APK, clone tab) của 1 máy — tiến trình riêng, mở từ thanh bên cửa sổ máy."""
+    spawn_viewer(pid, "--tools")
 
 
 # ================================================================ CỬA SỔ MÁY (pygame + PyAV)
@@ -247,7 +353,7 @@ AK = {  # phím máy tính → mã phím Android
 META_CTRL, META_SHIFT, META_ALT = 0x1000, 0x1, 0x2
 QUALITIES = [("auto", "Tự động"), ("hd", "Siêu nét"), ("bal", "Cân bằng"), ("eco", "Tiết kiệm")]
 TOOLS = [("back", "Quay lại"), ("home", "Màn chính"), ("recents", "Đa nhiệm"), ("volup", "Âm +"), ("voldown", "Âm −"),
-         ("rotate", "Xoay"), ("paste", "Dán chữ"), ("quality", "Chất lượng"), ("full", "Toàn màn"), ("info", "Thông số")]
+         ("rotate", "Xoay"), ("paste", "Dán chữ"), ("tools", "Công cụ"), ("quality", "Chất lượng"), ("full", "Toàn màn"), ("info", "Thông số")]
 BAR = 72
 C_BG, C_BAR, C_ICON, C_HOT, C_TXT, C_DIM, C_ACC = (8, 12, 22), (17, 24, 39), (210, 220, 235), (47, 123, 255), (235, 240, 248), (130, 142, 160), (47, 123, 255)
 
@@ -446,6 +552,10 @@ class Viewer:
                 pygame.draw.arc(s, c, (cx - r, cy - r, 2 * r, 2 * r), 0.6, 5.6, 2); pygame.draw.polygon(s, c, [(cx + r - 1, cy - 7), (cx + r + 4, cy - 1), (cx + r - 6, cy - 1)])
             elif name == "paste":
                 pygame.draw.rect(s, c, (cx - r + 2, cy - r + 2, 2 * r - 4, 2 * r), 2, border_radius=3); pygame.draw.rect(s, c, (cx - 4, cy - r - 1, 8, 5), 0, border_radius=2)
+            elif name == "tools":                                  # 4 ô vuông = công cụ (cài APK, clone tab…)
+                q = max(3, r - 3)
+                for dx, dy in ((-1, -1), (1, -1), (-1, 1), (1, 1)):
+                    pygame.draw.rect(s, c, (cx + (1 if dx > 0 else -q - 1), cy + (1 if dy > 0 else -q - 1), q, q), 2, border_radius=2)
             elif name == "quality":
                 t = self.font_s.render({"auto": "AUTO", "hd": "HD", "bal": "CB", "eco": "TK"}[self.q], True, c); s.blit(t, t.get_rect(center=(cx, cy)))
             elif name == "full":
@@ -504,6 +614,7 @@ class Viewer:
             i = [q for q, _ in QUALITIES].index(self.q); self.q = QUALITIES[(i + 1) % len(QUALITIES)][0]; prefs({"q": self.q})
             if c: c.quality(self.q)
         elif name == "full": self._toggle_full(pygame)
+        elif name == "tools": spawn_tools(self.pid)
         elif name == "info": self.show_info = not self.show_info; prefs({"info": self.show_info})
 
     def _toggle_full(self, pygame):
@@ -771,7 +882,8 @@ class Dlg:
     """Cửa sổ con (mua / gia hạn / nạp): phần trên cuộn được, phần dưới (tổng tiền + nút) đứng yên."""
     def __init__(self, app, title, w=580, h=700):
         tk = app.tk; self.app = app; self.alive = True
-        self.win = d = tk.Toplevel(app.root); d.title(title); d.configure(bg=BG); d.transient(app.root)
+        self.win = d = tk.Toplevel(app.root); d.title(title); d.configure(bg=BG)
+        if not getattr(app, "tools_only", False): d.transient(app.root)
         app.root.update_idletasks()
         sw, sh = d.winfo_screenwidth(), d.winfo_screenheight(); h = min(h, sh - 80)
         x = app.root.winfo_rootx() + (app.root.winfo_width() - w) // 2; y = app.root.winfo_rooty() + 20
@@ -1264,12 +1376,179 @@ class UpgradeDlg(Dlg):
         self.bg(lambda: self.app.auth.rpc("cloudphone_upgrade", {"p_id": self.p["id"], "p_ram": nr, "p_cpu": nc}), done, fail)
 
 
+APP_NAMES = {"com.roblox.client": "Roblox", "com.facebook.katana": "Facebook", "com.zing.zalo": "Zalo", "org.telegram.messenger": "Telegram",
+             "com.zhiliaoapp.musically": "TikTok", "com.ss.android.ugc.trill": "TikTok", "com.android.chrome": "Chrome"}
+
+
+def app_label(pkg): return APP_NAMES.get(pkg, pkg)
+
+
+class ToolsDlg(Dlg):
+    """CÔNG CỤ của 1 máy: cài file APK / chép file vào máy, cài từ link, CLONE TAB (chạy thêm bản 2, 3… của 1 app — VD Roblox
+       chính thức — mỗi bản 1 hồ sơ riêng để đăng nhập acc khác). Gọi cpapi qua đường thẳng tới máy chủ (CpClient)."""
+    def __init__(self, app, phone):
+        super().__init__(app, "Công cụ — " + (phone.get("name") or "máy"), 620, 720)
+        self.p = phone; self.cp = CpClient(app.auth, phone["id"]); self.busy = False
+        self.pkg, self.n, self.apps, self.counts, self.max = None, 1, [], {}, 4
+        tk = app.tk
+        # ---- 1. cài app / chép file vào máy ----
+        f = self.section("Cài app / chép file vào máy")
+        self.label(f, "File .apk / .apks / .xapk / .apkm → cài vào máy. File khác (ảnh, video, tài liệu…) → chép vào thư mục Download của máy.",
+                   self.app.f_s, DIM, wraplength=560).pack(fill="x")
+        r = tk.Frame(f, bg=BG); r.pack(fill="x", pady=(8, 0))
+        self.pick_btn = self.app.btn(r, "Chọn file trên máy tính…", self.pick); self.pick_btn.pack(side="left")
+        lr = tk.Frame(f, bg=BG); lr.pack(fill="x", pady=(8, 0))
+        self.link = tk.Entry(lr, font=("Segoe UI", 10), bg=CARD, fg=TXT, insertbackground=TXT, relief="flat")
+        self.link.pack(side="left", fill="x", expand=True, ipady=6)
+        self.link_btn = self.app.btn(lr, "Cài từ link", self.from_link, "soft"); self.link_btn.pack(side="left", padx=(6, 0))
+        self.label(f, "Link tải trực tiếp file (thường kết thúc bằng .apk), không phải link trang web.", self.app.f_s, DIM).pack(fill="x", pady=(2, 0))
+        self.up_msg = self.label(f, "", ("Segoe UI", 10, "bold"), TXT, wraplength=560); self.up_msg.pack(fill="x", pady=(8, 0))
+        # ---- 2. clone tab ----
+        f = self.section("Clone tab — chạy thêm bản 2, 3… của 1 app để đăng nhập acc khác")
+        self.label(f, "Mỗi bản clone là 1 hồ sơ riêng của Android, dùng đúng app gốc đã cài trong máy. Bản clone hiện thành biểu tượng "
+                      "\"Clone 1, 2…\" (hoặc tab Công việc) trên màn hình chính, hoặc bấm Mở bản ở đây. Mỗi bản cần thêm RAM / CPU.",
+                   self.app.f_s, DIM, wraplength=560).pack(fill="x")
+        self.clone_box = tk.Frame(f, bg=BG); self.clone_box.pack(fill="x", pady=(8, 0))
+        self.cl_msg = self.label(f, "", ("Segoe UI", 10, "bold"), TXT, wraplength=560); self.cl_msg.pack(fill="x", pady=(8, 16))
+        bb = tk.Frame(self.foot, bg=CARD); bb.pack(fill="x", padx=16, pady=10)
+        self.app.btn(bb, "Làm mới", self.load, "soft").pack(side="left")
+        self.app.btn(bb, "Đóng", self.close, "soft").pack(side="right")
+        self.load()
+
+    def close(self):
+        super().close()
+        if getattr(self.app, "tools_only", False):
+            try: self.app.root.destroy()
+            except Exception: pass
+
+    def say(self, lbl, text, col=TXT):
+        if self.alive and lbl.winfo_exists(): lbl.config(text=text, fg=col)
+
+    # ---------- cài app / chép file ----------
+    def pick(self):
+        from tkinter import filedialog
+        if self.busy: return
+        fp = filedialog.askopenfilename(parent=self.win, title="Chọn file để cài / chép vào máy",
+                                        filetypes=[("App Android", "*.apk *.apks *.xapk *.apkm"), ("Tất cả file", "*.*")])
+        if not fp: return
+        mb_ = os.path.getsize(fp) / 1048576
+        if mb_ > 4096: self.say(self.up_msg, "File lớn hơn 4GB — không gửi được.", BAD); return
+        self._run_upload(lambda prog: self.cp.upload(fp, prog), os.path.basename(fp))
+
+    def from_link(self):
+        u = self.link.get().strip()
+        if self.busy or not u: return
+        if not re.match(r"^https?://\S+$", u): self.say(self.up_msg, "Link phải bắt đầu bằng http:// hoặc https://", BAD); return
+        self._run_upload(lambda prog: self.cp.json("POST", "fromurl", {"url": u}).get("job"), u[-60:])
+
+    def _run_upload(self, start, title):
+        self.busy = True
+        for b in (self.pick_btn, self.link_btn): b.config(state="disabled")
+        self.say(self.up_msg, f"Đang gửi {title}…", WARN)
+        t0 = [time.time()]
+        def prog(done, total):
+            sp = done / max(0.5, time.time() - t0[0]) / 1048576
+            self.app.ui(lambda: self.say(self.up_msg, f"Đang tải lên {done * 100 // total}%  ({done / 1048576:.1f} / {total / 1048576:.1f} MB · {sp:.1f} MB/s)…", WARN))
+        def job():
+            try:
+                jid = start(prog)
+                if not jid: raise ApiError(0, "Máy chủ chưa nhận việc — thử lại.")
+                self.app.ui(lambda: self.say(self.up_msg, "Đang cài / chép vào máy…", WARN))
+                msg = self.cp.wait_job(jid, lambda m: self.app.ui(lambda: self.say(self.up_msg, m, WARN)))
+                self.app.ui(lambda: (self.say(self.up_msg, "✓ " + msg, OK), self.load()))
+            except Exception as e:
+                m = str(e) or "Có lỗi."; log("tools upload:", traceback.format_exc())
+                self.app.ui(lambda: self.say(self.up_msg, "✗ " + m, BAD))
+            finally:
+                def done():
+                    self.busy = False
+                    for b in (self.pick_btn, self.link_btn):
+                        if b.winfo_exists(): b.config(state="normal")
+                self.app.ui(done)
+        threading.Thread(target=job, daemon=True).start()
+
+    # ---------- clone tab ----------
+    def load(self):
+        for w in self.clone_box.winfo_children(): w.destroy()
+        self.label(self.clone_box, "Đang đọc danh sách app trong máy…", self.app.f_t, DIM).pack(fill="x")
+        def got(r):
+            a, c = r
+            self.apps = list(a.get("apps") or []); self.counts = dict(c.get("counts") or {}); self.max = int(num(c.get("max")) or 4)
+            if self.pkg not in self.apps: self.pkg = "com.roblox.client" if "com.roblox.client" in self.apps else (self.apps[0] if self.apps else None)
+            self.n = max(1, min(self.max, self.counts.get(self.pkg, 0) + 1)) if self.pkg else 1
+            self.draw()
+        def fail(m):
+            for w in self.clone_box.winfo_children(): w.destroy()
+            self.say(self.cl_msg, "✗ " + m, BAD)
+        self.bg(lambda: (self.cp.json("GET", "apps"), self.cp.json("GET", "clone")), got, fail)
+
+    def draw(self):
+        tk = self.app.tk
+        for w in self.clone_box.winfo_children(): w.destroy()
+        if not self.apps:
+            self.label(self.clone_box, "Máy chưa có app nào. Cài app trước (VD Roblox từ CH Play trong máy, hoặc file APK ở trên) rồi bấm Làm mới.",
+                       self.app.f_t, DIM, wraplength=560).pack(fill="x"); return
+        self.label(self.clone_box, "App cần clone", ("Segoe UI", 10, "bold"), DIM).pack(fill="x")
+        items = [(k, app_label(k) + (f"  ×{self.counts[k]}" if self.counts.get(k) else "")) for k in self.apps]
+        self.c_app = Chips(self.app, self.clone_box, items, lambda: self.pkg, self._pick_app, self.draw, wrap=3); self.c_app.frame.pack(fill="x")
+        self.label(self.clone_box, f"Số bản clone muốn có (tổng, tối đa {self.max})", ("Segoe UI", 10, "bold"), DIM).pack(fill="x", pady=(8, 0))
+        nr = tk.Frame(self.clone_box, bg=BG); nr.pack(fill="x")
+        self.c_n = Chips(self.app, nr, [(i, f"{i} bản") for i in range(1, self.max + 1)], lambda: self.n, lambda v: setattr(self, "n", v), self._paint_n)
+        self.c_n.frame.pack(side="left")
+        self.go = self.app.btn(nr, "", self.clone); self.go.pack(side="left", padx=(10, 0)); self._paint_n()
+        k = self.counts.get(self.pkg, 0)
+        if k:
+            row = tk.Frame(self.clone_box, bg=CARD, highlightbackground=LINE, highlightthickness=1); row.pack(fill="x", pady=(10, 0))
+            self.label(row, f"{app_label(self.pkg)} đang có {k} bản clone", ("Segoe UI", 10, "bold"), TXT).pack(fill="x", padx=10, pady=(8, 2))
+            br = tk.Frame(row, bg=CARD); br.pack(fill="x", padx=10, pady=(0, 8))
+            for i in range(1, k + 1):
+                self.app.btn(br, f"▶ Mở bản {i}", lambda i=i: self.open_clone(i), padx=10, pady=4).pack(side="left", padx=(0, 6))
+            self.app.btn(br, "Bỏ clone", self.remove, "danger", padx=10, pady=4).pack(side="right")
+
+    def _pick_app(self, v):
+        self.pkg = v; self.n = max(1, min(self.max, self.counts.get(v, 0) + 1))
+
+    def _paint_n(self):
+        if hasattr(self, "go") and self.go.winfo_exists():
+            k = self.counts.get(self.pkg, 0)
+            self.go.config(text=f"Tạo {self.n} bản clone" if self.n > k else f"Đã có {k} bản", state="normal" if self.n > k else "disabled",
+                           bg=ACC if self.n > k else LINE)
+
+    def clone(self):
+        if self.busy or not self.pkg: return
+        pkg, n = self.pkg, self.n; self.busy = True; self.go.config(state="disabled")
+        self.say(self.cl_msg, f"Đang tạo {n} bản clone {app_label(pkg)} (mỗi bản ~20 giây)…", WARN)
+        def job():
+            try:
+                j = self.cp.json("POST", "clone", {"pkg": pkg, "n": n})
+                msg = self.cp.wait_job(j.get("job"), lambda m: self.app.ui(lambda: self.say(self.cl_msg, m, WARN))) if j.get("job") else (j.get("msg") or "Xong.")
+                self.app.ui(lambda: (self.say(self.cl_msg, msg, OK), self.load()))
+            except Exception as e:
+                m = str(e) or "Có lỗi."; self.app.ui(lambda: self.say(self.cl_msg, "✗ " + m, BAD))
+            finally:
+                self.app.ui(lambda: setattr(self, "busy", False))
+        threading.Thread(target=job, daemon=True).start()
+
+    def open_clone(self, i):
+        pkg = self.pkg; self.say(self.cl_msg, f"Đang mở bản clone {i}…", WARN)
+        self.bg(lambda: self.cp.json("POST", "clone", {"pkg": pkg, "open": i}),
+                lambda j: self.say(self.cl_msg, "✓ " + (j.get("msg") or f"Đã mở bản clone {i}."), OK), lambda m: self.say(self.cl_msg, "✗ " + m, BAD))
+
+    def remove(self):
+        import tkinter.messagebox as mb
+        pkg = self.pkg
+        if not mb.askyesno("Bỏ clone", f"Bỏ tất cả bản clone của {app_label(pkg)}?\n\nAcc đăng nhập trong các bản clone sẽ bị xoá.", icon="warning", default="no", parent=self.win): return
+        self.say(self.cl_msg, "Đang bỏ các bản clone…", WARN)
+        self.bg(lambda: self.cp.json("POST", "clone", {"pkg": pkg, "remove": True}),
+                lambda j: (self.say(self.cl_msg, "✓ " + (j.get("msg") or "Đã bỏ các bản clone."), OK), self.load()), lambda m: self.say(self.cl_msg, "✗ " + m, BAD))
+
+
 ERRORS.update({"UPGRADE_PENDING": "Máy đang được nâng cấp, đợi khoảng 1 phút rồi thử lại.", "FREE_NO_UPGRADE": "Máy miễn phí không nâng cấp được — thuê máy trả phí để nâng.",
                "PHONE_NOT_ACTIVE": "Máy phải đang chạy mới làm được việc này.", "BAD_UPGRADE": "Cấu hình nâng cấp không hợp lệ."})
 
 
 class Launcher:
-    def __init__(self, open_id=None):
+    def __init__(self, open_id=None, tools_for=None):
         import tkinter as tk
         self.tk = tk; self.auth = Auth(); self.shop = Shop(self.auth); self.open_id = open_id; self.rows = []; self.busy = False
         self.scrollers = {}; self._fast = None; self._q = queue.Queue()
@@ -1282,8 +1561,22 @@ class Launcher:
         except Exception: pass
         self.f_h1 = ("Segoe UI", 18, "bold"); self.f_h2 = ("Segoe UI", 12, "bold"); self.f_t = ("Segoe UI", 10); self.f_s = ("Segoe UI", 9)
         self.body = tk.Frame(self.root, bg=BG); self.body.pack(fill="both", expand=True)
-        if self.auth.logged_in: self.show_list()
+        self.tools_only = bool(tools_for)
+        if tools_for:                                    # mở từ nút "Công cụ" của cửa sổ máy: chỉ hiện cửa sổ Công cụ
+            self.root.withdraw(); self._open_tools(tools_for)
+        elif self.auth.logged_in: self.show_list()
         else: self.show_login()
+
+    def _open_tools(self, pid):
+        import tkinter.messagebox as mb
+        def job():
+            try:
+                p = next((x for x in self.auth.phones() if str(x.get("id")) == pid), None)
+                if not p: raise ApiError(404, "Không tìm thấy máy này trong tài khoản.")
+                self.ui(lambda: ToolsDlg(self, p))
+            except Exception as e:
+                m = str(e); self.ui(lambda: (mb.showerror("BlueRoblox", m), self.root.destroy()))
+        threading.Thread(target=job, daemon=True).start()
 
     def clear(self):
         for w in self.body.winfo_children(): w.destroy()
@@ -1337,6 +1630,9 @@ class Launcher:
         """Menu "Khác" của 1 máy: nâng cấp RAM/CPU, huỷ máy."""
         m = self.tk.Menu(self.root, tearoff=0, bg=CARD, fg=TXT, activebackground=ACC, activeforeground=TXT, font=("Segoe UI", 10))
         can_up = p.get("status") == "active" and not p.get("locked") and not p.get("is_free") and p.get("pending_ram") is None
+        on = p.get("status") == "active" and (not p.get("locked") or (getattr(self, "prof", None) or {}).get("role") == "admin")
+        m.add_command(label="Công cụ: cài APK, Clone tab…", command=lambda: ToolsDlg(self, p), state="normal" if on else "disabled")
+        m.add_separator()
         m.add_command(label="Nâng cấp RAM / CPU", command=lambda: self.open_upgrade(p), state="normal" if can_up else "disabled")
         m.add_separator()
         m.add_command(label="Huỷ máy (xoá vĩnh viễn)", command=lambda: self.cancel(p))
@@ -1416,6 +1712,7 @@ class Launcher:
                     if e.code == 401: raise
                     prof = None
                 def show():
+                    if prof is not None: self.prof = prof
                     if prof is not None and hasattr(self, "bal") and self.bal.winfo_exists():
                         self.bal.config(text=vnd(prof.get("balance")) + (f"  · CTV −{int(num(prof.get('ctv_discount')))}%" if is_ctv(prof) else ""))
                     self.render(rows)
@@ -1461,7 +1758,8 @@ class Launcher:
         if p.get("pending_ram") is not None:
             tk.Label(c, text=f"⏳ Đang nâng cấp lên {p.get('pending_ram')}GB · {p.get('pending_cpu')} nhân…", font=self.f_s, fg=WARN, bg=CARD, anchor="w").pack(fill="x", padx=14)
         bar = tk.Frame(c, bg=CARD); bar.pack(fill="x", padx=14, pady=(10, 12))
-        st = p.get("status"); active = st == "active" and not p.get("locked")
+        st = p.get("status"); adm = (getattr(self, "prof", None) or {}).get("role") == "admin"
+        active = st == "active" and (not p.get("locked") or adm)                 # admin: toàn quyền (kể cả máy bị khoá, lúc bảo trì)
         b = self.btn(bar, "▶  Điều khiển", lambda pid=str(p["id"]): spawn_viewer(pid)); b.pack(side="left")
         if not active: b.config(state="disabled", bg=LINE)
         if active: self.btn(bar, "Khởi động lại", lambda q=p: self.reboot(q), "ghost").pack(side="left", padx=8)
@@ -1475,9 +1773,7 @@ class Launcher:
         if not mb.askyesno("Khởi động lại", f"Khởi động lại máy “{p.get('name')}”? Mất khoảng 1 phút."): return
         def job():
             try:
-                ep = self.auth.rpc("cloudphone_endpoint", {"p_id": p["id"]}) or {}
-                base = ((ep.get("stream") or {}).get("api") or PHONE_API).rstrip("/")
-                self.auth.cp("POST", base, f"{p['id']}/reboot")
+                CpClient(self.auth, p["id"]).json("POST", "reboot", {})
                 self.ui(lambda: mb.showinfo("BlueRoblox", "Đang khởi động lại máy — chờ khoảng 1 phút rồi mở lại."))
             except Exception as e:
                 m = str(e); self.ui(lambda m=m: mb.showerror("BlueRoblox", m))
@@ -1520,6 +1816,9 @@ def main():
         return selftest(args[1])
     if len(args) >= 2 and args[0] == "--view":
         return run_viewer(args[1])
+    if len(args) >= 2 and args[0] == "--tools":
+        if not UUID_RE.fullmatch(args[1]) or not Auth().logged_in: return
+        return Launcher(tools_for=args[1]).run()
     link = next((a for a in args if a.lower().startswith("blueroblox:")), "")
     m = UUID_RE.search(link)
     open_id = m.group(0) if m else None

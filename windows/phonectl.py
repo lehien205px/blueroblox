@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 # =====================================================================
-#  phonectl.py — BẢN WINDOWS (MEmu Play). Cùng câu lệnh với bản Ubuntu để cloudphoned.py / cpapi.py dùng y nguyên.
+#  phonectl.py — BẢN WINDOWS: LDPlayer 9 (Android 9) · MuMu (Android 12 / 7) · MEmu. Mỗi máy chủ chạy 1 loại (cloudphone.conf EMU=).
+#   Cùng câu lệnh với bản Ubuntu để cloudphoned.py / cpapi.py dùng y nguyên.
+#   python phonectl.py probe        ← in thông tin giả lập (gửi hỗ trợ khi cài máy chủ MuMu/MEmu mới)
 #   python phonectl.py create TÊN --ram 4 --cpu 4 --days 7 [--res 720x1280] [--nowait]
 #   python phonectl.py list | capacity | delete TÊN | stop TÊN | start TÊN | restart TÊN | renew TÊN --days N
 #   python phonectl.py resize TÊN --ram 6 --cpu 6 | waitboot TÊN | connect-all | reap | rootfix --all
@@ -35,8 +37,38 @@ MEMU = next((d for d in MEMU_DIRS if d and os.path.isfile(os.path.join(d, "memuc
 LD_DIRS = [CONF.get("LD_DIR", ""), r"C:\LDPlayer\LDPlayer9", r"D:\LDPlayer\LDPlayer9", r"C:\Program Files\LDPlayer\LDPlayer9",
            r"C:\leidian\LDPlayer9", r"D:\leidian\LDPlayer9"]
 LD = next((d for d in LD_DIRS if d and os.path.isfile(os.path.join(d, "ldconsole.exe"))), "")
-EMU = "ld" if LD and (CONF.get("EMU", "").lower() == "ld" or not MEMU) else "memu"
+# ---------- MuMu (NetEase, Android 12 / Android 7): MuMuManager.exe / mumu-cli.exe ----------
+MUMU_DIRS = [CONF.get("MUMU_DIR", ""), r"C:\Program Files\Netease\MuMuPlayer-12.0", r"D:\Program Files\Netease\MuMuPlayer-12.0",
+             r"C:\Program Files\Netease\MuMu Player 12", r"D:\Program Files\Netease\MuMu Player 12", r"C:\Program Files\Netease\MuMuPlayer",
+             r"D:\Program Files\Netease\MuMuPlayer", r"C:\Program Files\MuMuPlayerGlobal-12.0", r"D:\Program Files\MuMuPlayerGlobal-12.0",
+             r"C:\Program Files\Netease\MuMuPlayerGlobal-12.0"]
+def _find_mumu():
+    for d in MUMU_DIRS:
+        if not d: continue
+        for rel in (r"nx_main\mumu-cli.exe", r"shell\MuMuManager.exe", r"nx_main\MuMuManager.exe", "MuMuManager.exe", "mumu-cli.exe"):
+            f = os.path.join(d, rel)
+            if os.path.isfile(f): return d, f
+    return "", ""
+MUMU, MUMU_CLI = _find_mumu()
+_E = CONF.get("EMU", "").lower()
+if _E in ("ld", "mumu", "memu"): EMU = _E
+elif LD and not MEMU and not MUMU: EMU = "ld"
+elif MUMU and not MEMU and not LD: EMU = "mumu"
+else: EMU = "ld" if LD and not MEMU else ("memu" if MEMU else ("mumu" if MUMU else "ld"))
 if EMU == "ld": MEMU = LD                  # các chỗ kiểm tra "có giả lập chưa" dùng chung biến MEMU
+if EMU == "mumu": MEMU = MUMU
+EMU_NAME = {"ld": "LDPlayer 9", "mumu": "MuMu", "memu": "MEmu"}[EMU]
+# Các bản Android máy chủ này bán (đơn khách chọn bản nào thì tạo bản đó). LDPlayer 9 = Android 9.
+ANDROIDS = [x.strip() for x in (CONF.get("ANDROIDS") or {"ld": "9", "mumu": "12,7", "memu": "7"}[EMU]).split(",") if x.strip()]
+DEF_ANDROID = ANDROIDS[0] if ANDROIDS else "9"
+MEMU_CODES = {"5": "51", "7": "76", "9": "96"}          # memuc create <mã>: 76 = Android 7.1 64-bit · 96 = Android 9 64-bit
+def tpl_name(ver):
+    """Máy MẪU cho 1 bản Android (admin tạo tay 1 lần trong giả lập, đặt tên tpl_a12 / tpl_a7…) → máy khách được NHÂN BẢN từ máy mẫu."""
+    return CONF.get(f"TPL_A{ver}", f"tpl_a{ver}")
+def norm_android(v):
+    v = str(v or "").strip().split(".")[0]
+    if EMU == "ld": return "9"
+    return v if v in ANDROIDS else DEF_ANDROID
 NOWIN = 0x08000000
 
 def run(args, timeout=180, text=True):
@@ -139,8 +171,118 @@ def _ld(a, timeout):
             except Exception: return _ok("Value: ?")
         return _ok("Value: 1")
     return _ok()
+# ---------------- MuMu: dịch lệnh memuc → MuMuManager / mumu-cli ----------------
+def _mumurun(args, timeout): return run([MUMU_CLI] + [str(x) for x in args], timeout)
+def _mumu_json(txt):
+    txt = (txt or "").strip()
+    i = min([k for k in (txt.find("{"), txt.find("[")) if k >= 0] or [-1])
+    if i < 0: return None
+    try: return json.loads(txt[i:])
+    except Exception:
+        try: return json.loads(txt[i:txt.rfind("}") + 1])
+        except Exception: return None
+_MUMU_INFO = {"t": 0, "v": {}}
+def _mumu_info(fresh=True):
+    if not fresh and time.time() - _MUMU_INFO["t"] < 5: return _MUMU_INFO["v"]
+    j = _mumu_json(_mumurun(["info", "-v", "all"], 60).stdout) or {}
+    if isinstance(j, dict) and ("index" in j or "name" in j) and not any(isinstance(v, dict) for v in j.values()): j = {str(j.get("index", 0)): j}
+    out = {}
+    for k, v in (j.items() if isinstance(j, dict) else enumerate(j or [])):
+        if isinstance(v, dict):
+            ix = str(v.get("index", k))
+            if ix.isdigit(): out[int(ix)] = v
+    _MUMU_INFO.update(t=time.time(), v=out)
+    return out
+def _mumu_running(v): return bool(v.get("is_process_started") or v.get("is_android_started") or str(v.get("player_state", "")).startswith("start"))
+def _mumu_list(): return {i: {"name": str(v.get("name", "")), "running": _mumu_running(v), "pid": v.get("pid", -1)} for i, v in _mumu_info().items()}
+_MUMU_KEYS = {}
+def _mumu_set(idx, kv):
+    """Ghi cài đặt máy MuMu (máy phải đang TẮT). Tự dò tên khoá (MuMu đổi tên khoá theo bản)."""
+    if idx not in _MUMU_KEYS:
+        _MUMU_KEYS[idx] = _mumu_json(_mumurun(["setting", "-v", idx, "-a"], 60).stdout) or _mumu_json(_mumurun(["setting", "--vmindex", idx, "--all"], 60).stdout) or {}
+    allk = _MUMU_KEYS[idx] if isinstance(_MUMU_KEYS[idx], dict) else {}
+    def pick(*names):
+        for n in names:
+            if n in allk: return n
+        for n in names:
+            hit = [k for k in allk if k.startswith(n)]
+            if hit: return sorted(hit, key=len)[0]
+        return names[0]
+    want = []
+    for k, v in kv.items():
+        if k == "cpu": want += [(pick("performance_mode"), "custom"), (pick("performance_cpu.custom", "performance_cpu"), str(v))]
+        elif k == "mem": want += [(pick("performance_mode"), "custom"), (pick("performance_mem.custom", "performance_mem"), f"{float(v):.6f}")]
+        elif k == "res":
+            w, h, d = v
+            want += [(pick("resolution_mode"), "custom"), (pick("resolution_width.custom", "resolution_width"), str(w)),
+                     (pick("resolution_height.custom", "resolution_height"), str(h)), (pick("resolution_dpi.custom", "resolution_dpi"), str(d))]
+        elif k == "root": want.append((pick("root_permission"), "true"))
+        elif k == "fps": want.append((pick("max_frame_rate"), str(v)))
+        else: want.append((k, str(v)))
+    seen = set()
+    for k, v in want:
+        if k in seen or (allk and k not in allk and k not in ("performance_mode", "resolution_mode")): continue
+        seen.add(k)
+        r = _mumurun(["setting", "-v", idx, "-k", k, "-val", v], 60)
+        o = ((r.stdout or "") + (r.stderr or "")).lower()
+        if r.returncode not in (0, None) or "error" in o or "invalid" in o:
+            _mumurun(["setting", "--vmindex", idx, "--key", k, "--value", v], 60)
+def _mumu(a, timeout):
+    """Dịch lệnh memuc → MuMu. Trả kết quả GIỐNG memuc để phần còn lại của tool dùng y nguyên."""
+    a = [str(x) for x in a]; c = a[0]
+    def ix(): return a[a.index("-i") + 1] if "-i" in a else "0"
+    def running(i): return (_mumu_list().get(int(i)) or {}).get("running")
+    if c == "listvms":
+        L = _mumu_list(); run_only = "--running" in a
+        return _ok("\n".join(f"{i},{x['name']},0,{1 if x['running'] else 0},{x['pid']}" for i, x in sorted(L.items()) if x["running"] or not run_only))
+    if c == "create":                                     # create <bản android>: có máy mẫu tpl_a<bản> → nhân bản, không thì tạo mới
+        ver = a[1] if len(a) > 1 else DEF_ANDROID
+        before = set(_mumu_list()); tpl = next((i for i, x in _mumu_list().items() if x["name"] == tpl_name(ver)), None)
+        r = _mumurun(["clone", "-v", tpl], timeout) if tpl is not None else _mumurun(["create"], timeout)
+        new = sorted(set(_mumu_list()) - before)
+        if not new: return subprocess.CompletedProcess([], 1, r.stdout, (r.stderr or "") + " MuMu không tạo được máy")
+        return _ok(f"index: {new[-1]}")
+    if c == "rename":
+        r = _mumurun(["rename", "-v", ix(), "-n", a[-1]], timeout)
+        if (_mumu_list().get(int(ix())) or {}).get("name") != a[-1]: r = _mumurun(["rename", "--vmindex", ix(), "--name", a[-1]], timeout)
+        return r
+    if c == "start":
+        r = _mumurun(["control", "-v", ix(), "launch"], timeout)
+        for _ in range(15):
+            if running(ix()): return _ok("start ok")
+            time.sleep(2)
+        return subprocess.CompletedProcess([], 1, r.stdout, "start vm failed")
+    if c == "stop":
+        _mumurun(["control", "-v", ix(), "shutdown"], timeout)
+        for _ in range(20):
+            if not running(ix()): break
+            time.sleep(2)
+        return _ok("stop ok")
+    if c == "stopall": return _mumurun(["control", "-v", "all", "shutdown"], timeout)
+    if c == "remove":
+        r = _mumurun(["delete", "-v", ix()], timeout)
+        return _ok("remove ok") if int(ix()) not in _mumu_list() else subprocess.CompletedProcess([], 1, r.stdout, "remove failed")
+    if c == "setconfigex":
+        k, v = a[-2], a[-1]
+        if k == "memory": _mumu_set(ix(), {"mem": float(v) / 1024})
+        elif k == "cpus": _mumu_set(ix(), {"cpu": v})
+        elif k == "enable_su": _mumu_set(ix(), {"root": 1})
+        elif k == "fps": _mumu_set(ix(), {"fps": v})
+        return _ok()
+    if c == "getconfigex":
+        allk = _mumu_json(_mumurun(["setting", "-v", ix(), "-a"], 60).stdout) or {}
+        if a[-1] == "cpus": return _ok("Value: " + str(next((allk[k] for k in allk if k.startswith("performance_cpu")), "?")))
+        return _ok("Value: 1")
+    if c == "clone": return _mumurun(["clone", "-v", ix()], timeout)
+    return _ok()
 def memuc(*a, timeout=300):
     """memuc chỉ xử lý 1 lệnh một lúc (chạy chồng → "read failed: 233") → xếp hàng bằng khoá + thử lại."""
+    if EMU == "mumu":
+        lk = _Lock("memuc", wait=min(max(120, timeout), 260))
+        try: lk.__enter__()
+        except RuntimeError: _unstick_memuc(); lk = _Lock("memuc", wait=60); lk.__enter__()
+        try: return _mumu(a, timeout)
+        finally: lk.__exit__()
     if EMU == "ld":
         lk = _Lock("memuc", wait=min(max(120, timeout), 260))
         try: lk.__enter__()
@@ -177,7 +319,32 @@ def now(): return datetime.datetime.now().astimezone()
 def parse_dt(s):
     d = datetime.datetime.fromisoformat(str(s).replace("Z", "+00:00")); return d if d.tzinfo else d.astimezone()
 def fmt(dt): return dt.strftime("%d/%m/%Y %H:%M")
-def port_of(idx): return (5555 + 2 * int(idx)) if EMU == "ld" else (21503 + 10 * int(idx))   # LDPlayer: máy N ⇄ 127.0.0.1:5555+2N
+def port_of(idx):
+    """Cổng adb của máy số idx. LDPlayer: 5555+2N · MEmu: 21503+10N · MuMu: đọc từ MuMu (thường 16384+32N)."""
+    if EMU == "ld": return 5555 + 2 * int(idx)
+    if EMU == "mumu":
+        v = _mumu_info(fresh=False).get(int(idx)) or _mumu_info().get(int(idx)) or {}
+        try: return int(v.get("adb_port"))
+        except (TypeError, ValueError): return 16384 + 32 * int(idx)
+    return 21503 + 10 * int(idx)
+def create_vm(android):
+    """Tạo 1 máy ảo mới ĐÚNG bản Android → (kết quả lệnh, số máy hoặc None). Không tạo được đúng bản → lỗi (đơn được hoàn tiền),
+       KHÔNG BAO GIỜ tạo nhầm bản khác (khách trả tiền Android 7 mà nhận Android 12)."""
+    ver = norm_android(android); before = set(vms())
+    has_tpl = any(x["name"] == tpl_name(ver) for x in vms().values())
+    if EMU == "ld": r = memuc("create", "96", timeout=240)
+    elif EMU == "mumu":
+        if not has_tpl and ver != DEF_ANDROID:            # MuMu tạo mới = bản mặc định của MuMu (ANDROIDS[0]); bản khác phải có máy mẫu
+            return subprocess.CompletedProcess([], 1, "", f"chưa có máy mẫu {tpl_name(ver)} (Android {ver}) trong MuMu"), None
+        r = memuc("create", ver, timeout=300)
+    else:
+        tpl = next((i for i, x in vms().items() if x["name"] == tpl_name(ver)), None)
+        if tpl is not None: r = memuc("clone", "-i", tpl, timeout=600)            # MEmu: bản không có mã tạo sẵn (VD Android 12) → nhân bản máy mẫu
+        elif ver in MEMU_CODES: r = memuc("create", MEMU_CODES[ver], timeout=240)
+        else: return subprocess.CompletedProcess([], 1, "", f"MEmu không có sẵn Android {ver} — tạo máy mẫu {tpl_name(ver)}"), None
+    m = re.search(r"index\D*(\d+)", r.stdout or "")
+    idx = int(m.group(1)) if m else next(iter(sorted(set(vms()) - before)), None)
+    return r, idx
 
 def _pid_alive(pid):
     try:
@@ -280,6 +447,8 @@ def hide_window(name, show=False):
             u.SetWindowLongW(h, GWL_EXSTYLE, (ex | WS_EX_APPWINDOW) & ~WS_EX_TOOLWINDOW); u.ShowWindow(h, 5)
             u.SetWindowPos(h, 0, 100, 100, 0, 0, 0x0001 | 0x0004)
         else:
+            rc = (ctypes.c_long * 4)(); u.GetWindowRect(ctypes.c_void_p(h), rc)
+            if (ex & WS_EX_TOOLWINDOW) and rc[0] <= -30000: continue            # đã chạy ngầm rồi → không đụng (khỏi nháy, không làm gián đoạn phát hình)
             u.ShowWindow(h, 0)                                                   # ẩn tạm để đổi kiểu cửa sổ
             u.SetWindowLongW(h, GWL_EXSTYLE, (ex | WS_EX_TOOLWINDOW) & ~WS_EX_APPWINDOW)
             u.SetWindowPos(h, 0, -32000, -32000, 0, 0, 0x0001 | 0x0004 | 0x0010)  # ra ngoài màn hình, giữ kích thước
@@ -417,6 +586,11 @@ def configure(idx, ram, cpu, res, dpi):
                        "advancedSettings.resolution": {"width": int(w), "height": int(h)}, "advancedSettings.resolutionDpi": d})
         _ldrun(["globalsetting", "--audio", "0", "--fps", CONF.get("LD_FPS", "60")], 60)
         return
+    if EMU == "mumu":
+        if float(ram) > MAX_RAM: print(f"   (gói {float(ram):g}GB → MuMu chạy tối đa {MAX_RAM:g}GB/máy, đặt {MAX_RAM:g}GB)", flush=True)
+        _mumu_set(str(idx), {"cpu": max(1, int(round(min(float(cpu), MAX_CPU)))), "mem": min(float(ram), MAX_RAM),
+                             "res": (int(w), int(h), int(dpi or auto_dpi(res))), "root": 1})
+        return
     if float(ram) > MAX_RAM: print(f"   (gói {float(ram):g}GB → MEmu chỉ chạy tối đa {MAX_RAM:g}GB/máy, đặt {MAX_RAM:g}GB)", flush=True)
     ram = min(float(ram), MAX_RAM); cpu = min(float(cpu), MAX_CPU)
     for k, v in (("memory", int(float(ram) * 1024)), ("cpus", max(1, int(round(float(cpu))))), ("is_customed_resolution", 1),
@@ -495,7 +669,8 @@ def cmd_create(a):
         print(f"HẾT HÀNG: RAM Windows còn {av:.1f}GB, máy {need:g}GB cần thêm {need + 1:g}GB và chừa {RESERVE:g}GB."); sys.exit(2)
     try: open(os.path.join(HOME, "redroid", f"creating_{os.getpid()}.flag"), "w").write(a.name)   # báo "đang tạo máy khách" → dựng máy sẵn nhường đường
     except OSError: pass
-    sp = take_spare(a.name)
+    ver = norm_android(a.android)
+    sp = take_spare(a.name) if ver == DEF_ANDROID else None          # máy dựng sẵn là bản Android mặc định của máy chủ
     if sp is not None:
         idx = sp
         print(f"[1/4] ⚡ Dùng máy dựng sẵn (MEmu #{idx}) → đổi tên, RAM, CPU…", flush=True)
@@ -505,15 +680,12 @@ def cmd_create(a):
             memuc("setconfigex", "-i", idx, "fps", clamp_fps(a.fps), timeout=60)
             apply_template(idx)
     else:
-        print(f"[1/4] Tạo máy Android 9 trên {'LDPlayer' if EMU == 'ld' else 'MEmu'}…", flush=True)
+        print(f"[1/4] Tạo máy Android {ver} trên {EMU_NAME}…", flush=True)
         with _Lock("memu"):
             for oi, ox in sorted(vms().items(), reverse=True):   # máy trùng tên còn sót trong MEmu (lần tạo trước bị ngắt) → xoá trước
                 if ox["name"] == a.name:
                     print(f"   (xoá máy sót cùng tên #{oi})", flush=True); memuc("stop", "-i", oi, timeout=60); memuc("remove", "-i", oi, timeout=180)
-            before = set(vms())
-            r = memuc("create", "96", timeout=240)                       # 96 = Android 9 64-bit
-            m = re.search(r"index\D*(\d+)", r.stdout or "")
-            idx = int(m.group(1)) if m else next(iter(sorted(set(vms()) - before)), None)
+            r, idx = create_vm(ver)
             if idx is None: print("LỖI tạo máy:", ((r.stdout or "") + (r.stderr or "")).strip()[-300:]); sys.exit(4)
             print(f"[2/4] Đã tạo máy #{idx} → đặt tên, RAM, CPU, root…", flush=True)
             for _t in range(4):                                          # đổi tên PHẢI thành công — máy tìm theo TÊN (không thì thành "MEmuNN" mồ côi)
@@ -529,7 +701,7 @@ def cmd_create(a):
             apply_template(idx)
     port = port_of(idx); exp = now() + datetime.timedelta(days=a.days)
     row = {"name": a.name, "idx": idx, "port": port, "ram": a.ram, "cpu": a.cpu, "res": a.res, "fps": clamp_fps(a.fps), "dpi": dpi,
-           "android": "9", "kind": "memu", "created": fmt(now()), "expires": exp.isoformat()}
+           "android": ver, "kind": EMU, "created": fmt(now()), "expires": exp.isoformat()}
     st = load(); st["phones"].append(row); save(st)
     print(f"[3/4] Bật máy…", flush=True)
     s = memu_start(idx)
@@ -570,7 +742,8 @@ def cmd_stop(a):
 def _start_failed(r): return "fail" in ((r.stdout or "") + (r.stderr or "")).lower() or r.returncode not in (0, None)
 def memu_unstick():
     """MEmu bị kẹt (mọi máy 'start vm failed') → tắt hẳn tiến trình MEmu chạy ngầm. Chỉ làm khi KHÔNG có máy nào đang chạy."""
-    r = memuc("listvms", "--running", timeout=30) if EMU == "ld" else run([os.path.join(MEMU, "memuc.exe"), "listvms", "--running"], 30)
+    if EMU == "mumu": return False
+    r = memuc("listvms", "--running", timeout=30) if EMU in ("ld", "mumu") else run([os.path.join(MEMU, "memuc.exe"), "listvms", "--running"], 30)
     if r.returncode not in (0, None) or any(ln.strip() and ln[0].isdigit() for ln in (r.stdout or "").splitlines()):
         return False
     for im in (("dnplayer.exe", "Ld9BoxHeadless.exe", "LdBoxHeadless.exe", "Ld9BoxSVC.exe", "LdBoxSVC.exe", "ldconsole.exe") if EMU == "ld" else
@@ -774,7 +947,8 @@ def _cleanup(v=None, quiet=False, all_=False):
     for i in sorted(v, reverse=True):          # xoá từ số lớn xuống → số máy còn lại ít bị đổi
         nm = v[i]["name"]
         if nm == tpl or (nm in mine and not all_) or (nm.startswith("spare_") and not all_): continue
-        if EMU == "ld" and i == 0: continue                  # LDPlayer: giữ máy gốc số 0 (LDPlayer cần)
+        if nm.startswith("tpl_") or nm in {tpl_name(x) for x in ANDROIDS}: continue      # máy MẪU từng bản Android — không bao giờ xoá
+        if EMU in ("ld", "mumu") and i == 0: continue        # LDPlayer / MuMu: giữ máy gốc số 0 (giả lập cần)
         if quiet and not nm.startswith("cp_"): continue     # tự động: chỉ dọn máy do BlueRoblox tạo (cp_…)
         print(f"XOA_THUA {nm} (MEmu #{i})", flush=True)
         def _at(n):                                          # số máy HIỆN TẠI của máy tên n (MEmu đổi số khi xoá máy khác) — KHÔNG BAO GIỜ đụng máy khác tên
@@ -873,17 +1047,15 @@ def cmd_pool(a):
         print(f"DUNG_SAN {nm}: tạo + khởi động + cài sẵn…", flush=True)
         with _Lock("memu", wait=5):                     # không chờ: đang có việc MEmu khác (máy khách) → để lần sau
             before = set(vms())
-            r = memuc("create", "96", timeout=90)        # bình thường ~10–30 giây; treo → bỏ, không giữ khoá lâu
-            m = re.search(r"index\D*(\d+)", r.stdout or "")
+            r, idx = create_vm(DEF_ANDROID)              # bản Android mặc định của máy chủ
             v2 = vms(); new = sorted(set(v2) - before)
-            idx = int(m.group(1)) if m else next(iter(new), None)
             def _drop(ix):                               # máy dở không đặt được tên → XOÁ NGAY (không để thành "MEmuNN" mồ côi ăn CPU)
                 print(f"XOA_DO MEmu #{ix} (không đặt tên được)", flush=True)
                 if (vms().get(ix) or {}).get("running"): memuc("stop", "-i", ix, timeout=120); time.sleep(3)
                 memuc("remove", "-i", ix, timeout=180)
             if idx is None:
                 for ix in reversed(new):
-                    if re.match(r"^(MEmu\d*|new_\d+)$", v2[ix]["name"]): _drop(ix)
+                    if re.match(r"^(MEmu\d*|new_\d+|MuMu.*)$", v2[ix]["name"]) and ix != 0: _drop(ix)
                 print("LỖI dựng máy sẵn:", ((r.stdout or "") + (r.stderr or "")).strip()[-200:]); return
             for _t in range(4):
                 memuc("rename", "-i", idx, nm, timeout=60)
@@ -961,6 +1133,21 @@ def cmd_hide(a):
         if not a.name or p["name"] == a.name: n += hide_window(p["name"])
     print(f"Đã cho {n} cửa sổ MEmu chạy ngầm.")
 
+def cmd_engine(a):
+    """Cho cloudphoned biết máy chủ này chạy giả lập gì + bán bản Android nào (JSON 1 dòng)."""
+    print(json.dumps({"emu": EMU, "androids": ANDROIDS, "default": DEF_ANDROID, "found": bool(MEMU)}))
+
+def cmd_probe(a):
+    """In thông tin giả lập để kiểm tra / gửi hỗ trợ khi cài máy chủ mới."""
+    print(f"Giả lập: {EMU_NAME} (EMU={EMU}) · thư mục: {MEMU or 'KHÔNG THẤY'}" + (f" · lệnh: {MUMU_CLI}" if EMU == "mumu" else ""))
+    print(f"Bản Android bán ở máy chủ này: {', '.join(ANDROIDS)} (mặc định {DEF_ANDROID}) · máy mẫu: {', '.join(tpl_name(x) for x in ANDROIDS)}")
+    v = vms(); print(f"Có {len(v)} máy:")
+    for i, x in sorted(v.items()): print(f"  #{i} {x['name']} {'đang chạy' if x['running'] else 'tắt'} · cổng adb {port_of(i)}")
+    if EMU == "mumu":
+        r = _mumurun(["info", "-v", "all"], 60); print("--- MuMu info ---"); print((r.stdout or r.stderr or "")[:3000])
+        if v:
+            i0 = sorted(v)[0]; r = _mumurun(["setting", "-v", i0, "-a"], 60); print(f"--- MuMu setting máy #{i0} ---"); print((r.stdout or r.stderr or "")[:4000])
+
 def main():
     ap = argparse.ArgumentParser(); s = ap.add_subparsers(dest="c", required=True)
     c = s.add_parser("create"); c.add_argument("name"); c.add_argument("--ram", type=float, default=2); c.add_argument("--cpu", type=float, default=2)
@@ -984,6 +1171,8 @@ def main():
     he = s.add_parser("heal"); he.add_argument("--orphans", action="store_true"); he.set_defaults(f=cmd_heal)
     cl = s.add_parser("cleanup"); cl.add_argument("--all", action="store_true"); cl.add_argument("--yes", action="store_true"); cl.set_defaults(f=cmd_cleanup)
     s.add_parser("pool").set_defaults(f=cmd_pool)
+    s.add_parser("probe").set_defaults(f=cmd_probe)
+    s.add_parser("engine").set_defaults(f=cmd_engine)
     s.add_parser("tuneall").set_defaults(f=cmd_tuneall)
     s.add_parser("vmlist").set_defaults(f=cmd_vmlist)
     ba = s.add_parser("bootall"); ba.add_argument("--quiet", action="store_true"); ba.set_defaults(f=cmd_bootall)

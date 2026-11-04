@@ -11,6 +11,9 @@ from tkinter import messagebox, simpledialog, ttk
 
 B = os.path.dirname(os.path.abspath(__file__))
 PY = os.path.join(os.path.dirname(sys.executable), "python.exe") if sys.executable.lower().endswith("pythonw.exe") else sys.executable
+FROZEN = getattr(sys, "frozen", False)           # chạy bằng BlueRobloxServer.exe (không cần cài Python)
+if FROZEN: TASK_EXE, TASK_ARG = sys.executable, "--auto"
+else: TASK_EXE, TASK_ARG = os.path.join(os.path.dirname(sys.executable), "pythonw.exe"), '"C:\\blue\\panel.py" --auto'
 LOGS = os.path.join(B, "logs"); os.makedirs(LOGS, exist_ok=True)
 CONF = os.path.join(B, "cloudphone.conf")
 RAW = "https://raw.githubusercontent.com/lehien205px/blueroblox/main"
@@ -38,7 +41,7 @@ SERVICES = {   # tên: (thư mục chạy, lệnh)
     "cpapi": (B, [PY, "-u", "run.py", "cpapi.py"]),
     "cloudphoned": (B, [PY, "-u", "run.py", "cloudphoned.py"]),
     "duong-thang": (B, [os.path.join(B, "caddy.exe"), "run", "--config", os.path.join(B, "Caddyfile"), "--adapter", "caddyfile"]),
-    "phat-hinh": (B, [PY, "-u", "phathinh.py", "--server"]),      # hình kiểu Parsec (WebRTC) — tự tải FFmpeg/MediaMTX lần đầu
+    "phat-hinh": (B, [PY, "-u", "bluestream.py"]),                # PHÁT HÌNH v2 cho app PC + app Android (TLS cổng 8189 + WebSocket 8020)
 }
 FAST_HOST, FAST_PORT, ZONE = "fast.blueroblox.shop", 8443, "blueroblox.shop"
 CADDY_URL = "https://caddyserver.com/api/download?os=windows&arch=amd64&p=github.com%2Fcaddy-dns%2Fcloudflare"
@@ -65,6 +68,25 @@ def set_conf(key, val):
         if l.split("=", 1)[0].strip() == key: lines[i] = f"{key}={val}"; done = True
     if not done: lines.append(f"{key}={val}")
     open(CONF, "w", encoding="utf-8").write("\n".join(lines) + "\n")
+
+EMUS = {"ld": ("LDPlayer 9", "9"), "mumu": ("MuMu", "12,7"), "memu": ("MEmu", "7")}
+def find_emu(c=None):
+    """(thư mục giả lập, chữ hiện trên đèn) theo loại đã chọn ở cloudphone.conf (EMU=ld|mumu|memu)."""
+    c = c or conf(); e = (c.get("EMU") or "").lower()
+    ld = next((d for d in [c.get("LD_DIR", ""), r"C:\LDPlayer\LDPlayer9", r"D:\LDPlayer\LDPlayer9", r"C:\leidian\LDPlayer9", r"D:\leidian\LDPlayer9"]
+               if d and os.path.isfile(os.path.join(d, "ldconsole.exe"))), "")
+    mm = next((d for d in [c.get("MEMU_DIR", ""), r"C:\Program Files\Microvirt\MEmu", r"D:\Program Files\Microvirt\MEmu"]
+               if d and os.path.isfile(os.path.join(d, "memuc.exe"))), "")
+    mu = ""
+    for d in [c.get("MUMU_DIR", ""), r"C:\Program Files\Netease\MuMuPlayer-12.0", r"D:\Program Files\Netease\MuMuPlayer-12.0",
+              r"C:\Program Files\Netease\MuMu Player 12", r"D:\Program Files\Netease\MuMu Player 12", r"C:\Program Files\Netease\MuMuPlayer",
+              r"C:\Program Files\MuMuPlayerGlobal-12.0", r"D:\Program Files\MuMuPlayerGlobal-12.0", r"C:\Program Files\Netease\MuMuPlayerGlobal-12.0"]:
+        if d and any(os.path.isfile(os.path.join(d, x)) for x in (r"nx_main\mumu-cli.exe", r"shell\MuMuManager.exe", r"nx_main\MuMuManager.exe")): mu = d; break
+    found = {"ld": ld, "memu": mm, "mumu": mu}
+    if e not in found: e = "ld" if ld else ("mumu" if mu else ("memu" if mm else ""))
+    if not e: return "", "chưa thấy giả lập — cài LDPlayer 9 hoặc MuMu rồi bấm 🎛 Chọn giả lập"
+    name = EMUS[e][0]; av = c.get("ANDROIDS") or EMUS[e][1]
+    return found[e], (f"{name} · bán Android {av.replace(',', ', ')}" if found[e] else f"chưa thấy {name} — cài từ trang chính thức")
 
 def port_open(p):
     s = socket.socket(); s.settimeout(0.5)
@@ -122,7 +144,7 @@ def kill_tree(pid):
     for x in reversed(seen):
         if x != keep: subprocess.run(["taskkill", "/PID", x, "/F"], capture_output=True, creationflags=NOWIN)
 
-PORTS = {"ws-scrcpy": 8000, "cpapi": 8010, "duong-thang": 8443, "phat-hinh": 8889}
+PORTS = {"ws-scrcpy": 8000, "cpapi": 8010, "duong-thang": 8443, "phat-hinh": int(conf().get("STREAM_PORT") or 8189)}
 def free_port(port):
     """Tắt chương trình CŨ còn giữ cổng (vd ws-scrcpy cũ mất kết nối adb → web đen màn, bản mới không mở được cổng: EADDRINUSE)."""
     out = subprocess.run(["netstat", "-ano", "-p", "TCP"], capture_output=True, text=True, creationflags=NOWIN).stdout or ""
@@ -183,7 +205,7 @@ class App:
         self.svcs = {n: Svc(n, self) for n in SERVICES}
         top = tk.Frame(r, bg=BG); top.pack(fill="x", padx=14, pady=(12, 6))
         tk.Label(top, text="🐋 BlueRoblox", fg=BLUE, bg=BG, font=("Segoe UI", 18, "bold")).pack(side="left")
-        tk.Label(top, text="  máy chủ Windows · LDPlayer / MEmu", fg=MUTED, bg=BG, font=("Segoe UI", 11)).pack(side="left", pady=(6, 0))
+        tk.Label(top, text="  máy chủ Windows · LDPlayer 9 / MuMu / MEmu", fg=MUTED, bg=BG, font=("Segoe UI", 11)).pack(side="left", pady=(6, 0))
         self.adm = tk.Label(top, text="", bg=BG, font=("Segoe UI", 10)); self.adm.pack(side="right")
         # dòng tổng: đủ đèn xanh = OK
         self.banner = tk.Label(r, text="⏳ Đang kiểm tra…", fg="#1a1300", bg=WARN, font=("Segoe UI", 13, "bold"), anchor="w", padx=14, pady=6)
@@ -192,7 +214,8 @@ class App:
         self.lights = {}
         grid = tk.Frame(r, bg=BG); grid.pack(fill="x", padx=14)
         items = [("memu", "Giả lập"), ("adb", "adb (Google)"), ("key", "Khoá Supabase"), ("ws", "Trình phát hình :8000"),
-                 ("api", "Cổng bảo vệ :8010"), ("daemon", "Nhận đơn (cloudphoned)"), ("cf", "Đường hầm Cloudflare"), ("web", pub_host())]
+                 ("api", "Cổng bảo vệ :8010"), ("daemon", "Nhận đơn (cloudphoned)"), ("cf", "Đường hầm Cloudflare"), ("web", pub_host()),
+                 ("st", f"Phát hình app :{PORTS['phat-hinh']}")]
         for i, (k, t) in enumerate(items):
             c = tk.Frame(grid, bg=CARD, highlightbackground=LINE, highlightthickness=1); c.grid(row=i // 4, column=i % 4, sticky="nsew", padx=4, pady=4)
             grid.columnconfigure(i % 4, weight=1)
@@ -224,7 +247,8 @@ class App:
         btn("⏻ Thoát hẳn", self.quit_all, "#3a2030", "#ffb3bb")
         btn("🔑 Tự đăng nhập + tự chạy", self.autologon, "#2a2350", "#d9ccff")
         btn("🧹 Dọn giả lập thừa", self.cleanup, "#3a2a10", "#ffd9a0")
-        btn("🙈 Ẩn cửa sổ MEmu", lambda: self.job("Cho cửa sổ MEmu chạy ngầm", [PY, "phonectl.py", "hide"]))
+        btn("🙈 Ẩn cửa sổ giả lập", lambda: self.job("Cho cửa sổ giả lập chạy ngầm", [PY, "phonectl.py", "hide"]))
+        btn("🎛 Chọn giả lập", self.choose_emu, "#14304a", "#bfe0ff")
         # nhật ký
         self.nb = ttk.Notebook(r); self.nb.pack(fill="both", expand=True, padx=14, pady=(0, 6))
         self.texts = {}
@@ -241,6 +265,7 @@ class App:
         threading.Thread(target=self._checker, daemon=True).start()
         r.protocol("WM_DELETE_WINDOW", self.on_close)
         if auto: r.after(1500, self.boot_auto)          # Windows khởi động lại → tự bật A→Z
+        if not conf().get("EMU") and not auto: r.after(1200, self.choose_emu)    # lần đầu: hỏi máy chủ này chạy LDPlayer hay MuMu/MEmu
 
     # ---------- nhật ký ----------
     def say(self, tab, line): self.q.put((tab, line))
@@ -258,7 +283,7 @@ class App:
         self.root.after(150, self._drain)
 
     NAMES = {"memu": "Giả lập", "adb": "adb", "key": "Khoá Supabase", "ws": "Trình phát hình", "api": "Cổng bảo vệ",
-             "daemon": "Nhận đơn", "cf": "Đường hầm Cloudflare", "web": "Web"}
+             "daemon": "Nhận đơn", "cf": "Đường hầm Cloudflare", "web": "Web", "st": "Phát hình app"}
     def light(self, k, ok, text):
         dot, sub = self.lights[k]
         dot.configure(fg=GOOD if ok is True else BAD if ok is False else WARN); sub.configure(text=text)
@@ -306,14 +331,13 @@ class App:
         if on("cloudphoned") and self._bad("daemon", not self.svcs["cloudphoned"].alive()) == 6: self._fix("nhận đơn bị tắt → bật lại"); self._restart_svc("cloudphoned")
         if n % 3 == 0 and on("cpapi"):
             q = subprocess.run(["sc", "query", "cloudflared"], capture_output=True, text=True, creationflags=NOWIN).stdout or ""
-            if "SERVICE_NAME" in q and self._bad("cf", "RUNNING" not in q) == 2:
+            if "SERVICE_NAME" in q and self._bad("cf", "RUNNING" not in q) >= 2:
                 self._fix("đường hầm Cloudflare tắt → bật lại"); subprocess.run(["sc", "start", "cloudflared"], capture_output=True, creationflags=NOWIN)
             # web 5xx/không vào được 3 lần liền trong khi máy mình vẫn chạy → khởi động lại đường hầm
             web_bad = self.lights and not self.state.get("web", True)
             if self._bad("web", web_bad and port_open(8010)) == 3:
                 self._fix("web không vào được → khởi động lại đường hầm Cloudflare")
-                subprocess.run(["sc", "stop", "cloudflared"], capture_output=True, creationflags=NOWIN); time.sleep(3)
-                subprocess.run(["sc", "start", "cloudflared"], capture_output=True, creationflags=NOWIN)
+                subprocess.run(["powershell", "-NoProfile", "-Command", "Restart-Service cloudflared -Force; Start-Sleep 2; Start-Service cloudflared"], capture_output=True, creationflags=NOWIN, timeout=120)
         # ~1 phút: lệnh MEmu treo quá 3 phút → tắt; máy khách mất kết nối điều khiển → nối lại
         if n % 15 == 5 and on("cloudphoned") and not getattr(self, "_stuckjob", False):
             def sj():
@@ -425,7 +449,7 @@ if ($r -eq 0) {{ Write-Host '[OK] Windows tu dang nhap tai khoan' $U }} else {{ 
 New-Item 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\PasswordLess\Device' -Force | Out-Null
 Set-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\PasswordLess\Device' DevicePasswordLessBuildVersion 0 -Type DWord
 Write-Host '[OK] Tat bat buoc Windows Hello'
-$a = New-ScheduledTaskAction -Execute 'C:\Program Files\Python312\pythonw.exe' -Argument '"C:\blue\panel.py" --auto' -WorkingDirectory 'C:\blue'
+$a = New-ScheduledTaskAction -Execute '{TASK_EXE}' -Argument '{TASK_ARG}' -WorkingDirectory 'C:\blue'
 $t = New-ScheduledTaskTrigger -AtLogOn -User "$D\$U"
 $pr = New-ScheduledTaskPrincipal -UserId "$D\$U" -LogonType Interactive -RunLevel Highest
 $st = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -MultipleInstances IgnoreNew -Priority 4
@@ -486,12 +510,11 @@ Write-Host '[OK] Khong ngu, khong tat man hinh'
         n = 0
         while True:
             c = conf()
-            memu = next((d for d in [c.get("LD_DIR", ""), r"C:\LDPlayer\LDPlayer9", r"D:\LDPlayer\LDPlayer9", r"C:\leidian\LDPlayer9"]
-                         if d and os.path.isfile(os.path.join(d, "ldconsole.exe"))), "") or \
-                   next((d for d in [c.get("MEMU_DIR", ""), r"C:\Program Files\Microvirt\MEmu", r"D:\Program Files\Microvirt\MEmu"]
-                         if d and os.path.isfile(os.path.join(d, "memuc.exe"))), "")
+            memu, emu_txt = find_emu(c)
             L = self.root.after
-            L(0, self.light, "memu", bool(memu), memu or "chưa thấy LDPlayer 9 / MEmu")
+            L(0, self.light, "memu", bool(memu), emu_txt)
+            sp = PORTS["phat-hinh"]
+            L(0, self.light, "st", port_open(sp), "đang chạy · app PC/Android nối vào đây" if port_open(sp) else "tắt")
             adb = os.path.isfile(os.path.join(B, "platform-tools", "adb.exe"))
             L(0, self.light, "adb", adb, "đã có" if adb else "chưa cài — bấm ①")
             key = c.get("SUPABASE_SERVICE_KEY", "")
@@ -572,6 +595,25 @@ Write-Host '[OK] Khong ngu, khong tat man hinh'
         except OSError: pass
         run_admin(f"Set-Location C:\\\ncurl.exe -fsSL -H \"Accept: application/vnd.github.raw\" -H \"User-Agent: BlueRoblox\" -o C:\\blue\\setup.ps1 \"https://api.github.com/repos/lehien205px/blueroblox/contents/windows/setup.ps1\"; if ($LASTEXITCODE -ne 0) {{ curl.exe -fsSL -o C:\\blue\\setup.ps1 \"{RAW}/windows/setup.ps1?t={int(time.time())}\" }}\n& C:\\blue\\setup.ps1", log)
         self.tail(log, "Cài đặt / Cập nhật")
+
+    def choose_emu(self, first=False):
+        """Máy chủ này chạy giả lập nào → nhận đơn bản Android nào. Mỗi máy chủ 1 loại; web tự chia đơn đúng máy chủ."""
+        w = tk.Toplevel(self.root); w.title("Chọn giả lập cho máy chủ này"); w.configure(bg=BG); w.grab_set(); w.resizable(False, False)
+        tk.Label(w, text="Máy chủ này chạy giả lập nào?", fg=FG, bg=BG, font=("Segoe UI", 14, "bold")).pack(padx=24, pady=(18, 4))
+        tk.Label(w, text="Khách mua Android 9 → máy chủ LDPlayer · Android 12 / 7 → máy chủ MuMu (hoặc MEmu).\n"
+                         "Mỗi máy chủ chỉ cài 1 loại. Chọn sai thì bấm 🎛 Chọn giả lập để đổi.", fg=MUTED, bg=BG, font=("Segoe UI", 10), justify="left").pack(padx=24)
+        cur = (conf().get("EMU") or "").lower()
+        def pick(e, av):
+            set_conf("EMU", e); set_conf("ANDROIDS", av); w.destroy()
+            self.say("Tổng quan", f"✓ Máy chủ này: {EMUS[e][0]} · nhận đơn Android {av}. Đang bật lại phần nhận đơn…")
+            if self.svcs["cloudphoned"].alive(): threading.Thread(target=lambda: self._restart_svc("cloudphoned"), daemon=True).start()
+        for e, (nm, av), desc in (("ld", EMUS["ld"], "Android 9 · ổn định, nhẹ"), ("mumu", EMUS["mumu"], "Android 12 + Android 7 (cần máy mẫu tpl_a7 nếu MuMu mặc định là 12)"),
+                                  ("memu", EMUS["memu"], "Android 7 (MEmu) · thêm 12 bằng máy mẫu tpl_a12")):
+            b = tk.Button(w, text=f"{nm}  —  {desc}" + ("   ✓ đang dùng" if cur == e else ""), command=lambda e=e, av=av: pick(e, av),
+                          bg=BLUE if cur == e else CARD, fg="white" if cur == e else FG, relief="flat", font=("Segoe UI", 11, "bold"),
+                          padx=14, pady=10, anchor="w", cursor="hand2", bd=0)
+            b.pack(fill="x", padx=24, pady=4)
+        tk.Label(w, text="", bg=BG).pack(pady=4)
 
     def set_key(self):
         k = simpledialog.askstring("Khoá Supabase", "Mở Supabase → Project Settings → API Keys → khoá service_role (Reveal → Copy)\n"

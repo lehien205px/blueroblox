@@ -119,13 +119,16 @@ netsh advfirewall firewall delete rule name="BlueRoblox chan 8000" | Out-Null
 netsh advfirewall firewall add rule name="BlueRoblox chan 8000" dir=in action=block protocol=TCP localport=8000,8010 remoteip=localsubnet | Out-Null
 
 Step "6/7 Tai chuong trinh BlueRoblox"
-& $PY -m pip install --quiet --disable-pip-version-check pillow windows-capture numpy 2>$null | Out-Null   # ảnh màn hình nhỏ (màn hình trực tiếp trong danh sách máy)
+& $PY -m pip install --quiet --disable-pip-version-check pillow windows-capture numpy cryptography 2>$null | Out-Null   # phát hình app: quay cửa sổ + chứng chỉ TLS
 foreach ($f in "cloudphoned.py", "cpapi.py") { Get "$RAW/$f" "$B\$f" }
-foreach ($f in "phonectl.py", "run.py", "remake.py", "keep.bat", "start-blue.bat", "panel.py", "wallpaper.png", "donweb.py", "kiemtra.py", "suachua.ps1", "phathinh.py") { Get "$RAW/windows/$f" "$B\$f" }
+foreach ($f in "phonectl.py", "run.py", "remake.py", "keep.bat", "start-blue.bat", "panel.py", "wallpaper.png", "donweb.py", "kiemtra.py", "suachua.ps1", "bluestream.py") { Get "$RAW/windows/$f" "$B\$f" }
 if (-not (Test-Path "$B\cloudphone.conf")) {
 $PRI = if ($Node -eq "win1") { "1" } else { "0" }
 $MAXR = if ($LDP) { "8" } else { "16" }
+$NUM = [int]("0" + ($Node -replace '[^0-9]', ''))
+$SPORT = if ($NUM -ge 2) { 8188 + $NUM } else { 8189 }
 @"
+# BlueRoblox — cấu hình máy chủ (KHÔNG đưa file này lên GitHub)
 SUPABASE_URL=https://nprftgodswlpzomcttal.supabase.co
 SUPABASE_SERVICE_KEY=DAN_SERVICE_ROLE_KEY_VAO_DAY
 PUBLIC_BASE=https://$PubHost
@@ -142,6 +145,7 @@ MEMU_MAX_CPU=8
 MEMU_RENDER=1
 MEMU_GMEM_OPT=1
 POOL_SIZE=1
+STREAM_PORT=$SPORT
 "@ | Set-Content -Encoding utf8 "$B\cloudphone.conf" }
 $nl = (Get-Content "$B\cloudphone.conf" | Where-Object { $_ -match '^(NODE_ID|PUBLIC_BASE)=' }) -join "  "
 Ok "$B\cloudphone.conf  ($nl)"

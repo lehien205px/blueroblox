@@ -14,9 +14,17 @@ $R = "C:\blue\rtc"; New-Item -ItemType Directory -Force $R | Out-Null
 function Ok($m) { Write-Host "  [OK] $m" -ForegroundColor Green }
 
 # 1) FFmpeg (bản chính thức BtbN trên GitHub) + MediaMTX (máy chủ WebRTC mã nguồn mở, GitHub bluenviron)
+# Bản FFmpeg 7.1 (NVENC API 12.x) — bản mới nhất đòi driver NVIDIA 610+, card GTX 10xx (Pascal) không có driver đó
+if ((Test-Path "$R\ffmpeg.exe") -and -not (Test-Path "$R\ff71.ok")) { Remove-Item "$R\ffmpeg.exe" }
 if (-not (Test-Path "$R\ffmpeg.exe")) {
-  Write-Host "Tai FFmpeg (~100MB)..."
-  curl.exe -fsSL -o "$R\ff.zip" "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
+  Write-Host "Tai FFmpeg 7.1 (~100MB)..."
+  $fr = Invoke-RestMethod -UseBasicParsing -UserAgent "BlueRoblox" "https://api.github.com/repos/BtbN/FFmpeg-Builds/releases/tags/latest"
+  $fa = $fr.assets | Where-Object { $_.name -match '^ffmpeg-n7\.1.*-win64-gpl-7\.1\.zip$' } | Select-Object -First 1
+  if (-not $fa) { $fa = $fr.assets | Where-Object { $_.name -match '^ffmpeg-n7\..*-win64-gpl-7\.\d+\.zip$' } | Select-Object -First 1 }
+  if (-not $fa) { throw "Khong tim thay ban FFmpeg 7.x tren GitHub BtbN — gui ket qua cho ho tro" }
+  Write-Host "  ban: $($fa.name)"
+  curl.exe -fsSL -o "$R\ff.zip" $fa.browser_download_url
+  Set-Content "$R\ff71.ok" "1"
   Expand-Archive -Force "$R\ff.zip" "$R\fftmp"
   Copy-Item -Force (Get-ChildItem "$R\fftmp" -Recurse -Filter ffmpeg.exe | Select-Object -First 1).FullName "$R\ffmpeg.exe"
   Remove-Item -Recurse -Force "$R\ff.zip", "$R\fftmp" }

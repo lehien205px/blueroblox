@@ -4,7 +4,7 @@ Bản v2 chia hệ thống làm 4 phần:
 
 | Phần | Làm gì |
 |---|---|
-| **Web** blueroblox.shop | Chỉ còn: đăng ký, nạp tiền, **mua máy (chọn RAM · CPU · Android 9/12/7)**, danh sách máy, gia hạn, nâng cấp, chia sẻ. Không còn màn điều khiển → web nhẹ, load nhanh. |
+| **Web** cloudblue.vn (trước đây blueroblox.shop) | Chỉ còn: đăng ký, nạp tiền, **mua máy (chọn RAM · CPU · Android 9/12/7)**, danh sách máy, gia hạn, nâng cấp, chia sẻ. Không còn màn điều khiển → web nhẹ, load nhanh. |
 | **App PC cho khách** (BlueRobloxPC.exe) | Đăng nhập → thấy máy → bấm **Điều khiển** → cửa sổ máy mượt (mở nhiều máy cùng lúc được). |
 | **App Android** (cập nhật) | Màn điều khiển dùng trình phát hình gốc của điện thoại (không còn trang web bên trong). |
 | **Máy chủ** (bảng BlueRoblox) | Thêm dịch vụ **phát hình app** (bluestream, cổng 8189). Mỗi máy chủ chọn 1 giả lập: **LDPlayer 9 = Android 9**, **MuMu = Android 12 + 7** (hoặc MEmu = Android 7). Đơn khách tự chạy về đúng máy chủ. |
@@ -75,8 +75,8 @@ Bản .exe cho khách: GitHub → **Actions** → *Build PC client* xong → web
 ### Bước 6 (nên làm) — Đường dự phòng qua Cloudflare
 Cho khách ở mạng chặn cổng lạ:
 1. Cloudflare → Zero Trust → Networks → Tunnels → đường hầm của máy 1 → **Public Hostname** → **Add**:
-   subdomain `stream`, domain `blueroblox.shop`, Type `HTTP`, URL `localhost:8020` → Save.
-2. Thêm dòng vào `C:\blue\cloudphone.conf`:  `STREAM_WS=wss://stream.blueroblox.shop/v2/stream`
+   subdomain `stream`, domain `cloudblue.vn`, Type `HTTP`, URL `localhost:8020` → Save.
+2. `python C:\blue\doi-ten-mien.py cloudblue.vn` tự ghi `STREAM_WS=wss://stream.cloudblue.vn/v2/stream` vào `cloudphone.conf`.
 3. Tắt/bật dịch vụ **phat-hinh** trong bảng.
 
 ---
@@ -84,7 +84,7 @@ Cho khách ở mạng chặn cổng lạ:
 ## Thêm máy chủ MuMu (Android 12 + Android 7)
 
 1. Cài **MuMu Player** bản chính thức từ trang MuMu (mumuplayer.com). Không dùng bản sửa / bản tải lại.
-2. Cài BlueRoblox như máy chủ 2 cũ (`setup.ps1 -Node win3 -PubHost phone3.blueroblox.shop`), dán khoá, nối Cloudflare.
+2. Cài BlueRoblox như máy chủ 2 cũ (`setup.ps1 -Node win3 -PubHost phone3.cloudblue.vn`), dán khoá, nối Cloudflare.
 3. Bảng hỏi giả lập → chọn **MuMu** (bán Android 12 và 7).
 4. **Máy mẫu Android 7**: trong MuMu Multi-instance tạo 1 máy **Android 7**, đặt tên đúng `tpl_a7`.
    Nếu MuMu mặc định tạo Android 12 thì làm thêm 1 máy Android 12 tên `tpl_a12` (để chắc chắn). Máy mẫu không bao giờ bị xoá.
@@ -95,6 +95,25 @@ Cho khách ở mạng chặn cổng lạ:
 MEmu cũng được (chọn **MEmu** trong bảng): Android 7 tạo sẵn; Android 12 cần máy mẫu `tpl_a12`.
 
 ---
+
+## Tên miền cloudblue.vn (05/11/2026)
+`blueroblox.shop` bị nơi bán khoá (`clientHold`) chiều 04/11 → chuyển web sang **cloudblue.vn** (Tenten → nameserver Cloudflare → Vercel).
+Những chỗ phụ thuộc tên miền và đã đổi:
+
+| Chỗ | Tên miền mới |
+|---|---|
+| Vercel → Domains | `cloudblue.vn` (chính), `www.cloudblue.vn` chuyển về đó. Bản ghi A `@` + CNAME `www` ở Cloudflare để **mây xám** |
+| Đường hầm Cloudflare (máy 1) | `phone.cloudblue.vn` → `http://localhost:8010`, `stream.cloudblue.vn` → `http://localhost:8020` (máy 2: `phone2` / `stream2`) |
+| `cloudphone.conf` | `python C:\blue\doi-ten-mien.py cloudblue.vn` (máy 2: thêm `phone2`) — tự sửa PUBLIC_BASE, STREAM_WS, CPAPI_ORIGINS, NOTIFY_URL + link máy khách cũ |
+| Supabase | Auth → URL Configuration (Site URL + Redirect URLs) · SQL Editor chạy `doi-ten-mien-cloudblue.sql` (settings.data.web + đổi địa chỉ Database Webhooks) |
+| SePay webhook | `https://cloudblue.vn/api/sepay-webhook` |
+| Bot Telegram | `setWebhook?url=https://cloudblue.vn/api/telegram&secret_token=…` |
+| Vercel env | `SITE_URL=https://cloudblue.vn` (nếu có biến này) |
+
+- App PC + app Android (từ v1.37) đọc tên miền web ở Supabase `settings.data.web` → lần sau đổi tên miền chỉ cần sửa dòng đó, không phải cập nhật app.
+  App Android tự cập nhật: web hỏng thì lấy `app.json` + APK thẳng trên GitHub.
+- Đường điều khiển chính (IP:8189) không phụ thuộc tên miền; tên miền chỉ cho web, nút công cụ dự phòng, báo Telegram.
+- `vercel.json`: khi `blueroblox.shop` mở lại sẽ tự chuyển sang `cloudblue.vn` (trừ `/api/…` để webhook cũ vẫn chạy).
 
 ## App máy chủ dạng .exe (không cần cài Python) — tuỳ chọn
 GitHub → Actions → **Build server exe** → Run workflow → tải `BlueRobloxServer.zip` ở Artifacts (chỉ admin).

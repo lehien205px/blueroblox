@@ -33,8 +33,8 @@ Response:
     "direct": [ {"host": "192.168.1.6", "port": 8189, "lan": true},
                 {"host": "1.54.69.205", "port": 8189} ],
     "cert":   "5f1c…e2",                                  // sha256 of the server TLS cert (DER), hex lowercase
-    "ws":     "wss://stream.blueroblox.shop/v2/stream",   // may be null/missing
-    "api":    "https://phone.blueroblox.shop"             // cpapi base for actions (reboot, upload…)
+    "ws":     "wss://stream.cloudblue.vn/v2/stream",      // may be null/missing
+    "api":    "https://phone.cloudblue.vn"                // cpapi base for actions (reboot, upload…)
   }
 }
 ```
@@ -126,7 +126,7 @@ Meta: SHIFT_ON 0x1 · ALT_ON 0x2 · CTRL_ON 0x1000 · META_ON 0x10000.
 
 ## 4. Actions that do not need the video link
 
-Unchanged cpapi endpoints, called with `Authorization: Bearer <access token>` on `stream.api` (fallback `https://phone.blueroblox.shop`):
+Unchanged cpapi endpoints, called with `Authorization: Bearer <access token>` on `stream.api` (fallback `https://phone.cloudblue.vn`):
 
 * `GET  {api}/cpapi/<phone id>/info` → status / online / booting
 * `POST {api}/cpapi/<phone id>/reboot`

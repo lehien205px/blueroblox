@@ -303,7 +303,7 @@ def configure(idx, ram, cpu, res, dpi):
     ram = min(float(ram), MAX_RAM); cpu = min(float(cpu), MAX_CPU)
     for k, v in (("memory", int(float(ram) * 1024)), ("cpus", max(1, int(round(float(cpu))))), ("is_customed_resolution", 1),
                  ("resolution_width", w), ("resolution_height", h), ("vbox_dpi", int(dpi or auto_dpi(res))), ("enable_su", 1),
-                 ("graphics_render_mode", CONF.get("MEMU_RENDER", "0")),          # 0 = OpenGL: web/app THẤY ĐƯỢC hình 3D (Roblox…); DirectX (1) chỉ thấy nút, cảnh 3D đen
+                 ("graphics_render_mode", CONF.get("MEMU_RENDER", "1")),          # 1 = DirectX: MƯỢT (OpenGL 0 thấy 3D trên web nhưng máy vẽ chậm gấp nhiều lần)
                  ("gmem_opt", CONF.get("MEMU_GMEM_OPT", "1")),                    # GPU memory optimization: BẬT (game cần). Tắt: MEMU_GMEM_OPT=0
                  ("enable_audio", 0)):                                            # máy cloud không cần âm thanh → đỡ CPU
         memuc("setconfigex", "-i", idx, k, v, timeout=60)

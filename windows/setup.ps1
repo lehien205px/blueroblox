@@ -44,7 +44,7 @@ if (-not (Get-Command curl.exe -ErrorAction SilentlyContinue)) {
   Remove-Item -Recurse -Force "$B\curltmp", "$B\curl.zip"
   $mp = [Environment]::GetEnvironmentVariable("Path", "Machine")
   if ($mp -notlike "*$B\bin*") { [Environment]::SetEnvironmentVariable("Path", "$mp;$B\bin", "Machine") }
-  RefreshPath; Ok "curl $((& curl.exe --version | Select-Object -First 1) -replace ' \(.*','')" }
+  RefreshPath; Ok "curl da cai vao C:\blue\bin" }
 
 Step "1/7 Python"
 $PY = "C:\Program Files\Python312\python.exe"
@@ -132,7 +132,8 @@ MEMU_RENDER=1
 MEMU_GMEM_OPT=1
 POOL_SIZE=1
 "@ | Set-Content -Encoding utf8 "$B\cloudphone.conf" }
-Ok "$B\cloudphone.conf  (may chu: $((Select-String "$B\cloudphone.conf" -Pattern '^NODE_ID=').Line) · $((Select-String "$B\cloudphone.conf" -Pattern '^PUBLIC_BASE=').Line))"
+$nl = (Get-Content "$B\cloudphone.conf" | Where-Object { $_ -match '^(NODE_ID|PUBLIC_BASE)=' }) -join "  "
+Ok "$B\cloudphone.conf  ($nl)"
 
 Step "7/7 Tu chay khi bat may"
 $lnk = "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\StartUp\BlueRoblox.lnk"

@@ -53,8 +53,8 @@ if (-not $p) { throw "Khong thay cua so LDPlayer dang mo. Bat may LDPlayer (cua 
 $h = $p.MainWindowHandle
 if ([W]::IsIconic($h)) { [W]::ShowWindow($h, 9) | Out-Null; Start-Sleep 1 }
 [W]::SetWindowPos($h, [IntPtr]::Zero, 0, 0, 0, 0, 0x0001 -bor 0x0004) | Out-Null; Start-Sleep 1   # đưa về góc trên-trái màn hình (giữ cỡ)
-$r = New-Object W+RECT; [W]::GetWindowRect($h, [ref]$r) | Out-Null
-$x = [Math]::Max(0, $r.L); $y = [Math]::Max(0, $r.T); $w = ($r.R - $x); $hh = ($r.B - $y); $w -= $w % 2; $hh -= $hh % 2
+$rc = New-Object W+RECT; [W]::GetWindowRect($h, [ref]$rc) | Out-Null      # KHÔNG đặt tên $r — PowerShell coi $r và $R là một (ghi đè thư mục)
+$x = [Math]::Max(0, $rc.L); $y = [Math]::Max(0, $rc.T); $w = ($rc.R - $x); $hh = ($rc.B - $y); $w -= $w % 2; $hh -= $hh % 2
 Ok "cua so '$($p.MainWindowTitle)' tai ($x,$y) co ${w}x${hh}  — DUNG thu nho / che cua so nay khi dang thu"
 
 # 4) Bật máy chủ WebRTC + bắt đầu quay & nén

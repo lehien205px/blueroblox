@@ -18,12 +18,10 @@ function Ok($m) { Write-Host "  [OK] $m" -ForegroundColor Green }
 if ((Test-Path "$R\ffmpeg.exe") -and -not (Test-Path "$R\ff71.ok")) { Remove-Item "$R\ffmpeg.exe" }
 if (-not (Test-Path "$R\ffmpeg.exe")) {
   Write-Host "Tai FFmpeg 7.1 (~100MB)..."
-  $fr = Invoke-RestMethod -UseBasicParsing -UserAgent "BlueRoblox" "https://api.github.com/repos/BtbN/FFmpeg-Builds/releases/tags/latest"
-  $fa = $fr.assets | Where-Object { $_.name -match '^ffmpeg-n7\.1.*-win64-gpl-7\.1\.zip$' } | Select-Object -First 1
-  if (-not $fa) { $fa = $fr.assets | Where-Object { $_.name -match '^ffmpeg-n7\..*-win64-gpl-7\.\d+\.zip$' } | Select-Object -First 1 }
-  if (-not $fa) { throw "Khong tim thay ban FFmpeg 7.x tren GitHub BtbN — gui ket qua cho ho tro" }
-  Write-Host "  ban: $($fa.name)"
-  curl.exe -fsSL -o "$R\ff.zip" $fa.browser_download_url
+  # bản 7.1 của Gyan (mirror chính thức trên GitHub GyanD/codexffmpeg) — dùng NVENC API 12.x
+  curl.exe -fsSL -o "$R\ff.zip" "https://github.com/GyanD/codexffmpeg/releases/download/7.1.1/ffmpeg-7.1.1-essentials_build.zip"
+  if ($LASTEXITCODE -ne 0) { curl.exe -fsSL -o "$R\ff.zip" "https://github.com/GyanD/codexffmpeg/releases/download/7.1/ffmpeg-7.1-essentials_build.zip" }
+  if ($LASTEXITCODE -ne 0) { throw "Khong tai duoc FFmpeg 7.1 — gui ket qua cho ho tro" }
   Set-Content "$R\ff71.ok" "1"
   Expand-Archive -Force "$R\ff.zip" "$R\fftmp"
   Copy-Item -Force (Get-ChildItem "$R\fftmp" -Recurse -Filter ffmpeg.exe | Select-Object -First 1).FullName "$R\ffmpeg.exe"
@@ -60,9 +58,15 @@ $p = $ps | Select-Object -First 1
 if (-not $p) { throw "Khong thay cua so LDPlayer dang mo. Bat may LDPlayer (cua so hien tren man hinh) roi chay lai." }
 $h = $p.MainWindowHandle
 if ([W]::IsIconic($h)) { [W]::ShowWindow($h, 9) | Out-Null; Start-Sleep 1 }
-[W]::SetWindowPos($h, [IntPtr]::Zero, 0, 0, 0, 0, 0x0001 -bor 0x0004) | Out-Null; Start-Sleep 1   # đưa về góc trên-trái màn hình (giữ cỡ)
+# Tool đang cho cửa sổ máy khách chạy ngầm (ngoài màn hình) và cứ ~1 phút lại ẩn → tạm TẮT ẩn trong lúc thử
+$cf = "C:\blue\cloudphone.conf"; $hideOld = (Get-Content $cf) -match '^HIDE_WINDOWS='
+(Get-Content $cf | Where-Object { $_ -notmatch '^HIDE_WINDOWS=' }) + "HIDE_WINDOWS=0" | Set-Content -Encoding utf8 $cf
 $rc = New-Object W+RECT; [W]::GetWindowRect($h, [ref]$rc) | Out-Null      # KHÔNG đặt tên $r — PowerShell coi $r và $R là một (ghi đè thư mục)
-$x = [Math]::Max(0, $rc.L); $y = [Math]::Max(0, $rc.T); $w = ($rc.R - $x); $hh = ($rc.B - $y); $w -= $w % 2; $hh -= $hh % 2
+$w = $rc.R - $rc.L; $hh = $rc.B - $rc.T
+[W]::SetWindowPos($h, [IntPtr]::Zero, 0, 0, 0, 0, 0x0001 -bor 0x0004 -bor 0x0040) | Out-Null; Start-Sleep 1   # đưa về góc trên-trái, hiện lên (giữ cỡ)
+[W]::GetWindowRect($h, [ref]$rc) | Out-Null
+$x = [Math]::Max(0, $rc.L); $y = [Math]::Max(0, $rc.T); $w -= $w % 2; $hh -= $hh % 2
+if ($w -lt 100 -or $hh -lt 100) { throw "Cua so LDPlayer co kich thuoc la (${w}x${hh}) — mo cua so may do bang tay roi chay lai" }
 Ok "cua so '$($p.MainWindowTitle)' tai ($x,$y) co ${w}x${hh}  — DUNG thu nho / che cua so nay khi dang thu"
 
 # 4) Bật máy chủ WebRTC + bắt đầu quay & nén
@@ -79,4 +83,7 @@ if ($Cpu) { $enc = @("-vf", "hwdownload,format=bgra,format=yuv420p", "-c:v", "li
 else      { $enc = @("-c:v", "h264_nvenc", "-preset", "p1", "-tune", "ull", "-zerolatency", "1", "-rc", "cbr", "-profile:v", "baseline") }
 try {
   & "$R\ffmpeg.exe" -hide_banner -loglevel warning -f lavfi -i $src @enc -bf 0 -g 120 -b:v 4M -maxrate 4M -bufsize 1M -f rtsp -rtsp_transport tcp "rtsp://127.0.0.1:8554/thu"
-} finally { Stop-Process -Id $mtx.Id -Force -ErrorAction SilentlyContinue; Write-Host "Da tat ban thu." }
+} finally {
+  Stop-Process -Id $mtx.Id -Force -ErrorAction SilentlyContinue
+  (Get-Content $cf | Where-Object { $_ -notmatch '^HIDE_WINDOWS=' }) + $(if ($hideOld) { $hideOld } else { @() }) | Set-Content -Encoding utf8 $cf   # trả lại cài đặt ẩn cửa sổ
+  Write-Host "Da tat ban thu (cua so may se tu chay ngam lai sau ~1 phut)." }

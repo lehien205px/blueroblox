@@ -13,7 +13,9 @@ PY = sys.executable
 mem, cpus = {}, {}
 for ln in (subprocess.run([PY, os.path.join(B, "phonectl.py"), "vmlist"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=300).stdout or "").splitlines():
     p = ln.split(",")
-    if len(p) >= 4 and p[0].strip().isdigit(): mem[p[1].strip()] = (int(p[0]), p[2].strip() == "1"); cpus[p[1].strip()] = p[3].strip()
+    if len(p) >= 4 and p[0].strip().isdigit():
+        if p[0].strip() == "0" and p[1].strip() == "LDPlayer": continue          # máy gốc số 0 của LDPlayer — giữ lại, không phải máy thừa
+        mem[p[1].strip()] = (int(p[0]), p[2].strip() == "1"); cpus[p[1].strip()] = p[3].strip()
 def cfg(n): return cpus.get(n, "?")
 ph = {p["name"]: p for p in json.load(open(os.path.join(B, "redroid", "phones.json"), encoding="utf-8")).get("phones", [])}
 web = {}

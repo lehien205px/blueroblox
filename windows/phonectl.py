@@ -504,7 +504,7 @@ def cmd_create(a):
             memuc("setconfigex", "-i", idx, "fps", clamp_fps(a.fps), timeout=60)
             apply_template(idx)
     else:
-        print(f"[1/4] Tạo máy Android 9 trên MEmu…", flush=True)
+        print(f"[1/4] Tạo máy Android 9 trên {'LDPlayer' if EMU == 'ld' else 'MEmu'}…", flush=True)
         with _Lock("memu"):
             for oi, ox in sorted(vms().items(), reverse=True):   # máy trùng tên còn sót trong MEmu (lần tạo trước bị ngắt) → xoá trước
                 if ox["name"] == a.name:
@@ -514,7 +514,7 @@ def cmd_create(a):
             m = re.search(r"index\D*(\d+)", r.stdout or "")
             idx = int(m.group(1)) if m else next(iter(sorted(set(vms()) - before)), None)
             if idx is None: print("LỖI tạo máy:", ((r.stdout or "") + (r.stderr or "")).strip()[-300:]); sys.exit(4)
-            print(f"[2/4] Đã tạo MEmu #{idx} → đặt tên, RAM, CPU, root…", flush=True)
+            print(f"[2/4] Đã tạo máy #{idx} → đặt tên, RAM, CPU, root…", flush=True)
             for _t in range(4):                                          # đổi tên PHẢI thành công — máy tìm theo TÊN (không thì thành "MEmuNN" mồ côi)
                 memuc("rename", "-i", idx, a.name, timeout=60)
                 if (vms().get(idx) or {}).get("name") == a.name: break
@@ -536,7 +536,7 @@ def cmd_create(a):
     if s.returncode not in (0, None) and "SUCCESS" not in (s.stdout or "").upper():
         print("CẢNH BÁO bật máy:", (s.stdout or s.stderr or "").strip()[-200:])
     ok = True if a.nowait else wait_boot(a.name, port)
-    print(f"✅ Đã tạo máy '{a.name}' (MEmu #{idx})  | cổng {port} | RAM {a.ram:g}GB CPU {a.cpu:g} | hết hạn {fmt(exp)}")
+    print(f"✅ Đã tạo máy '{a.name}' (#{idx})  | cổng {port} | RAM {a.ram:g}GB CPU {a.cpu:g} | hết hạn {fmt(exp)}")
     print("   Android đã khởi động xong, sẵn sàng điều khiển." if ok else "   CẢNH BÁO: máy chưa kết nối được trình điều khiển, sẽ tự thử lại.")
 
 def _need(name):

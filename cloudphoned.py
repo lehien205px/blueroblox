@@ -194,7 +194,7 @@ def adopt_old():
         for row in sb("GET", "cloud_phones?node=is.null&status=in.(active,expired,creating)&select=id,container") or []:
             if row.get("container") and phone_state(row["container"]): patch(row["id"], {"node": NODE_ID})
     except Exception as e: print("lỗi ghi server cho máy cũ:", e)
-NOTIFY_URL = CFG.get("NOTIFY_URL", "https://www.blueroblox.shop/api/notify-admin")   # blueroblox.shop chuyển hướng 308 sang www → gọi thẳng www
+NOTIFY_URL = CFG.get("NOTIFY_URL", "https://cloudblue.vn/api/notify-admin")   # tên miền chính (www.cloudblue.vn chuyển về đây) → gọi thẳng, không qua chuyển hướng
 def _lim():
     try: return max(50, min(100, int(CFG.get("LIMIT_PCT", "95"))))
     except ValueError: return 95

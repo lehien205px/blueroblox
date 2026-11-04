@@ -14,8 +14,8 @@ import datetime, hashlib, json, os, queue, re, secrets, subprocess, sys, threadi
 APP_VER = "1.0.0"
 SB = "https://nprftgodswlpzomcttal.supabase.co"
 KEY = "sb_publishable_qfNcnOMv70nq5LIlYXDJzg_UtdWHVze"          # khoá CÔNG KHAI (giống web + app Android)
-WEB = "https://blueroblox.shop"
-PHONE_API = "https://phone.blueroblox.shop"
+WEB = "https://cloudblue.vn"                    # web chính; Supabase settings.data.web ghi đè được (đổi tên miền không cần cập nhật app)
+PHONE_API = "https://phone.cloudblue.vn"        # chỉ dùng khi máy chủ chưa báo đường cpapi (stream.api)
 FROZEN = getattr(sys, "frozen", False)
 HERE = os.path.dirname(os.path.abspath(sys.executable if FROZEN else __file__))
 sys.path.insert(0, HERE)
@@ -806,11 +806,20 @@ class Shop:
 
     def site(self):
         rows = self.auth.rest("settings?id=eq.1&select=data") or []
-        return (rows[0].get("data") or {}) if rows else {}
+        d = (rows[0].get("data") or {}) if rows else {}
+        set_web(d.get("web"))
+        return d
 
     def live_count(self):
         try: return len(self.auth.rest(f"cloud_phones?user_id=eq.{self.auth.uid}&status=in.(pending,creating,active,expired,cancelling)&select=id") or [])
         except ApiError: return 0
+
+
+def set_web(u):
+    """Tên miền web do admin đặt trong Supabase (settings.data.web, VD https://cloudblue.vn) — chỉ nhận link https hợp lệ."""
+    global WEB
+    u = str(u or "").strip().rstrip("/")
+    if re.fullmatch(r"https://[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*\.[a-z]{2,}", u, re.I): WEB = u
 
 
 def is_ctv(prof): return prof.get("ctv_status") == "approved" and num(prof.get("ctv_discount")) > 0
@@ -1707,6 +1716,9 @@ class Launcher:
         def job():
             try:
                 rows = self.auth.phones()
+                if not getattr(self, "_site_ok", False):           # 1 lần mỗi lần mở app: lấy tên miền web hiện tại
+                    try: self.shop.site(); self._site_ok = True
+                    except Exception: pass
                 try: prof = self.shop.profile()
                 except ApiError as e:
                     if e.code == 401: raise

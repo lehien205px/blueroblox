@@ -849,7 +849,7 @@ class OrderDlg(Dlg):
         if self.left <= 0:
             self.loading(f"Mỗi tài khoản chỉ được thuê tối đa {mpu} máy — bạn đã có {have} máy.\nGia hạn máy đang có, hoặc xoá máy cũ (trên web) để thuê máy khác.")
             return
-        if self.st.get("maint"):
+        if self.st.get("maint") and self.prof.get("role") != "admin":           # admin vẫn thuê được khi bảo trì (giống web) để thử máy
             self.loading("Hệ thống đang bảo trì" + (": " + str(self.st.get("maint_msg")) if self.st.get("maint_msg") else "") + ". Vui lòng quay lại sau."); return
         self.s = {"ram": cl(2, p["min_ram"], p["max_ram"]), "cpu": cl(2, p["min_cpu"], p["max_cpu"]), "days": cl(7, p["min_days"], p["max_days"]),
                   "res": "720x1280", "fps": cl(30, p["min_fps"], p["max_fps"]), "qty": 1, "android": "9", "free": False}
@@ -861,6 +861,9 @@ class OrderDlg(Dlg):
     def build(self):
         tk = self.app.tk; p, s = self.pr, self.s; self.clear(); self.rows = []
         lo = lambda k: int(num(p.get(k)))
+        if self.prof.get("role") == "admin" and (self.st.get("maint") or self.st.get("online") is False):
+            self.label(self.body, "⚠ Đang bật BẢO TRÌ — khách không thuê được. Tài khoản admin vẫn thuê được (không giới hạn chỗ trống) để thử máy.",
+                       ("Segoe UI", 10, "bold"), WARN, wraplength=540).pack(fill="x", padx=18, pady=(14, 0))
         if free_live(p):
             fb = tk.Frame(self.body, bg=CARD, highlightbackground=WARN if s["free"] else LINE, highlightthickness=1); fb.pack(fill="x", padx=18, pady=(14, 0))
             v = tk.BooleanVar(value=s["free"])
@@ -959,7 +962,7 @@ class OrderDlg(Dlg):
     def upd(self):
         if not self.alive: return
         p, s = self.pr, self.s
-        if s["android"] not in and_list(p) or and_why(self.st, s["android"], s["ram"], s["cpu"]):     # bản đang chọn hết chỗ → tự đổi sang bản còn chỗ
+        if s["android"] not in and_list(p) or (self.prof.get("role") != "admin" and and_why(self.st, s["android"], s["ram"], s["cpu"])):  # hết chỗ → tự đổi bản còn chỗ
             ok = [v for v in and_list(p) if not and_why(self.st, v, s["ram"], s["cpu"])]
             if ok: s["android"] = "9" if "9" in ok else ok[0]
         for r in self.rows: r.paint()

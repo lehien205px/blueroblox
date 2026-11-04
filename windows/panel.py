@@ -15,6 +15,16 @@ LOGS = os.path.join(B, "logs"); os.makedirs(LOGS, exist_ok=True)
 CONF = os.path.join(B, "cloudphone.conf")
 RAW = "https://raw.githubusercontent.com/lehien205px/blueroblox/main"
 NOWIN = 0x08000000
+HIPRI = NOWIN | 0x00008000   # ABOVE_NORMAL — trình phát hình/cpapi/adb luôn được ưu tiên (Task Scheduler mặc định chạy THẤP → giật hình)
+def _boost_self():
+    """Bảng chạy từ Task Scheduler bị hạ ưu tiên (CPU 'Below normal', ổ đĩa/RAM 'thấp') và truyền xuống mọi tiến trình con → nâng lại."""
+    try:
+        k = ctypes.windll.kernel32; h = k.GetCurrentProcess()
+        k.SetPriorityClass(h, 0x00000020)                          # NORMAL cho chính bảng
+        class MP(ctypes.Structure): _fields_ = [("v", ctypes.c_ulong)]
+        k.SetProcessInformation(h, 0, ctypes.byref(MP(5)), 4)       # ProcessMemoryPriority = 5 (bình thường)
+        ctypes.windll.ntdll.NtSetInformationProcess(h, 33, ctypes.byref(ctypes.c_ulong(2)), 4)   # IoPriority = bình thường
+    except Exception: pass
 ENV = dict(os.environ, PATH=os.path.join(B, "platform-tools") + os.pathsep + os.environ.get("PATH", ""), PYTHONIOENCODING="utf-8", PYTHONUTF8="1", PYTHONUNBUFFERED="1")
 
 # ---------- màu Cloud Blue ----------
@@ -134,7 +144,7 @@ class Svc:
         if self.name == "ws-scrcpy": self.ui.adb_seen = adb_pid()
         try:
             self.p = subprocess.Popen(cmd, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
-                                      env=ENV, creationflags=NOWIN, bufsize=1, text=True, encoding="utf-8", errors="replace")
+                                      env=ENV, creationflags=HIPRI, bufsize=1, text=True, encoding="utf-8", errors="replace")
         except Exception as e:
             self.ui.say(self.name, f"✗ Không chạy được: {e}"); return
         self.ui.say(self.name, f"▶ Đã bật (pid {self.p.pid})")
@@ -280,7 +290,7 @@ class App:
         except Exception: pass
         # adb server do CHÍNH bảng giữ (không làm "con" của dịch vụ nào → tắt/bật dịch vụ không kéo adb chết theo)
         if n % 2 == 0 and on("ws-scrcpy") and not adb_pid():
-            subprocess.run([os.path.join(B, "platform-tools", "adb.exe"), "start-server"], capture_output=True, creationflags=NOWIN, env=ENV, timeout=30)
+            subprocess.run([os.path.join(B, "platform-tools", "adb.exe"), "start-server"], capture_output=True, creationflags=HIPRI, env=ENV, timeout=30)
             self._fix("adb bị tắt → bật lại adb")
         # trình phát hình / cổng bảo vệ không mở cổng ~16 giây → bật lại (tự tắt bản cũ giữ cổng)
         if on("ws-scrcpy") and self._bad("ws", not port_open(8000)) == 4: self._fix("trình phát hình :8000 không chạy → bật lại"); self._restart_svc("ws-scrcpy")
@@ -410,7 +420,7 @@ Write-Host '[OK] Tat bat buoc Windows Hello'
 $a = New-ScheduledTaskAction -Execute 'C:\Program Files\Python312\pythonw.exe' -Argument '"C:\blue\panel.py" --auto' -WorkingDirectory 'C:\blue'
 $t = New-ScheduledTaskTrigger -AtLogOn -User "$D\$U"
 $pr = New-ScheduledTaskPrincipal -UserId "$D\$U" -LogonType Interactive -RunLevel Highest
-$st = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -MultipleInstances IgnoreNew
+$st = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -MultipleInstances IgnoreNew -Priority 4
 Register-ScheduledTask -TaskName 'BlueRoblox' -Action $a -Trigger $t -Principal $pr -Settings $st -Force | Out-Null
 Remove-Item "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\StartUp\BlueRoblox.lnk" -ErrorAction SilentlyContinue
 Write-Host '[OK] Bang BlueRoblox tu mo bang quyen Admin khi dang nhap'
@@ -592,7 +602,7 @@ Write-Host '[OK] Khong ngu, khong tat man hinh'
     def start_all(self):
         if not os.path.isfile(os.path.join(B, "platform-tools", "adb.exe")): self.say("Tổng quan", "✗ Chưa cài — bấm ① Cài đặt trước"); return
         if len(conf().get("SUPABASE_SERVICE_KEY", "")) < 30: self.say("Tổng quan", "✗ Chưa có khoá Supabase — bấm ② trước"); return
-        subprocess.run([os.path.join(B, "platform-tools", "adb.exe"), "start-server"], capture_output=True, creationflags=NOWIN, env=ENV)
+        subprocess.run([os.path.join(B, "platform-tools", "adb.exe"), "start-server"], capture_output=True, creationflags=HIPRI, env=ENV)
         c = conf(); ENV["CF_API_TOKEN"] = c.get("CF_DNS_TOKEN", "")
         for n in SERVICES:
             if n == "duong-thang" and not (c.get("FAST_BASE") and os.path.isfile(os.path.join(B, "caddy.exe"))): continue   # chưa bật đường thẳng
@@ -813,6 +823,7 @@ Write-Host '[OK] Tat Xbox Game DVR'
         self.stop_all(); self.root.destroy()
 
 if __name__ == "__main__":
+    _boost_self()
     try:   # chỉ mở 1 bảng điều khiển
         _lock = socket.socket(); _lock.bind(("127.0.0.1", 47123))
     except OSError:

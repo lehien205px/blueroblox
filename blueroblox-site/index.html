@@ -2037,17 +2037,17 @@ window.BR_CONFIG = {
     <div class="cpguide" id="cp-guide"></div>
     <div class="cpgrid">
       <div class="cpf"><label class="cpl" for="cp-ram-x">RAM (GB)</label><div class="amts" id="cp-ram"></div>
-        <input class="in cpx" id="cp-ram-x" type="number" min="1" step="1" inputmode="numeric" placeholder="Hoặc tự nhập số GB, VD 32"></div>
+        <input hidden class="in cpx" id="cp-ram-x" type="number" min="1" step="1" inputmode="numeric" placeholder="Hoặc tự nhập số GB, VD 32"></div>
       <div class="cpf"><label class="cpl" for="cp-cpu-x">CPU (số nhân)</label><div class="amts" id="cp-cpu"></div>
-        <input class="in cpx" id="cp-cpu-x" type="number" min="1" step="1" inputmode="numeric" placeholder="Hoặc tự nhập số nhân, VD 12"></div>
+        <input hidden class="in cpx" id="cp-cpu-x" type="number" min="1" step="1" inputmode="numeric" placeholder="Hoặc tự nhập số nhân, VD 12"></div>
       <div class="cpf"><label class="cpl" for="cp-days-x">Số ngày thuê</label><div class="amts" id="cp-days"></div>
         <input class="in cpx" id="cp-days-x" type="number" min="1" step="1" inputmode="numeric" placeholder="Hoặc tự nhập số ngày, VD 45"></div>
       <div class="cpf"><label class="cpl" for="cp-qty-x">Số lượng máy (cùng cấu hình)</label><div class="amts" id="cp-qty"></div>
         <input class="in cpx" id="cp-qty-x" type="number" min="1" max="20" step="1" inputmode="numeric" placeholder="Hoặc tự nhập số máy, tối đa 20"></div>
       <div class="cpf"><label class="cpl" for="cp-res">Độ phân giải (rộng x cao)</label><div class="amts" id="cp-resq"></div>
-        <input class="in cpx" id="cp-res" type="text" autocomplete="off" placeholder="Hoặc tự nhập, VD 1080x2400"></div>
-      <div class="cpf"><label class="cpl" for="cp-fps-x">FPS (khung hình/giây — càng cao càng mượt, càng tốn CPU)</label><div class="amts" id="cp-fps"></div>
-        <input class="in cpx" id="cp-fps-x" type="number" min="10" max="120" step="1" inputmode="numeric" placeholder="Hoặc tự nhập FPS, VD 45"></div>
+        <input hidden class="in cpx" id="cp-res" type="text" autocomplete="off" placeholder="Hoặc tự nhập, VD 1080x2400"></div>
+      <div class="cpf"><label class="cpl" for="cp-fps-x">FPS (khung hình/giây)</label><div class="amts" id="cp-fps"></div>
+        <input hidden class="in cpx" id="cp-fps-x" type="number" min="10" max="120" step="1" inputmode="numeric" placeholder="Hoặc tự nhập FPS, VD 45"></div>
     </div>
     </div>
     <div class="cpfoot">
@@ -4387,9 +4387,10 @@ $("tg-test") && ($("tg-test").onclick = async () => {
 
 
 /* ===================== ĐIỆN THOẠI ĐÁM MÂY (khách) ===================== */
-const CP_RAM = [2, 4, 6, 8, 12, 16, 24, 32], CP_CPU = [2, 4, 6, 8], CP_DAYS = [7, 15, 30, 60], CP_FPS = [30, 60, 90, 120], CP_QTY = [1, 2, 5, 10];
-const CP_RES = [["540x960", "Nhẹ máy"], ["720x1280", "HD"], ["720x1600", "HD+ dài"], ["1080x1920", "Full HD"],
-  ["1080x2340", "FHD+ dài"], ["1080x2400", "FHD+ 20:9"], ["1280x720", "HD ngang"], ["1920x1080", "FHD ngang"]];
+// Máy chủ chạy LDPlayer 9: mỗi máy tối đa 8GB RAM · 8 nhân → chỉ bán 1–8 (gọn, khách khỏi chọn gói máy chủ không chạy được)
+const CP_HARD = { ram: 8, cpu: 8, fps: 60 };
+const CP_RAM = [1, 2, 3, 4, 5, 6, 7, 8], CP_CPU = [1, 2, 3, 4, 5, 6, 7, 8], CP_DAYS = [7, 15, 30, 60], CP_FPS = [30, 60], CP_QTY = [1, 2, 5, 10];
+const CP_RES = [["540x960", "Nhẹ máy"], ["720x1280", "HD"], ["720x1600", "HD+ dài"], ["1080x1920", "Full HD"]];
 const CP_GRACE_MIN = 30;
 const CP_DEF = { price_ram_gb_day: 2500, price_cpu_day: 2000, min_ram: 1, max_ram: 16, min_cpu: 1, max_cpu: 8, min_days: 1, max_days: 90, min_fps: 10, max_fps: 120 };
 const CP_CARD_DEF = { name: "Điện thoại đám mây (Cloud Phone)", feats: "Android 24/7, Chạy game, Điều khiển web",
@@ -4420,8 +4421,10 @@ async function cpLoadPricing() {
   try {
     const { data, error } = await sb.from("cloudphone_pricing").select("*").eq("id", 1).maybeSingle();
     if (!error && data) { CPpricing = { ...CP_DEF }; for (const k in data) if (data[k] != null) CPpricing[k] = data[k]; }
+    if (CPpricing) for (const [k, h] of [["max_ram", CP_HARD.ram], ["max_cpu", CP_HARD.cpu], ["free_max_ram", CP_HARD.ram], ["free_max_cpu", CP_HARD.cpu], ["max_fps", CP_HARD.fps]])
+      if (CPpricing[k] != null) CPpricing[k] = Math.min(+CPpricing[k] || h, h);       // không bán vượt sức máy ảo
   } catch (e) {}
-  if (!CPpricing) CPpricing = { ...CP_DEF };
+  if (!CPpricing) CPpricing = { ...CP_DEF, max_ram: CP_HARD.ram, max_cpu: CP_HARD.cpu, max_fps: CP_HARD.fps };
   try { renderFreeBar(); } catch (e) {}
   return CPpricing;
 }

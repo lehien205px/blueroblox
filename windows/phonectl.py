@@ -750,6 +750,12 @@ def cmd_render(a):
     memuc("setconfigex", "-i", IDX(p), "graphics_render_mode", m, timeout=60)
     start_phone(p); ok = wait_boot(a.name, p["port"], apps=False)
     print(f"✅ '{a.name}' → vẽ bằng {a.mode.upper()}" + ("" if ok else " (đang kết nối lại)"))
+def cmd_gfxget(a):
+    """In chế độ vẽ hiện tại của máy: opengl | directx."""
+    st, p = _need(a.name)
+    o = (memuc("getconfigex", "-i", IDX(p), "graphics_render_mode", timeout=30).stdout or "")
+    m = re.search(r"Value:\s*(\d)", o)
+    print("GFX=" + ("opengl" if m and m.group(1) == "0" else "directx" if m else "unknown"))
 def cmd_wallpaper(a):
     v = vms()
     for p in load()["phones"]:
@@ -796,6 +802,7 @@ def main():
     lr = s.add_parser("liveres"); lr.add_argument("name"); lr.add_argument("--res", required=True); lr.set_defaults(f=cmd_liveres)
     pi = s.add_parser("preinstall"); pi.add_argument("name", nargs="?", default=""); pi.add_argument("--all", action="store_true"); pi.add_argument("--force", action="store_true"); pi.set_defaults(f=cmd_preinstall)
     rf = s.add_parser("rootfix"); rf.add_argument("name", nargs="?", default=""); rf.add_argument("--all", action="store_true"); rf.add_argument("--force", action="store_true"); rf.set_defaults(f=cmd_rootfix)
+    gg = s.add_parser("gfxget"); gg.add_argument("name"); gg.set_defaults(f=cmd_gfxget)
     rd = s.add_parser("render"); rd.add_argument("name"); rd.add_argument("mode", choices=["opengl", "directx"]); rd.set_defaults(f=cmd_render)
     wp = s.add_parser("wallpaper"); wp.add_argument("name", nargs="?", default=""); wp.add_argument("--all", action="store_true"); wp.add_argument("--force", action="store_true"); wp.set_defaults(f=cmd_wallpaper)
     tp = s.add_parser("template"); tp.add_argument("name", nargs="?", default=""); tp.add_argument("--apply", action="store_true"); tp.set_defaults(f=cmd_template)

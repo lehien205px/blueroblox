@@ -1226,6 +1226,24 @@ class H(BaseHTTPRequestHandler):
             run_job(jid, work)
             return self.send_json(200, {"job": jid})
 
+        if act == "gfx" and self.command == "GET":           # CHẾ ĐỘ HÌNH (máy MEmu): mượt (DirectX) hay hiện 3D (OpenGL)
+            if not cont: return self.send_json(409, {"error": "Không xác định được máy."})
+            r = subprocess.run(["python3", os.path.join(HOME, "phonectl.py"), "gfxget", cont], capture_output=True, timeout=60)
+            m = re.search(r"GFX=(\w+)", out(r))
+            return self.send_json(200, {"mode": m.group(1) if m else "unknown"})
+        if act == "gfx" and self.command == "POST":
+            mode = str(self.jbody().get("mode") or "")
+            if mode not in ("opengl", "directx"): return self.send_json(400, {"error": "Chế độ không hợp lệ."})
+            if not cont: return self.send_json(409, {"error": "Không xác định được máy."})
+            jid = new_job(me["uid"], "Đổi chế độ hình")
+            def work(j):
+                JOBS[j]["msg"] = "Máy đang khởi động lại với chế độ mới (khoảng 1–2 phút)…"
+                r = subprocess.run(["python3", os.path.join(HOME, "phonectl.py"), "render", cont, mode], capture_output=True, timeout=600)
+                if r.returncode: raise RuntimeError("Không đổi được: " + out(r)[-200:])
+                return ("Đã chuyển sang MƯỢT." if mode == "directx" else "Đã chuyển sang HIỆN 3D.") if wait_ready(cont, port) else "Đã đổi, đang kết nối lại…"
+            run_job(jid, work)
+            return self.send_json(200, {"job": jid})
+
         if act == "reboot" and self.command == "POST":
             if not cont: return self.send_json(409, {"error": "Không xác định được máy."})
             jid = new_job(me["uid"], "Khởi động lại")

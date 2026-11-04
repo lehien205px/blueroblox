@@ -127,3 +127,34 @@ Không cập nhật khi đang có máy "Đang tạo…".
 | Máy khách "Đang tạo…" mãi | Web → Bảng quản trị → Máy chủ → máy đó có đang **Ngừng nhận máy** không |
 | MEmu `connect console failed` / máy không tạo được | Khởi động lại Windows |
 | Lag cả máy | `kiemtra.py` xem tổng nhân (> số luồng = quá tải) · máy thừa → `cleanup` · chế độ hình phải DirectX |
+
+---
+
+## Hình kiểu Parsec (WebRTC) — mượt, ít trễ
+
+Bảng BlueRoblox có thêm dịch vụ **phat-hinh**. Lần đầu bật, nó tự tải FFmpeg 6.1 và MediaMTX (khoảng 2 phút) rồi tự mở tường lửa.
+Khi khách mở máy trên web hoặc app, hình được quay thẳng từ cửa sổ LDPlayer, nén bằng card NVIDIA và gửi qua UDP. Nếu không nối được, nó tự quay về hình cũ.
+
+**Bắt buộc: mở cổng trên modem/router (192.168.1.1) → NAT / Port Forwarding / Virtual Server**
+
+| Máy chủ | Cổng ngoài | Cổng trong | Giao thức | IP trong |
+|---|---|---|---|---|
+| Máy 1 | 8189 | 8189 | UDP **và** TCP (hoặc "Both") | 192.168.1.6 |
+| Máy 2 | 8190 | 8190 | UDP và TCP | IP máy 2 |
+| Máy 3 | 8191 | 8191 | UDP và TCP | IP máy 3 |
+
+Từ máy 2 trở đi phải thêm dòng `RTC_UDP_PORT=8190` (máy 3 đặt 8191…) vào `C:\blue\cloudphone.conf`, rồi bấm Tắt rồi Bật dịch vụ phat-hinh trong bảng.
+
+**Cài đặt thêm trong cloudphone.conf (không bắt buộc)**
+
+| Dòng | Ý nghĩa |
+|---|---|
+| `RTC=0` | Tắt hình kiểu mới, dùng hình cũ |
+| `RTC_FPS=60` | Số khung hình mỗi giây |
+| `RTC_MBPS=4` | Băng thông mỗi máy (đặt 3 nếu mạng nhà upload yếu) |
+| `RTC_CPU=1` | Nén bằng CPU thay vì card |
+| `RTC_PUBLIC_IP=` | IP mạng nhà; để trống thì tự dò |
+
+**Kiểm tra**
+- Nhật ký từng máy nằm ở `C:\blue\rtc\log\<tên máy>.txt`. Dòng "gửi 60 khung/giây · cửa sổ vẽ 60/giây" là tốt.
+- Xem hình cũ để so sánh: thêm `&cprtc=0` vào cuối địa chỉ trang điều khiển.

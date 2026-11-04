@@ -38,6 +38,7 @@ SERVICES = {   # tên: (thư mục chạy, lệnh)
     "cpapi": (B, [PY, "-u", "run.py", "cpapi.py"]),
     "cloudphoned": (B, [PY, "-u", "run.py", "cloudphoned.py"]),
     "duong-thang": (B, [os.path.join(B, "caddy.exe"), "run", "--config", os.path.join(B, "Caddyfile"), "--adapter", "caddyfile"]),
+    "phat-hinh": (B, [PY, "-u", "phathinh.py", "--server"]),      # hình kiểu Parsec (WebRTC) — tự tải FFmpeg/MediaMTX lần đầu
 }
 FAST_HOST, FAST_PORT, ZONE = "fast.blueroblox.shop", 8443, "blueroblox.shop"
 CADDY_URL = "https://caddyserver.com/api/download?os=windows&arch=amd64&p=github.com%2Fcaddy-dns%2Fcloudflare"
@@ -121,7 +122,7 @@ def kill_tree(pid):
     for x in reversed(seen):
         if x != keep: subprocess.run(["taskkill", "/PID", x, "/F"], capture_output=True, creationflags=NOWIN)
 
-PORTS = {"ws-scrcpy": 8000, "cpapi": 8010, "duong-thang": 8443}
+PORTS = {"ws-scrcpy": 8000, "cpapi": 8010, "duong-thang": 8443, "phat-hinh": 8889}
 def free_port(port):
     """Tắt chương trình CŨ còn giữ cổng (vd ws-scrcpy cũ mất kết nối adb → web đen màn, bản mới không mở được cổng: EADDRINUSE)."""
     out = subprocess.run(["netstat", "-ano", "-p", "TCP"], capture_output=True, text=True, creationflags=NOWIN).stdout or ""

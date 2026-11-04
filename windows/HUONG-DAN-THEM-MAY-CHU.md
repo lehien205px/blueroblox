@@ -119,6 +119,8 @@ Không cập nhật khi đang có máy "Đang tạo…".
 |---|---|
 | `'New-Item' is not recognized` | Đang ở cmd → gõ `powershell` rồi dán lại |
 | `curl.exe is not recognized` | Windows cũ → dùng đúng lệnh `Invoke-WebRequest` ở Bước 2 (setup tự cài curl) |
+| Đèn `phoneN.blueroblox.shop` đỏ, `curl` báo `Could not resolve host` | DNS modem nhớ kết quả cũ → setup đã tự đặt DNS 1.1.1.1/8.8.8.8; chạy lại: `Get-NetAdapter \| Where-Object Status -eq Up \| ForEach-Object { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ServerAddresses ("1.1.1.1","8.8.8.8","2606:4700:4700::1111","2001:4860:4860::8888") }; ipconfig /flushdns` |
+| Cloudflare: đường hầm Healthy nhưng **Routes = 0** | Tunnel → **+ Add route** → Published application → `phoneN` · `blueroblox.shop` · Service URL **`http://localhost:8010`** |
 | `Khong thay gia lap` | Cài LDPlayer 9 trước rồi chạy lại lệnh Bước 2 |
 | adb `offline` với máy LDPlayer | Tool tự bật ADB khi bật máy; máy tạo tay trong LDPlayer → Settings → Other → ADB debugging = Open local connection |
 | Bảng vẫn ghi "MEmu" / đèn đỏ sau cập nhật | ⏻ Thoát hẳn → mở lại biểu tượng BlueRoblox → 🚀 |

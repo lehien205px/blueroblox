@@ -30,6 +30,8 @@ Set-Location $B
 $env:Path = [Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [Environment]::GetEnvironmentVariable("Path", "User")
 function Dl($url, $out) { Invoke-WebRequest -UseBasicParsing -UserAgent "BlueRoblox-setup" -Uri $url -OutFile $out }
 function RefreshPath { $env:Path = [Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [Environment]::GetEnvironmentVariable("Path", "User") }
+# DNS Cloudflare + Google (IPv4 + IPv6): DNS của modem/nhà mạng hay nhớ "không có tên" → tên miền phoneN.blueroblox.shop mới tạo không vào được
+try { Get-NetAdapter | Where-Object Status -eq Up | ForEach-Object { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ServerAddresses ("1.1.1.1","8.8.8.8","2606:4700:4700::1111","2001:4860:4860::8888") }; ipconfig /flushdns | Out-Null } catch {}
 $WG = [bool](Get-Command winget -ErrorAction SilentlyContinue)   # Windows 10 bản cũ / Server không có winget → tải thẳng bộ cài chính thức
 
 # Windows 10 bản cũ (trước 1803) không có sẵn curl.exe → tải curl chính thức (curl.se) vào C:\blue\bin + thêm vào PATH

@@ -260,6 +260,38 @@ public final class Api {
         return o;
     }
 
+    // ---------------- cpapi trên máy chủ đang giữ máy (stream.api của cloudphone_endpoint) ----------------
+    /** Gốc cpapi: base = stream.api (VD https://phone.blueroblox.shop); rỗng / không phải https → máy chủ mặc định. */
+    public static String cpRoot(String base) {
+        String b = base == null ? "" : base.trim();
+        if (!b.startsWith("https://")) b = PHONE;
+        while (b.endsWith("/")) b = b.substring(0, b.length() - 1);
+        return b.endsWith("/cpapi") ? b : b + "/cpapi";
+    }
+
+    public static JSONObject cpAt(String base, String method, String path, JSONObject body) throws Exception {
+        Res r = http(method, cpRoot(base) + "/" + path, "application/json", body == null ? null : js(body),
+                new String[][]{{"Authorization", "Bearer " + token()}});
+        if (r.code >= 300) throw new ApiError(r.code, errorText(r));
+        String t = r.text().trim();
+        return t.startsWith("{") ? new JSONObject(t) : new JSONObject();
+    }
+
+    public static byte[] cpBytesAt(String base, String path) throws Exception {
+        Res r = http("GET", cpRoot(base) + "/" + path, null, null, new String[][]{{"Authorization", "Bearer " + token()}});
+        if (r.code >= 300) throw new ApiError(r.code, errorText(r));
+        return r.body;
+    }
+
+    public static JSONObject cpUploadAt(String base, String path, byte[] chunk) throws Exception {
+        Res r = http("POST", cpRoot(base) + "/" + path, "application/octet-stream", chunk, new String[][]{{"Authorization", "Bearer " + token()}});
+        JSONObject o;
+        try { o = new JSONObject(r.text()); } catch (Exception e) { o = new JSONObject(); }
+        if (r.code == 409 && o.has("size")) return o;
+        if (r.code >= 300) throw new ApiError(r.code, errorText(r));
+        return o;
+    }
+
     /** Mở phiên điều khiển: lấy cookie cho trình phát hình. */
     public static String cpSession() throws Exception {
         Res r = http("POST", CPAPI + "/session", "application/json", "{}".getBytes(StandardCharsets.UTF_8),

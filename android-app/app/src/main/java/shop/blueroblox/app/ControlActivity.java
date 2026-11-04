@@ -1,37 +1,40 @@
 package shop.blueroblox.app;
 
-import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.Dialog;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.ContentValues;
+import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.database.Cursor;
 import android.graphics.Color;
+import android.graphics.Typeface;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.provider.MediaStore;
 import android.provider.OpenableColumns;
+import android.text.Editable;
 import android.text.InputType;
+import android.text.TextWatcher;
 import android.view.Gravity;
+import android.view.InputDevice;
+import android.view.KeyEvent;
 import android.view.View;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
 import android.view.WindowManager;
-import android.webkit.CookieManager;
-import android.webkit.JavascriptInterface;
-import android.webkit.WebChromeClient;
-import android.webkit.WebResourceError;
-import android.webkit.WebResourceRequest;
-import android.webkit.WebSettings;
-import android.webkit.WebView;
-import android.webkit.WebViewClient;
+import android.view.inputmethod.BaseInputConnection;
+import android.view.inputmethod.EditorInfo;
+import android.view.inputmethod.InputConnection;
+import android.view.inputmethod.InputConnectionWrapper;
+import android.view.inputmethod.InputMethodManager;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.FrameLayout;
@@ -45,46 +48,62 @@ import org.json.JSONObject;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URLEncoder;
+import java.util.Locale;
 import java.util.Random;
+import java.util.regex.Pattern;
 
-/** Màn điều khiển máy ảo: hình máy ở giữa, thanh nút Android + công cụ bằng giao diện app. */
+/** Màn điều khiển máy ảo: hình máy (trình phát gốc, giao thức v2) ở giữa, thanh nút Android + công cụ bằng giao diện app. */
 public class ControlActivity extends Activity {
     private static final int REQ_APK = 51;
-    private static final String[][] QUAL = {{"eco", "Tiết kiệm", "Saver"}, {"bal", "Ít trễ", "Low latency"}, {"hd", "Siêu nét", "Ultra HD"}};
+    private static final String[][] QUAL = {{"eco", "Tiết kiệm", "Saver"}, {"bal", "Cân bằng", "Balanced"}, {"hd", "Siêu nét", "Ultra HD"}};
+    private static final Pattern UUID = Pattern.compile("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}");
+    private static final int META_CTRL = 0x1000;
 
     private final Handler h = new Handler(Looper.getMainLooper());
     private FrameLayout stage;
-    private WebView web;
+    private StreamView screen;
+    private StreamClient client;
     private LinearLayout topBar, navBar, veil;
-    private TextView title, info, veilText, fsExit;
+    private TextView title, info, veilText, fsExit, stats;
     private ProgressBar veilSpin;
     private Button veilBtn;
+    private Runnable veilAct;
     private JSONObject phone = new JSONObject();
     private String id;
+    private String api = "";                 // stream.api của máy chủ đang giữ máy (rỗng = máy chủ mặc định)
     private String quality = "bal";
-    private boolean full = false, gotVideo = false, landscapeDev = false;
-    private int retries = 0;
+    private boolean full = false, loaded = false, resumed = false, kicked = false, stopped = false, showStats = false;
+    private long rebootUntil = 0;
     private SharedPreferences pref;
-    // Bàn phím tự bật: máy cloud mở bàn phím (bấm vào ô nhập) → hiện ô gõ + bàn phím điện thoại
-    private LinearLayout kbBar;
-    private EditText kbEdit;
-    private boolean kbOpen = false, kbBusy = false, resumed = false;
+    // Bàn phím: máy cloud mở bàn phím (bấm vào ô nhập) → bật bàn phím điện thoại vào 1 ô gõ vô hình, gõ tới đâu gửi tới đó
+    private ImeSink sink;
+    private String mirror = "";              // chữ đang có trong ô gõ vô hình = phần đã gửi sang máy
+    private boolean sinkMute = false, kbOpen = false, kbBusy = false, kbDead = false, remoteIme = false, imeUp = false;
     private int kbOff = 0;
+    // chữ app vừa dán sang máy (máy báo copy lại đúng chữ đó thì không đưa về điện thoại)
+    private final java.util.LinkedHashMap<String, Long> sentClips = new java.util.LinkedHashMap<>();
 
-    @SuppressLint({"SetJavaScriptEnabled", "AddJavascriptInterface"})
     @Override
     protected void onCreate(Bundle b) {
         super.onCreate(b);
         Ui.init(this);
-        if (!Api.loggedIn()) { finish(); return; }
+        id = phoneId(getIntent());
+        if (!Api.loggedIn()) {                   // mở từ link blueroblox://phone/… khi chưa đăng nhập → đăng nhập trước, xong tự mở lại máy này
+            Intent i = new Intent(this, LoginActivity.class);
+            if (id != null) i.putExtra("open_phone", id);
+            startActivity(i);
+            finish();
+            return;
+        }
+        if (id == null) { Ui.toast(this, Ui.L("Link máy không hợp lệ.", "Invalid phone link.")); finish(); return; }
         Ui.edgeToEdge(this);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         pref = getSharedPreferences("control", MODE_PRIVATE);
-        // Điện thoại: mặc định ÍT TRỄ (mượt, bấm ăn ngay — Siêu nét 8 Mbps/60 FPS làm điện thoại & 4G nghẹn → bấm không nổi).
-        // Bản cũ đang ép Siêu nét → chuyển về Ít trễ 1 lần; khách muốn nét hơn tự chọn Siêu nét.
+        // Điện thoại: mặc định CÂN BẰNG (mượt, bấm ăn ngay). Bản cũ đang ép Siêu nét → chuyển về Cân bằng 1 lần; khách muốn nét hơn tự chọn.
         if (!pref.getBoolean("q_bal_v3", false)) pref.edit().putString("q", "bal").putBoolean("q_bal_v3", true).apply();
         quality = pref.getString("q", "bal");
-        id = getIntent().getStringExtra("id");
+        if (!"eco".equals(quality) && !"bal".equals(quality) && !"hd".equals(quality)) quality = "bal";
+        showStats = pref.getBoolean("stats", false);
 
         LinearLayout root = Ui.col(this, 0);
         root.setBackgroundColor(Color.BLACK);
@@ -112,26 +131,65 @@ public class ControlActivity extends Activity {
         topBar.addView(q, Ui.wrap());
         root.addView(topBar, Ui.fill());
 
-        // Màn hình máy
+        // Màn hình máy (SurfaceView + bộ giải mã phần cứng)
         stage = new FrameLayout(this);
         stage.setBackgroundColor(Color.BLACK);
-        web = new WebView(this);
-        web.setBackgroundColor(Color.BLACK);
-        stage.addView(web, new FrameLayout.LayoutParams(-1, -1));
+        screen = new StreamView(this);
+        screen.setEvents(new StreamView.Events() {
+            @Override public void onFirstFrame() { frameShown(); }
+            @Override public void onTouchDown() { touchedScreen(); }
+        });
+        stage.addView(screen, new FrameLayout.LayoutParams(-1, -1));
+
+        sink = new ImeSink(this);
+        sink.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+        sink.setImeOptions(EditorInfo.IME_FLAG_NO_EXTRACT_UI | EditorInfo.IME_FLAG_NO_FULLSCREEN | EditorInfo.IME_FLAG_NO_ENTER_ACTION);
+        sink.setAlpha(0f);
+        sink.setCursorVisible(false);
+        sink.setBackground(null);
+        sink.setTextColor(Color.TRANSPARENT);
+        sink.setFocusable(false);
+        sink.setFocusableInTouchMode(false);
+        sink.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        if (Build.VERSION.SDK_INT >= 26) sink.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
+        sink.onEmptyDelete = n -> { for (int i = 0; i < n; i++) press(KeyEvent.KEYCODE_DEL); };
+        sink.addTextChangedListener(new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int st, int c, int a) { }
+            @Override public void onTextChanged(CharSequence s, int st, int bf, int c) { }
+            @Override public void afterTextChanged(Editable s) { if (!sinkMute) sinkChanged(s); }
+        });
+        sink.setOnKeyListener((v, code, e) -> sinkKey(code, e));
+        sink.setOnEditorActionListener((v, a, e) -> {
+            if (e == null) { press(KeyEvent.KEYCODE_ENTER); h.post(this::resetSink); }   // nút Enter/Gửi của bàn phím (phím thật đã qua sinkKey)
+            return true;
+        });
+        stage.addView(sink, new FrameLayout.LayoutParams(1, 1, Gravity.TOP | Gravity.START));
+
+        stats = Ui.text(this, "", 11, Color.WHITE, false);
+        stats.setTypeface(Typeface.MONOSPACE);
+        stats.setBackground(Ui.round(Color.argb(150, 0, 0, 0), 6, 0));
+        stats.setPadding(Ui.dp(6), Ui.dp(2), Ui.dp(6), Ui.dp(2));
+        stats.setVisibility(showStats ? View.VISIBLE : View.GONE);
+        FrameLayout.LayoutParams sp = new FrameLayout.LayoutParams(-2, -2, Gravity.TOP | Gravity.START);
+        sp.setMargins(Ui.dp(8), Ui.dp(8), 0, 0);
+        stage.addView(stats, sp);
+
         veil = Ui.col(this, 12);
         veil.setGravity(Gravity.CENTER);
         veil.setPadding(Ui.dp(28), Ui.dp(28), Ui.dp(28), Ui.dp(28));
         veil.setBackgroundColor(Ui.LIGHT ? Color.argb(242, 243, 247, 252) : Color.argb(238, 7, 18, 38));
+        veil.setClickable(true);                 // đang chờ / báo lỗi: chạm không lọt xuống màn hình máy
         veilSpin = new ProgressBar(this);
         veil.addView(veilSpin, Ui.wrap());
-        veilText = Ui.text(this, Ui.L("Đang kết nối máy…", "Connecting…"), 15, Ui.FG, false);
+        veilText = Ui.text(this, Ui.L("Đang kết nối…", "Connecting…"), 15, Ui.FG, false);
         veilText.setGravity(Gravity.CENTER);
         veil.addView(veilText, Ui.fill());
         veilBtn = Ui.button(this, Ui.L("Thử lại", "Retry"), Ui.PRIMARY);
-        veilBtn.setOnClickListener(v -> connect());
+        veilBtn.setOnClickListener(v -> { Runnable r = veilAct; if (r != null) r.run(); });
         veilBtn.setVisibility(View.GONE);
         veil.addView(veilBtn, Ui.wrap());
         stage.addView(veil, new FrameLayout.LayoutParams(-1, -1));
+
         fsExit = Ui.text(this, "⤡", 18, Color.WHITE, true);
         fsExit.setGravity(Gravity.CENTER);
         fsExit.setBackground(Ui.round(Color.argb(140, 14, 22, 56), 99, Ui.LINE2));
@@ -141,84 +199,268 @@ public class ControlActivity extends Activity {
         FrameLayout.LayoutParams fp = new FrameLayout.LayoutParams(Ui.dp(40), Ui.dp(40), Gravity.TOP | Gravity.END);
         fp.setMargins(0, Ui.dp(10), Ui.dp(10), 0);
         stage.addView(fsExit, fp);
+        stage.setOnApplyWindowInsetsListener((v, in) -> {      // biết bàn phím điện thoại đang hiện hay không
+            imeUp = Build.VERSION.SDK_INT >= 30 ? in.isVisible(WindowInsets.Type.ime()) : in.getSystemWindowInsetBottom() > Ui.dp(120);
+            return in;
+        });
         root.addView(stage, new LinearLayout.LayoutParams(-1, 0, 1));
-
-        // Ô gõ chữ (hiện khi máy cloud đang chờ nhập chữ)
-        kbBar = Ui.row(this, 6);
-        kbBar.setBackgroundColor(Ui.BG);
-        kbBar.setPadding(Ui.dp(8), Ui.dp(6), Ui.dp(8), Ui.dp(6));
-        kbEdit = Ui.input(this, Ui.L("Gõ chữ vào máy… (có dấu được)", "Type into phone…"), InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
-        kbEdit.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_SEND);
-        kbEdit.setOnEditorActionListener((v, a, e) -> { kbSend(true); return true; });
-        kbBar.addView(kbEdit, Ui.weight(1));
-        Button kbDel = Ui.button(this, "⌫", Ui.GHOST);
-        kbDel.setMinWidth(0);
-        kbDel.setOnClickListener(v -> { if (kbEdit.length() > 0) kbEdit.getText().delete(kbEdit.length() - 1, kbEdit.length()); else key("del", 67); });
-        kbBar.addView(kbDel, Ui.wrap());
-        Button kbGo = Ui.button(this, Ui.L("Gửi", "Send"), Ui.PRIMARY);
-        kbGo.setMinWidth(0);
-        kbGo.setOnClickListener(v -> kbSend(false));
-        kbBar.addView(kbGo, Ui.wrap());
-        kbBar.setVisibility(View.GONE);
-        root.addView(kbBar, Ui.fill());
 
         // Thanh nút Android
         navBar = Ui.row(this, 0);
         navBar.setBackgroundColor(Ui.BG);
         navBar.setPadding(Ui.dp(6), Ui.dp(2), Ui.dp(6), Ui.dp(2));
-        navBar.addView(Ui.tool(this, "◁", Ui.L("Quay lại", "Back"), v -> key("back", 4)), Ui.weight(1));
-        navBar.addView(Ui.tool(this, "○", Ui.L("Màn chính", "Home"), v -> key("home", 3)), Ui.weight(1));
-        navBar.addView(Ui.tool(this, "▢", Ui.L("Đa nhiệm", "Recents"), v -> key("recents", 187)), Ui.weight(1));
+        navBar.addView(Ui.tool(this, "◁", Ui.L("Quay lại", "Back"), v -> cmd("back")), Ui.weight(1));
+        navBar.addView(Ui.tool(this, "○", Ui.L("Màn chính", "Home"), v -> cmd("home")), Ui.weight(1));
+        navBar.addView(Ui.tool(this, "▢", Ui.L("Đa nhiệm", "Recents"), v -> cmd("recents")), Ui.weight(1));
         navBar.addView(Ui.tool(this, "⋯", Ui.L("Công cụ", "Tools"), v -> tools()), Ui.weight(1));
         root.addView(navBar, Ui.fill());
 
         Ui.insets(root, true, true);
         setContentView(root);
-
-        WebSettings s = web.getSettings();
-        s.setJavaScriptEnabled(true);
-        s.setDomStorageEnabled(true);
-        s.setMediaPlaybackRequiresUserGesture(false);
-        s.setSupportZoom(false);
-        s.setBuiltInZoomControls(false);
-        s.setAllowFileAccess(false);
-        s.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
-        s.setUserAgentString(s.getUserAgentString() + " BlueRobloxApp/" + Api.version);
-        CookieManager.getInstance().setAcceptCookie(true);
-        CookieManager.getInstance().setAcceptThirdPartyCookies(web, true);   // khung hình phone.blueroblox.shop nằm trong trang blueroblox.shop
-        web.addJavascriptInterface(new Bridge(), "BRApp");
-        web.setWebChromeClient(new WebChromeClient());
-        web.setWebViewClient(new WebViewClient() {
-            @Override public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest r) {
-                String host = String.valueOf(r.getUrl().getHost());
-                return !(host.equals("blueroblox.shop") || host.equals("www.blueroblox.shop") || host.equals("phone.blueroblox.shop") || host.equals("fast.blueroblox.shop"));
-            }
-            @Override public void onReceivedError(WebView v, WebResourceRequest r, WebResourceError e) {
-                if (r.isForMainFrame()) fail(Ui.L("Không tải được trình điều khiển. Kiểm tra mạng rồi thử lại.", "Could not load the player. Check your network."));
-            }
-            @Override public void onPageFinished(WebView v, String url) {
-                // trang điều khiển tự lo kết nối / nối lại / báo trạng thái (giống bản web) → ẩn màn chờ của app
-                if (url != null && url.contains("phone.html")) h.postDelayed(() -> veil.setVisibility(View.GONE), 600);
-            }
-        });
         updQ();
         load();
     }
 
-    @Override protected void onResume() { super.onResume(); resumed = true; h.removeCallbacks(kbPoll); h.postDelayed(kbPoll, 1500); Updater.check(this, false); }
-    @Override protected void onPause() { super.onPause(); resumed = false; h.removeCallbacks(kbPoll); }
+    /** Mã máy: từ màn danh sách (extra "id") hoặc từ link blueroblox://phone/<uuid>. */
+    private static String phoneId(Intent it) {
+        if (it == null) return null;
+        String s = it.getStringExtra("id");
+        Uri d = it.getData();
+        if ((s == null || s.isEmpty()) && d != null && "blueroblox".equalsIgnoreCase(d.getScheme()) && "phone".equalsIgnoreCase(d.getHost()))
+            s = d.getLastPathSegment();
+        return cleanId(s);
+    }
 
-    /** Hỏi máy cloud mỗi ~1 giây: có đang chờ gõ chữ không → tự hiện / ẩn ô gõ + bàn phím điện thoại. */
+    private static String cleanId(String s) {
+        if (s == null) return null;
+        s = s.trim();
+        return UUID.matcher(s).matches() ? s.toLowerCase(Locale.ROOT) : null;
+    }
+
+    @Override protected void onResume() {
+        super.onResume();
+        resumed = true;
+        if (loaded && !kicked && !stopped && client == null) connect();
+        h.removeCallbacks(kbPoll);
+        h.postDelayed(kbPoll, 1500);
+        Updater.check(this, false);
+    }
+
+    @Override protected void onPause() {
+        super.onPause();
+        resumed = false;
+        h.removeCallbacks(kbPoll);
+        stopStream();                            // rời màn hình → đóng phiên (BYE); quay lại tự nối lại
+    }
+
+    @Override protected void onDestroy() {
+        h.removeCallbacksAndMessages(null);
+        stopStream();
+        if (screen != null) screen.release();
+        super.onDestroy();
+    }
+
+    // ---------------- Kết nối ----------------
+    private void load() {
+        stopStream();
+        loaded = false;
+        kicked = false;
+        stopped = false;
+        api = "";
+        showVeil(Ui.L("Đang mở máy…", "Opening phone…"), true, null, null);
+        final String pid = id;
+        Api.bg(() -> {
+            JSONArray a = (JSONArray) Api.get("cloud_phones?id=eq." + pid + "&select=*");
+            if (a.length() == 0) throw new Exception(Ui.L("Không tìm thấy máy.", "Phone not found."));
+            return a.getJSONObject(0);
+        }, p -> {
+            if (!pid.equals(id) || isFinishing()) return;
+            phone = p;
+            title.setText(phone.optString("name"));
+            String res = phone.optString("res", "720x1280");
+            try {
+                String[] wh = res.split("x");
+                if (wh.length == 2) screen.setVideoSize(Integer.parseInt(wh[0].trim()), Integer.parseInt(wh[1].trim()));   // đoán tỉ lệ trước khi có hình
+            } catch (Exception ignored) { }
+            info.setText(phone.optInt("ram") + "GB · " + phone.optInt("cpu") + Ui.L(" nhân · ", " cores · ") + res + " · " + phone.optInt("fps", 30) + " FPS");
+            if (!"active".equals(phone.optString("status"))) { fail(Ui.L("Máy chưa chạy (đang tạo hoặc đã hết hạn).", "This phone is not running.")); return; }
+            loaded = true;
+            if (resumed) connect();
+        }, m -> { if (pid.equals(id)) fail(m); });
+    }
+
+    /** Mở phiên phát hình mới (đóng phiên cũ nếu có). */
+    private void connect() {
+        if (id == null) return;
+        if (!loaded) { load(); return; }
+        stopStream();
+        kicked = false;
+        stopped = false;
+        if (!rebooting()) showVeil(Ui.L("Đang kết nối…", "Connecting…"), true, null, null);
+        client = new StreamClient(this, id, quality, net);
+        screen.attach(client);
+        client.start();
+    }
+
+    private void stopStream() {
+        if (client != null) { client.close(); client = null; }
+        if (screen != null) screen.attach(null);
+    }
+
+    private final StreamClient.Listener net = new StreamClient.Listener() {
+        @Override public void onConnecting(int attempt, String why) {
+            if (rebooting()) return;
+            if (attempt <= 0) showVeil(Ui.L("Đang kết nối…", "Connecting…"), true, null, null);
+            else showVeil(Ui.L("Đang kết nối lại… (lần " + attempt + ")", "Reconnecting… (attempt " + attempt + ")")
+                    + (why == null || why.isEmpty() ? "" : "\n" + why), true, Ui.L("Mở lại", "Reopen"), ControlActivity.this::connect);
+        }
+
+        @Override public void onEndpoint(JSONObject ep) {
+            JSONObject s = ep.optJSONObject("stream");
+            String a = s == null || s.isNull("api") ? "" : s.optString("api", "").trim();
+            api = a.startsWith("https://") ? a : "";
+        }
+
+        @Override public void onWelcome(JSONObject w, boolean direct) {
+            if (stats.getVisibility() == View.VISIBLE) stats.setText(direct ? Ui.L("trực tiếp", "direct") : "Cloudflare");
+            // màn chờ ẩn khi khung hình đầu tiên hiện (StreamView báo)
+        }
+
+        @Override public void onClipboard(String text) { phoneCopied(text); }
+
+        @Override public void onStats(int fps, int kbps, int ping, boolean direct, JSONObject server) {
+            if (stats.getVisibility() != View.VISIBLE) return;
+            stats.setText(fps + " fps · " + kbps + " kbps · " + (ping >= 0 ? ping + " ms" : "– ms") + " · "
+                    + (direct ? Ui.L("trực tiếp", "direct") : "Cloudflare"));
+        }
+
+        @Override public void onProblem(String code, String msg) {
+            if (rebooting()) return;
+            showVeil(msg + "\n" + Ui.L("Đang thử lại…", "Retrying…"), true, null, null);
+        }
+
+        @Override public void onStopped(String code, String msg) { streamStopped(code, msg); }
+    };
+
+    private void streamStopped(String code, String msg) {
+        stopStream();
+        if ("KICKED".equals(code)) {
+            kicked = true;
+            showVeil("📱 " + Ui.L("Máy đang được mở ở nơi khác", "This phone is open somewhere else") + "\n\n"
+                            + Ui.L("Mỗi máy chỉ xem được ở 1 nơi (app, máy tính…) để hình luôn mượt.", "A phone can only be viewed in one place at a time."),
+                    false, Ui.L("Mở lại tại đây", "Open here"), this::connect);
+            return;
+        }
+        if ("LOGIN".equals(code)) { Api.logout(); toLogin(); return; }
+        stopped = true;
+        if ("AUTH".equals(code)) {
+            showVeil(msg, false, Ui.L("Đăng nhập lại", "Log in again"), () -> { Api.logout(); toLogin(); });
+            return;
+        }
+        showVeil(msg, false, Ui.L("Thử lại", "Retry"), this::connect);
+    }
+
+    private void toLogin() {
+        Intent i = new Intent(this, LoginActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+        if (id != null) i.putExtra("open_phone", id);
+        startActivity(i);
+        finish();
+    }
+
+    /** Khung hình đầu tiên đã lên → ẩn màn chờ. */
+    private void frameShown() {
+        if (kicked || stopped || rebooting() || client == null) return;
+        veil.setVisibility(View.GONE);
+    }
+
+    private boolean rebooting() { return rebootUntil > SystemClock.uptimeMillis(); }
+
+    private void showVeil(String t, boolean spin, String btn, Runnable act) {
+        veil.setVisibility(View.VISIBLE);
+        veilText.setText(t);
+        veilSpin.setVisibility(spin ? View.VISIBLE : View.GONE);
+        veilAct = act;
+        if (btn != null && act != null) { veilBtn.setText(btn); veilBtn.setVisibility(View.VISIBLE); }
+        else veilBtn.setVisibility(View.GONE);
+    }
+
+    private void fail(String m) {
+        Runnable again = loaded ? this::connect : this::load;
+        showVeil(m, false, Ui.L("Thử lại", "Retry"), again);
+    }
+
+    /** Máy ảo vừa copy chữ → đưa vào bộ nhớ copy của điện thoại. */
+    private void phoneCopied(String text) {
+        if (text == null || text.isEmpty()) return;
+        if (ownClip(text)) return;                                    // chính chữ app vừa dán sang
+        try {
+            ClipboardManager cm = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+            if (cm != null) cm.setPrimaryClip(ClipData.newPlainText("Cloud Phone", text));
+            Ui.toast(this, "📋 " + Ui.L("Đã copy từ máy ảo: ", "Copied from cloud phone: ") + (text.length() > 60 ? text.substring(0, 60) + "…" : text));
+        } catch (Exception ignored) { }
+    }
+
+    private void rememberClip(String t) {
+        sentClips.remove(t);
+        sentClips.put(t, SystemClock.uptimeMillis());
+        while (sentClips.size() > 16) sentClips.remove(sentClips.keySet().iterator().next());
+    }
+
+    private boolean ownClip(String t) {
+        Long at = sentClips.get(t);
+        return at != null && SystemClock.uptimeMillis() - at < 15000;
+    }
+
+    private boolean live() {
+        if (client != null && client.isLive()) return true;
+        Ui.toast(this, Ui.L("Đang kết nối máy, thử lại sau giây lát.", "Still connecting, try again in a moment."));
+        return false;
+    }
+
+    // ---------------- Phím / lệnh Android ----------------
+    private void cmd(String name) { if (live()) client.cmd(name); }
+
+    private void press(int code) { if (client != null) client.press(code, 0); }
+
+    /** Phím thật (bàn phím Bluetooth / USB) khi không gõ vào ô vô hình → gửi thẳng sang máy cloud. */
+    @Override public boolean dispatchKeyEvent(KeyEvent e) {
+        if (client != null && client.isLive() && hardwareKey(e)) return true;
+        return super.dispatchKeyEvent(e);
+    }
+
+    private boolean hardwareKey(KeyEvent e) {
+        if (sink != null && sink.hasFocus()) return false;
+        InputDevice d = e.getDevice();
+        if (d == null || d.isVirtual() || d.getKeyboardType() != InputDevice.KEYBOARD_TYPE_ALPHABETIC) return false;
+        if ((e.getSource() & InputDevice.SOURCE_KEYBOARD) != InputDevice.SOURCE_KEYBOARD) return false;
+        int k = e.getKeyCode();
+        if (k == KeyEvent.KEYCODE_BACK || k == KeyEvent.KEYCODE_VOLUME_UP || k == KeyEvent.KEYCODE_VOLUME_DOWN
+                || k == KeyEvent.KEYCODE_VOLUME_MUTE || k == KeyEvent.KEYCODE_POWER || k == KeyEvent.KEYCODE_HOME) return false;
+        if (e.getAction() == KeyEvent.ACTION_DOWN) client.key(StreamClient.KEY_DOWN, k, e.getMetaState());
+        else if (e.getAction() == KeyEvent.ACTION_UP) client.key(StreamClient.KEY_UP, k, e.getMetaState());
+        else return false;
+        return true;
+    }
+
+    // ---------------- Bàn phím: ô gõ vô hình ----------------
+    /** Hỏi máy cloud mỗi ~1 giây: có đang chờ gõ chữ không → tự hiện / ẩn bàn phím điện thoại (máy chủ không có /ime thì thôi hỏi). */
     private final Runnable kbPoll = new Runnable() {
         @Override public void run() {
-            if (!resumed || id == null) return;
-            if (kbBusy || full) { h.postDelayed(this, 1200); return; }
+            if (!resumed || id == null || kbDead) return;
+            if (kbBusy || full || client == null) { h.postDelayed(this, 1200); return; }
             kbBusy = true;
-            Api.bg(() -> Api.cp("GET", id + "/ime", null), j -> {
+            final String pid = id, base = api;
+            Api.bg(() -> {
+                try { return Api.cpAt(base, "GET", pid + "/ime", null); }
+                catch (Api.ApiError e) { if (e.status == 404 || e.status == 405 || e.status == 501) return null; throw e; }
+            }, j -> {
                 kbBusy = false;
-                boolean on = j.optBoolean("shown");
-                if (on) { kbOff = 0; if (!kbOpen) kbShow(true); }
-                else if (kbOpen && ++kbOff >= 2 && kbEdit.length() == 0) kbShow(false);
+                if (j == null) { kbDead = true; return; }
+                if (pid.equals(id)) {
+                    boolean on = j.optBoolean("shown");
+                    if (on) { kbOff = 0; if (!remoteIme) kbShow(true); remoteIme = true; }
+                    else { remoteIme = false; if (kbOpen && ++kbOff >= 2) kbShow(false); }
+                }
                 if (resumed) h.postDelayed(this, 1000);
             }, m -> { kbBusy = false; if (resumed) h.postDelayed(this, 4000); });
         }
@@ -226,103 +468,135 @@ public class ControlActivity extends Activity {
 
     private void kbShow(boolean on) {
         kbOpen = on;
-        android.view.inputmethod.InputMethodManager im = (android.view.inputmethod.InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+        InputMethodManager im = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
         if (on) {
-            kbBar.setVisibility(View.VISIBLE);
-            kbEdit.requestFocus();
-            h.postDelayed(() -> { if (im != null) im.showSoftInput(kbEdit, 0); }, 120);
+            sink.setFocusable(true);
+            sink.setFocusableInTouchMode(true);
+            sink.requestFocus();
+            h.postDelayed(() -> { if (im != null && kbOpen) im.showSoftInput(sink, 0); }, 120);
         } else {
-            if (im != null) im.hideSoftInputFromWindow(kbEdit.getWindowToken(), 0);
-            kbEdit.clearFocus();
-            kbBar.setVisibility(View.GONE);
+            if (im != null) im.hideSoftInputFromWindow(sink.getWindowToken(), 0);
+            resetSink();
+            sink.clearFocus();
+            sink.setFocusable(false);
+            sink.setFocusableInTouchMode(false);
         }
     }
 
-    /** Gửi chữ đang gõ vào máy cloud (dán qua bộ nhớ copy → giữ được chữ có dấu). enter = bấm Enter sau khi dán. */
-    private void kbSend(boolean enter) {
-        String t = kbEdit.getText().toString();
-        if (!t.isEmpty()) { page("cpApp.paste(" + JSONObject.quote(t) + ")"); kbEdit.setText(""); }
-        if (enter) h.postDelayed(() -> key("enter", 66), t.isEmpty() ? 0 : 900);
+    /** Chạm vào hình: chỗ gõ trên máy có thể đã đổi → làm trống ô gõ; máy vẫn đang chờ gõ mà bàn phím đã bị ẩn → bật lại. */
+    private void touchedScreen() {
+        if (!mirror.isEmpty() || sink.length() > 0) resetSink();
+        if (remoteIme && kbOpen && !imeUp && !full) h.postDelayed(() -> { if (remoteIme && kbOpen && !imeUp) kbShow(true); }, 350);
     }
 
-    @Override protected void onDestroy() {
-        h.removeCallbacksAndMessages(null);
-        if (web != null) { web.loadUrl("about:blank"); web.destroy(); }
-        super.onDestroy();
+    /** Ô gõ đổi chữ → so với phần đã gửi: gửi phím Xoá cho phần bị sửa + gõ phần mới (bộ gõ Telex / tự sửa chữ vẫn đúng). */
+    private void sinkChanged(Editable e) {
+        String now = e.toString(), old = mirror;
+        int n = Math.min(old.length(), now.length()), p = 0;
+        while (p < n && old.charAt(p) == now.charAt(p)) p++;
+        if (p > 0 && p < Math.max(old.length(), now.length()) && Character.isHighSurrogate(now.charAt(p - 1))) p--;   // không cắt đôi emoji
+        int dels = old.codePointCount(p, old.length());
+        String add = now.substring(p);
+        mirror = now;
+        for (int i = 0; i < dels; i++) press(KeyEvent.KEYCODE_DEL);
+        typeRemote(add);
+        if (now.indexOf('\n') >= 0 || (now.length() > 64 && BaseInputConnection.getComposingSpanStart(e) < 0)) h.post(this::resetSink);
     }
 
-    // ---------------- Kết nối ----------------
-    private void load() {
-        showVeil(Ui.L("Đang mở máy…", "Opening phone…"), true);
-        Api.<JSONObject[]>bg(() -> {
-            JSONArray a = (JSONArray) Api.get("cloud_phones?id=eq." + id + "&select=*");
-            if (a.length() == 0) throw new Exception(Ui.L("Không tìm thấy máy.", "Phone not found."));
-            JSONObject p = a.getJSONObject(0);
-            JSONObject inf = Api.cp("GET", id + "/info", null);
-            return new JSONObject[]{p, inf};
-        }, r -> {
-            phone = r[0];
-            JSONObject inf = r[1];
-            title.setText(phone.optString("name"));
-            String res = phone.optString("res", "720x1280");
-            String[] wh = res.split("x");
-            landscapeDev = wh.length == 2 && Integer.parseInt(wh[0]) > Integer.parseInt(wh[1]);
-            info.setText(phone.optInt("ram") + "GB · " + phone.optInt("cpu") + Ui.L(" nhân · ", " cores · ") + res + " · " + phone.optInt("fps", 30) + " FPS");
-            if (inf.optBoolean("maint")) { fail("🛠 " + inf.optString("maint_msg", Ui.L("Đang bảo trì", "Under maintenance"))); return; }
-            if (inf.optBoolean("locked")) { fail("🔒 " + inf.optString("lock_msg")); return; }
-            if (!"active".equals(phone.optString("status"))) { fail(Ui.L("Máy chưa chạy (đang tạo hoặc đã hết hạn).", "This phone is not running.")); return; }
-            connect();
-        }, this::fail);
-    }
-
-    /** Mở trang điều khiển của web ở chế độ nhúng: dùng chung bộ kết nối hình đã ổn định của web (tự nối lại, chế độ dự phòng). */
-    private void connect() {
-        showVeil(Ui.L("Đang kết nối máy…", "Connecting…"), true);
-        Api.bg(() -> {
-            String at = Api.token();
-            return Api.WEB + "/phone.html?id=" + URLEncoder.encode(id, "UTF-8") + "&embed=app&q=" + quality + "#at=" + URLEncoder.encode(at, "UTF-8")
-                    + "&rt=" + URLEncoder.encode(Api.refresh, "UTF-8");
-        }, url -> web.loadUrl(url), this::fail);
-    }
-
-    /** Gọi hàm của trang điều khiển (cpApp.*). */
-    private void page(String js) { web.evaluateJavascript("(function(){try{return window.cpApp?(" + js + "):null;}catch(e){return null;}})()", null); }
-
-    private void showVeil(String t, boolean spin) {
-        veil.setVisibility(View.VISIBLE);
-        veilText.setText(t);
-        veilSpin.setVisibility(spin ? View.VISIBLE : View.GONE);
-        veilBtn.setVisibility(spin ? View.GONE : View.VISIBLE);
-    }
-
-    private void fail(String m) { showVeil(m, false); }
-
-    /** Máy ảo vừa copy chữ → đưa vào bộ nhớ copy của điện thoại. */
-    private class Bridge {
-        /** Trang điều khiển xin mã đăng nhập mới (chạy ở luồng nền của WebView nên gọi mạng được). */
-        @JavascriptInterface
-        public String token() {
-            try { return Api.token(); } catch (Exception e) { return ""; }
-        }
-
-        @JavascriptInterface
-        public void onEvent(String json) {
-            h.post(() -> {
-                try {
-                    JSONObject m = new JSONObject(json);
-                    if (!"clip".equals(m.optString("t"))) return;
-                    String text = m.optString("text");
-                    if (text.isEmpty()) return;
-                    ClipboardManager cm = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
-                    if (cm != null) cm.setPrimaryClip(ClipData.newPlainText("Cloud Phone", text));
-                    Ui.toast(ControlActivity.this, "📋 " + Ui.L("Đã copy từ máy ảo: ", "Copied from cloud phone: ") + (text.length() > 60 ? text.substring(0, 60) + "…" : text));
-                } catch (Exception ignored) { }
-            });
+    /** Gõ sang máy: chữ thường (ASCII) gõ bằng TEXT; chữ có dấu / emoji dán qua bộ nhớ copy để giữ dấu; xuống dòng = phím Enter. */
+    private void typeRemote(String s) {
+        if (s.isEmpty() || client == null) return;
+        int i = 0;
+        while (i < s.length()) {
+            int nl = s.indexOf('\n', i);
+            String part = nl < 0 ? s.substring(i) : s.substring(i, nl);
+            if (!part.isEmpty()) {
+                if (ascii(part)) client.text(part);
+                else { rememberClip(part); client.clipSet(part, true); }
+            }
+            if (nl < 0) break;
+            press(KeyEvent.KEYCODE_ENTER);
+            i = nl + 1;
         }
     }
 
-    // ---------------- Phím Android ----------------
-    private void key(String name, int code) { page("cpApp.key(" + code + ")"); }
+    private static boolean ascii(String s) {
+        for (int i = 0; i < s.length(); i++) if (s.charAt(i) >= 0x80) return false;
+        return true;
+    }
+
+    /** Phím từ bàn phím (ảo / thật) khi đang gõ vào ô vô hình. */
+    private boolean sinkKey(int code, KeyEvent e) {
+        boolean down = e.getAction() == KeyEvent.ACTION_DOWN;
+        switch (code) {
+            case KeyEvent.KEYCODE_ENTER:
+            case KeyEvent.KEYCODE_NUMPAD_ENTER:
+                if (down) { press(KeyEvent.KEYCODE_ENTER); h.post(this::resetSink); }
+                return true;
+            case KeyEvent.KEYCODE_DEL:
+                if (sink.length() > 0) return false;               // ô còn chữ → ô tự xoá, phần so sánh gửi phím Xoá
+                if (down) press(KeyEvent.KEYCODE_DEL);
+                return true;
+            case KeyEvent.KEYCODE_FORWARD_DEL:
+            case KeyEvent.KEYCODE_TAB:
+            case KeyEvent.KEYCODE_ESCAPE:
+            case KeyEvent.KEYCODE_DPAD_UP:
+            case KeyEvent.KEYCODE_DPAD_DOWN:
+            case KeyEvent.KEYCODE_DPAD_LEFT:
+            case KeyEvent.KEYCODE_DPAD_RIGHT:
+            case KeyEvent.KEYCODE_MOVE_HOME:
+            case KeyEvent.KEYCODE_MOVE_END:
+            case KeyEvent.KEYCODE_PAGE_UP:
+            case KeyEvent.KEYCODE_PAGE_DOWN:
+                if (client != null) client.key(down ? StreamClient.KEY_DOWN : StreamClient.KEY_UP, code, e.getMetaState());
+                if (down) h.post(this::resetSink);                 // con trỏ trên máy đã dời → làm trống ô gõ
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private void resetSink() {
+        if (sink == null || (mirror.isEmpty() && sink.length() == 0)) return;
+        sinkMute = true;
+        sink.setText("");
+        sinkMute = false;
+        mirror = "";
+        InputMethodManager im = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+        if (im != null && sink.hasFocus()) im.restartInput(sink);
+    }
+
+    /** Ô gõ vô hình: xoá khi ô đã trống vẫn báo ra để gửi phím Xoá sang máy cloud. */
+    static final class ImeSink extends EditText {
+        interface Deleter { void delete(int n); }
+        Deleter onEmptyDelete;
+
+        ImeSink(Context c) { super(c); }
+
+        @Override public InputConnection onCreateInputConnection(EditorInfo out) {
+            InputConnection ic = super.onCreateInputConnection(out);
+            if (out != null) out.imeOptions |= EditorInfo.IME_FLAG_NO_EXTRACT_UI | EditorInfo.IME_FLAG_NO_FULLSCREEN;
+            if (ic == null) return null;
+            return new InputConnectionWrapper(ic, true) {
+                @Override public boolean deleteSurroundingText(int before, int after) {
+                    beyond(before);
+                    return super.deleteSurroundingText(before, after);
+                }
+
+                @Override public boolean deleteSurroundingTextInCodePoints(int before, int after) {
+                    beyond(before);
+                    return super.deleteSurroundingTextInCodePoints(before, after);
+                }
+            };
+        }
+
+        private void beyond(int before) {
+            int s = getSelectionStart(), e = getSelectionEnd();
+            if (s != e) return;
+            int n = before - Math.max(0, s);
+            if (n > 0 && onEmptyDelete != null) onEmptyDelete.delete(n);
+        }
+    }
 
     // ---------------- Công cụ ----------------
     private void tools() {
@@ -330,14 +604,16 @@ public class ControlActivity extends Activity {
         final Dialog[] d = new Dialog[1];
         int w = (getResources().getDisplayMetrics().widthPixels - Ui.dp(64)) / 4;
         Object[][] items = {
-                {"🔊", Ui.L("Tăng âm", "Vol +"), (Runnable) () -> key("volup", 24)},
-                {"🔉", Ui.L("Giảm âm", "Vol −"), (Runnable) () -> key("voldown", 25)},
-                {"⏻", Ui.L("Tắt/mở màn", "Power"), (Runnable) () -> key("power", 26)},
-                {"🔄", Ui.L("Xoay màn", "Rotate"), (Runnable) this::rotate},
+                {"🔊", Ui.L("Tăng âm", "Vol +"), (Runnable) () -> cmd("volup")},
+                {"🔉", Ui.L("Giảm âm", "Vol −"), (Runnable) () -> cmd("voldown")},
+                {"⏻", Ui.L("Tắt/mở màn", "Power"), (Runnable) () -> cmd("power")},
+                {"🔄", Ui.L("Xoay màn", "Rotate"), (Runnable) () -> cmd("rotate")},
+                {"🔔", Ui.L("Thông báo", "Notifications"), (Runnable) () -> cmd("notif")},
                 {"📷", Ui.L("Chụp màn", "Screenshot"), (Runnable) this::shot},
-                {"📋", Ui.L("Dán từ ĐT", "Paste"), (Runnable) this::pasteFromPhone},
+                {"⌨️", Ui.L("Bàn phím", "Keyboard"), (Runnable) () -> kbShow(!(kbOpen && imeUp))},
+                {"📋", Ui.L("Dán chữ vào máy", "Paste into phone"), (Runnable) this::pasteFromPhone},
                 {"📄", Ui.L("Copy từ máy", "Copy out"), (Runnable) this::copyFromPhone},
-                {"⌨️", Ui.L("Gõ chữ", "Type text"), (Runnable) this::typeText},
+                {"📝", Ui.L("Gõ chữ", "Type text"), (Runnable) this::typeText},
                 {"🌐", Ui.L("Mở web", "Open link"), (Runnable) this::openUrl},
                 {"📦", Ui.L("Cài APK", "Install APK"), (Runnable) this::pickApk},
                 {"🔗", Ui.L("Cài từ link", "From link"), (Runnable) this::fromLink},
@@ -345,16 +621,11 @@ public class ControlActivity extends Activity {
                 {"🧬", "Clone tab", (Runnable) this::cloneTab},
                 {"📍", Ui.L("Vị trí GPS", "GPS"), (Runnable) this::gps},
                 {"🔓", Ui.L("Root máy", "Root"), (Runnable) this::root},
-                {"🛍️", Ui.L("Kho ứng dụng", "App store"), (Runnable) () -> page("cpApp.act('store')")},
-                {"🧊", Ui.L("Chế độ hình", "Graphics"), (Runnable) () -> page("cpApp.act('gfx')")},
-                {"🎚️", Ui.L("FPS & độ nét", "FPS & res"), (Runnable) () -> page("cpApp.act('display')")},
-                {"⏺️", "Macro", (Runnable) () -> page("cpApp.act('macro')")},
-                {"🎮", Ui.L("Gán phím", "Key map"), (Runnable) () -> page("cpApp.act('keymap')")},
-                {"🅖", Ui.L("Lỗi Google", "Google fix"), (Runnable) () -> page("cpApp.act('gfix')")},
                 {"✨", Ui.L("Chất lượng", "Quality"), (Runnable) this::pickQuality},
+                {"📊", Ui.L("Thông số", "Stats"), (Runnable) this::toggleStats},
                 {"⛶", Ui.L("Toàn màn", "Full screen"), (Runnable) () -> setFull(true)},
                 {"📱", Ui.L("Đổi máy", "Switch"), (Runnable) this::switchPhone},
-                {"↻", Ui.L("Tải lại hình", "Reload"), (Runnable) () -> page("cpApp.reload()")},
+                {"↻", Ui.L("Tải lại hình", "Reload"), (Runnable) this::connect},
                 {"⚡", Ui.L("Khởi động lại", "Reboot"), (Runnable) this::reboot},
         };
         for (Object[] it : items) {
@@ -368,18 +639,22 @@ public class ControlActivity extends Activity {
         d[0].show();
     }
 
-    private void cpPost(String path, JSONObject body, String okMsg) {
-        Api.bg(() -> Api.cp("POST", id + "/" + path, body), r -> { if (okMsg != null) Ui.toast(this, okMsg); }, m -> Ui.toast(this, m));
+    private void toggleStats() {
+        showStats = !showStats;
+        pref.edit().putBoolean("stats", showStats).apply();
+        stats.setText("…");
+        stats.setVisibility(showStats ? View.VISIBLE : View.GONE);
     }
 
-    private void rotate() {
-        try { cpPost("rotate", new JSONObject().put("dir", landscapeDev ? 0 : 1), Ui.L("Đã xoay màn hình.", "Rotated.")); landscapeDev = !landscapeDev; }
-        catch (Exception ignored) { }
+    private void cpPost(String path, JSONObject body, String okMsg) {
+        final String base = api, pid = id;
+        Api.bg(() -> Api.cpAt(base, "POST", pid + "/" + path, body), r -> { if (okMsg != null) Ui.toast(this, okMsg); }, m -> Ui.toast(this, m));
     }
 
     private void shot() {
         Ui.toast(this, Ui.L("Đang chụp…", "Capturing…"));
-        Api.bg(() -> Api.cpBytes(id + "/shot"), png -> {
+        final String base = api, pid = id;
+        Api.bg(() -> Api.cpBytesAt(base, pid + "/shot"), png -> {
             if (Build.VERSION.SDK_INT < 29) { Ui.toast(this, Ui.L("Cần Android 10 trở lên để lưu ảnh.", "Android 10+ required to save.")); return; }
             try {
                 ContentValues cv = new ContentValues();
@@ -412,12 +687,15 @@ public class ControlActivity extends Activity {
                 this::pasteText);
     }
 
-    /** Dán chữ vào máy ảo (giữ được chữ có dấu) — trang điều khiển lo phần đặt bộ nhớ copy + bấm Dán. */
+    /** Dán chữ vào máy ảo (giữ được chữ có dấu): đặt bộ nhớ copy của máy + dán luôn (CLIP_SET paste = 1). */
     private void pasteText(String text) {
-        page("cpApp.paste(" + JSONObject.quote(text) + ")");
+        if (!live()) return;
+        rememberClip(text);
+        client.clipSet(text, true);
         Ui.toast(this, Ui.L("Đang dán vào máy…", "Pasting…"));
     }
 
+    /** "Dán chữ vào máy": lấy chữ trong bộ nhớ copy của điện thoại dán sang máy cloud. */
     private void pasteFromPhone() {
         ClipboardManager cm = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
         String text = "";
@@ -431,9 +709,12 @@ public class ControlActivity extends Activity {
         pasteText(text);
     }
 
+    /** Copy chữ đang bôi đen trên máy (Ctrl+C) — máy báo bộ nhớ copy mới → chữ tự về điện thoại. */
     private void copyFromPhone() {
-        page("cpApp.copyOut()");
-        Ui.toast(this, Ui.L("Đang lấy chữ từ máy… (hoặc bôi đen chữ trên máy rồi bấm Copy — chữ tự về điện thoại)", "Getting text…"));
+        if (!live()) return;
+        client.press(KeyEvent.KEYCODE_C, META_CTRL);
+        Ui.toast(this, Ui.L("Đã copy chữ đang bôi đen trên máy — chữ tự về điện thoại. (Hoặc bôi đen chữ trên máy rồi bấm Copy)",
+                "Copied the selected text — it comes to your phone automatically."));
     }
 
     private void openUrl() {
@@ -445,9 +726,10 @@ public class ControlActivity extends Activity {
         askText(Ui.L("Cài APK từ link", "Install APK from link"), Ui.L("Link tải trực tiếp file .apk", "Direct .apk link"), Ui.L("Tải & cài", "Install"),
                 InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI, s -> {
                     Dialog[] pd = progress(Ui.L("Máy chủ đang tải file…", "Downloading on server…"));
+                    final String base = api, pid = id;
                     Api.bg(() -> {
-                        JSONObject j = Api.cp("POST", id + "/fromurl", new JSONObject().put("url", s.trim()));
-                        return waitJob(j.optString("job"), pd);
+                        JSONObject j = Api.cpAt(base, "POST", pid + "/fromurl", new JSONObject().put("url", s.trim()));
+                        return waitJob(base, j.optString("job"), pd);
                     }, msg -> { pd[0].dismiss(); Ui.toast(this, msg); }, m -> { pd[0].dismiss(); Ui.toast(this, m); });
                 });
     }
@@ -456,26 +738,36 @@ public class ControlActivity extends Activity {
         Ui.confirm(this, Ui.L("Khởi động lại máy?", "Reboot phone?"), Ui.L("Máy tắt khoảng 1 phút rồi tự bật lại. Dữ liệu vẫn giữ.", "The phone restarts in about a minute. Data is kept."),
                 Ui.L("Khởi động lại", "Reboot"), () -> {
                     cpPost("reboot", new JSONObject(), Ui.L("Đang khởi động lại…", "Rebooting…"));
-                    showVeil(Ui.L("Máy đang khởi động lại, khoảng 1 phút…", "Rebooting, about a minute…"), true);
-                    h.postDelayed(() -> page("cpApp.reload()"), 45000);
+                    rebootUntil = SystemClock.uptimeMillis() + 45000;
+                    showVeil(Ui.L("Máy đang khởi động lại, khoảng 1 phút…", "Rebooting, about a minute…"), true, null, null);
+                    h.removeCallbacks(afterReboot);
+                    h.postDelayed(afterReboot, 45000);
                 });
     }
+
+    private final Runnable afterReboot = () -> {
+        rebootUntil = 0;
+        if (resumed && loaded) connect();
+    };
 
     private void pickQuality() {
         LinearLayout c = Ui.col(this, 10);
         final Dialog[] d = new Dialog[1];
-        String[] desc = {Ui.L("Nhẹ nhất, 24 FPS — mạng 4G/wifi yếu", "Lightest, 24 FPS — weak 4G/wifi"),
-                Ui.L("Mượt, phản hồi nhanh, 30 FPS — khuyên dùng", "Smooth, responsive, 30 FPS — recommended"),
-                Ui.L("Nét nhất, 60 FPS — cần máy ≥4 nhân + mạng khoẻ", "Sharpest, 60 FPS — needs ≥4 cores + fast network")};
+        String[] desc = {Ui.L("Nhẹ nhất, 30 FPS — mạng 4G/wifi yếu", "Lightest, 30 FPS — weak 4G/wifi"),
+                Ui.L("Mượt 60 FPS, nét vừa — khuyên dùng", "Smooth 60 FPS — recommended"),
+                Ui.L("Nét nhất, 60 FPS — cần mạng khoẻ", "Sharpest, 60 FPS — needs a fast network")};
         for (int i = 0; i < QUAL.length; i++) {
             final String k = QUAL[i][0];
             Button b = Ui.button(this, Ui.L(QUAL[i][1], QUAL[i][2]) + " — " + desc[i], k.equals(quality) ? Ui.PRIMARY : Ui.GHOST);
-            b.setOnClickListener(v -> { d[0].dismiss(); quality = k; pref.edit().putString("q", k).apply(); updQ(); page("cpApp.quality('" + k + "')"); });
+            b.setOnClickListener(v -> {
+                d[0].dismiss();
+                quality = k;
+                pref.edit().putString("q", k).apply();
+                updQ();
+                if (client != null) client.quality(k);
+            });
             c.addView(b, Ui.fill());
         }
-        Button more = Ui.button(this, "⚙️ " + Ui.L("Cách giải mã hình (khi bị đen / giật)…", "Video decoder (if black / choppy)…"), Ui.GHOST);
-        more.setOnClickListener(v -> { d[0].dismiss(); page("cpApp.act('quality')"); });
-        c.addView(more, Ui.fill());
         d[0] = Ui.sheet(this, Ui.L("Chất lượng hình", "Video quality"), c);
         d[0].show();
     }
@@ -494,7 +786,17 @@ public class ControlActivity extends Activity {
                 if (!"active".equals(p.optString("status")) || MainActivity.locked(p)) continue;
                 boolean me = p.optString("id").equals(id);
                 Button b = Ui.button(this, (me ? "● " : "") + p.optString("name") + " · " + p.optInt("ram") + "GB", me ? Ui.PRIMARY : Ui.GHOST);
-                b.setOnClickListener(v -> { d[0].dismiss(); if (!me) { id = p.optString("id"); load(); } });
+                b.setOnClickListener(v -> {
+                    d[0].dismiss();
+                    if (me) return;
+                    String nid = cleanId(p.optString("id"));
+                    if (nid == null) return;
+                    if (kbOpen) kbShow(false);
+                    resetSink();
+                    remoteIme = false;
+                    id = nid;
+                    load();
+                });
                 c.addView(b, Ui.fill());
             }
             if (c.getChildCount() == 0) c.addView(Ui.muted(this, Ui.L("Không có máy nào đang chạy.", "No running phones.")));
@@ -504,7 +806,8 @@ public class ControlActivity extends Activity {
     }
 
     private void apps() {
-        Api.bg(() -> Api.cp("GET", id + "/apps", null), j -> {
+        final String base = api, pid = id;
+        Api.bg(() -> Api.cpAt(base, "GET", pid + "/apps", null), j -> {
             JSONArray a = j.optJSONArray("apps");
             LinearLayout c = Ui.col(this, 8);
             if (a == null || a.length() == 0) c.addView(Ui.muted(this, Ui.L("Chưa có ứng dụng nào do bạn cài.", "No user-installed apps.")));
@@ -539,7 +842,8 @@ public class ControlActivity extends Activity {
     // ---------------- Clone tab: chạy thêm bản Roblox / app khác để đăng nhập acc khác ----------------
     private void cloneTab() {
         Dialog[] pd = progress(Ui.L("Đang tải danh sách app…", "Loading apps…"));
-        Api.bg(() -> new JSONObject[]{Api.cp("GET", id + "/apps", null), Api.cp("GET", id + "/clone", null)}, js -> {
+        final String base = api, pid = id;
+        Api.bg(() -> new JSONObject[]{Api.cpAt(base, "GET", pid + "/apps", null), Api.cpAt(base, "GET", pid + "/clone", null)}, js -> {
             pd[0].dismiss();
             JSONArray a = js[0].optJSONArray("apps");
             JSONObject cnt = js[1].optJSONObject("counts");
@@ -570,8 +874,8 @@ public class ControlActivity extends Activity {
                     if (d[0] != null) d[0].dismiss();
                     Dialog[] p2 = progress(Ui.L("Đang tạo bản clone (~20 giây)…", "Creating clone (~20s)…"));
                     Api.bg(() -> {
-                        JSONObject j = Api.cp("POST", id + "/clone", new JSONObject().put("pkg", pkg).put("n", Math.min(mx, k + 1)));
-                        return waitJob(j.optString("job"), p2);
+                        JSONObject j = Api.cpAt(base, "POST", pid + "/clone", new JSONObject().put("pkg", pkg).put("n", Math.min(mx, k + 1)));
+                        return waitJob(base, j.optString("job"), p2);
                     }, msg -> { p2[0].dismiss(); Ui.toast(this, msg); }, m -> { p2[0].dismiss(); Ui.toast(this, m); });
                 });
                 w.addView(add);
@@ -625,9 +929,10 @@ public class ControlActivity extends Activity {
     // ---------------- Root máy ----------------
     private void root() {
         Dialog[] pd = progress(Ui.L("Đang kiểm tra / bật root…", "Checking root…"));
+        final String base = api, pid = id;
         Api.bg(() -> {
-            JSONObject j = Api.cp("POST", id + "/root", new JSONObject());
-            return waitJob(j.optString("job"), pd);
+            JSONObject j = Api.cpAt(base, "POST", pid + "/root", new JSONObject());
+            return waitJob(base, j.optString("job"), pd);
         }, msg -> { pd[0].dismiss(); Ui.toast(this, msg); }, m -> { pd[0].dismiss(); Ui.toast(this, m); });
     }
 
@@ -662,7 +967,7 @@ public class ControlActivity extends Activity {
     private void upload(Uri u, String name, long size) {
         boolean apk = name.toLowerCase(java.util.Locale.ROOT).endsWith(".apk");
         Dialog[] pd = progress(Ui.L("Đang gửi ", "Uploading ") + name);
-        final String fname = name;
+        final String fname = name, base = api, pid = id;
         Api.bg(() -> {
             String upid = Long.toString(System.currentTimeMillis(), 36) + Integer.toString(new Random().nextInt(1 << 30), 36);
             int CH = 8 * 1024 * 1024;
@@ -676,10 +981,10 @@ public class ControlActivity extends Activity {
                     while (n < CH) { int k = in.read(buf, n, CH - n); if (k < 0) break; n += k; }
                     if (n == 0) break;
                     byte[] chunk = n == CH ? buf : java.util.Arrays.copyOf(buf, n);
-                    String path = id + "/upload?id=" + upid + "&name=" + URLEncoder.encode(fname, "UTF-8") + "&total=" + size + "&off=" + off;
+                    String path = pid + "/upload?id=" + upid + "&name=" + URLEncoder.encode(fname, "UTF-8") + "&total=" + size + "&off=" + off;
                     JSONObject j = null;
                     for (int t = 1; ; t++) {
-                        try { j = Api.cpUpload(path, chunk); break; }
+                        try { j = Api.cpUploadAt(base, path, chunk); break; }
                         catch (Api.ApiError e) { if (e.status < 500 || t > 4) throw e; Thread.sleep(1500L * t); }
                         catch (java.io.IOException e) { if (t > 4) throw e; Thread.sleep(1500L * t); }
                     }
@@ -691,14 +996,14 @@ public class ControlActivity extends Activity {
             }
             if (job == null) throw new Exception(Ui.L("Gửi file chưa xong, thử lại.", "Upload incomplete, retry."));
             Api.ui(() -> setProgress(pd, apk ? Ui.L("Đang cài ứng dụng…", "Installing…") : Ui.L("Đang chép vào máy…", "Copying…")));
-            return waitJob(job, pd);
+            return waitJob(base, job, pd);
         }, msg -> { pd[0].dismiss(); Ui.toast(this, msg); }, m -> { pd[0].dismiss(); Ui.toast(this, m); });
     }
 
-    private String waitJob(String job, Dialog[] pd) throws Exception {
+    private String waitJob(String base, String job, Dialog[] pd) throws Exception {
         for (int i = 0; i < 900; i++) {
             Thread.sleep(1500);
-            JSONObject j = Api.cp("GET", "job?id=" + job, null);
+            JSONObject j = Api.cpAt(base, "GET", "job?id=" + job, null);
             String st = j.optString("state"), msg = j.optString("msg");
             Api.ui(() -> setProgress(pd, msg));
             if ("done".equals(st)) return "✅ " + msg;

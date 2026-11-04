@@ -142,7 +142,10 @@ public class LoginActivity extends Activity {
     private void fail(String m) { done(); err.setTextColor(Ui.BAD); err.setText(m); }
 
     private void openMain() {
-        startActivity(new Intent(this, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK));
+        Intent main = new Intent(this, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+        String pid = getIntent() != null ? getIntent().getStringExtra("open_phone") : null;   // mở từ link blueroblox://phone/… → đăng nhập xong vào thẳng máy đó
+        if (pid != null && !pid.isEmpty()) startActivities(new Intent[]{main, new Intent(this, ControlActivity.class).putExtra("id", pid)});
+        else startActivity(main);
         finish();
     }
 }

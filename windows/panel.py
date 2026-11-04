@@ -25,7 +25,9 @@ def _boost_self():
         k.SetProcessInformation(h, 0, ctypes.byref(MP(5)), 4)       # ProcessMemoryPriority = 5 (bình thường)
         ctypes.windll.ntdll.NtSetInformationProcess(h, 33, ctypes.byref(ctypes.c_ulong(2)), 4)   # IoPriority = bình thường
     except Exception: pass
-ENV = dict(os.environ, PATH=os.path.join(B, "platform-tools") + os.pathsep + os.environ.get("PATH", ""), PYTHONIOENCODING="utf-8", PYTHONUTF8="1", PYTHONUNBUFFERED="1")
+ENV = dict(os.environ, PATH=os.path.join(B, "platform-tools") + os.pathsep + os.environ.get("PATH", ""), PYTHONIOENCODING="utf-8", PYTHONUTF8="1", PYTHONUNBUFFERED="1",
+           ADB_LOCAL_TRANSPORT_MAX_PORT="5553")   # adb KHÔNG tự dò "emulator-55xx": LDPlayer hiện mỗi máy 2 lần (emulator-5556 + 127.0.0.1:5557)
+                                                  # → trình phát hình bật 2 bộ nén trên cùng 1 máy, tranh nhau cổng → hình đứng/giựt
 
 # ---------- màu Cloud Blue ----------
 BG, CARD, LINE, FG, MUTED, BLUE, GOOD, BAD, WARN = "#0b1530", "#12204a", "#22356e", "#e8efff", "#93a4cf", "#3d8bff", "#2ecc71", "#ff5d6c", "#ffb547"

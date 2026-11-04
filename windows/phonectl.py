@@ -12,6 +12,7 @@ HOME = os.environ.get("BLUE_HOME") or os.path.dirname(os.path.abspath(__file__))
 STATE = os.path.join(HOME, "redroid", "phones.json")
 CONF_F = os.path.join(HOME, "cloudphone.conf")
 ADB = os.path.join(HOME, "platform-tools", "adb.exe")
+os.environ["ADB_LOCAL_TRANSPORT_MAX_PORT"] = "5553"      # adb không tự dò emulator-55xx (LDPlayer hiện trùng máy) — xem panel.py
 GRACE_MIN = 30
 BOOT_WAIT = 300
 SAFE = re.compile(r"^[A-Za-z0-9_.-]+$")

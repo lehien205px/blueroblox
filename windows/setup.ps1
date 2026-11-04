@@ -74,6 +74,7 @@ $LDP = @("C:\LDPlayer\LDPlayer9", "D:\LDPlayer\LDPlayer9", "C:\Program Files\LDP
 $MEMU = @("C:\Program Files\Microvirt\MEmu", "D:\Program Files\Microvirt\MEmu", "C:\Microvirt\MEmu", "D:\Microvirt\MEmu") | Where-Object { Test-Path "$_\memuc.exe" } | Select-Object -First 1
 if ($LDP) { $MEMU = $LDP }
 if (-not $MEMU) { throw "Khong thay gia lap. Cai LDPlayer 9 (ldplayer.net) truoc." }
+[Environment]::SetEnvironmentVariable("ADB_LOCAL_TRANSPORT_MAX_PORT", "5553", "Machine"); $env:ADB_LOCAL_TRANSPORT_MAX_PORT = "5553"   # adb không tự dò emulator-55xx (LDPlayer hiện mỗi máy 2 lần)
 Get-Process adb -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 foreach ($f in "adb.exe", "AdbWinApi.dll", "AdbWinUsbApi.dll") {
   if ((Test-Path "$MEMU\$f") -and -not (Test-Path "$MEMU\$f.bak")) { Copy-Item "$MEMU\$f" "$MEMU\$f.bak" }
@@ -112,7 +113,7 @@ Ok "$B\ws-scrcpy\dist"
 # Sửa: chỉ giữ khung MỚI NHẤT (vẽ ngay khung mới, bỏ khung cũ) → bớt tới ~100ms trễ.
 Get-ChildItem "$B\ws-scrcpy\dist" -Recurse -Filter *.js -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notmatch '\\node_modules\\' } | ForEach-Object {
   $t = [IO.File]::ReadAllText($_.FullName)
-  if ($t -match 'videoSettings\.maxFps\s*/\s*10') { [IO.File]::WriteAllText($_.FullName, ($t -replace 'videoSettings\.maxFps\s*/\s*10', '0')); Ok "it tre: $($_.Name)" } }
+  if ($t -match 'videoSettings\.maxFps\s*/\s*10') { [IO.File]::WriteAllText($_.FullName, ($t -replace 'videoSettings\.maxFps\s*/\s*10', 'videoSettings.maxFps*0')); Ok "it tre: $($_.Name)" } }   # giữ "this." phía trước → vẫn đúng cú pháp
 # chặn máy khác trong mạng vào thẳng cổng 8000 (chỉ đi qua cpapi 8010 + Cloudflare)
 netsh advfirewall firewall delete rule name="BlueRoblox chan 8000" | Out-Null
 netsh advfirewall firewall add rule name="BlueRoblox chan 8000" dir=in action=block protocol=TCP localport=8000,8010 remoteip=localsubnet | Out-Null

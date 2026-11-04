@@ -14,15 +14,14 @@ $R = "C:\blue\rtc"; New-Item -ItemType Directory -Force $R | Out-Null
 function Ok($m) { Write-Host "  [OK] $m" -ForegroundColor Green }
 
 # 1) FFmpeg (bản chính thức BtbN trên GitHub) + MediaMTX (máy chủ WebRTC mã nguồn mở, GitHub bluenviron)
-# Bản FFmpeg 7.1 (NVENC API 12.x) — bản mới nhất đòi driver NVIDIA 610+, card GTX 10xx (Pascal) không có driver đó
-if ((Test-Path "$R\ffmpeg.exe") -and -not (Test-Path "$R\ff71.ok")) { Remove-Item "$R\ffmpeg.exe" }
+# Bản FFmpeg 6.1 (NVENC API 12.1) — bản 7.1+ đòi NVENC 13 (driver NVIDIA 570+); máy đang có NVENC 12.2
+if ((Test-Path "$R\ffmpeg.exe") -and -not (Test-Path "$R\ff61.ok")) { Remove-Item "$R\ffmpeg.exe" }
 if (-not (Test-Path "$R\ffmpeg.exe")) {
-  Write-Host "Tai FFmpeg 7.1 (~100MB)..."
-  # bản 7.1 của Gyan (mirror chính thức trên GitHub GyanD/codexffmpeg) — dùng NVENC API 12.x
-  curl.exe -fsSL -o "$R\ff.zip" "https://github.com/GyanD/codexffmpeg/releases/download/7.1.1/ffmpeg-7.1.1-essentials_build.zip"
-  if ($LASTEXITCODE -ne 0) { curl.exe -fsSL -o "$R\ff.zip" "https://github.com/GyanD/codexffmpeg/releases/download/7.1/ffmpeg-7.1-essentials_build.zip" }
-  if ($LASTEXITCODE -ne 0) { throw "Khong tai duoc FFmpeg 7.1 — gui ket qua cho ho tro" }
-  Set-Content "$R\ff71.ok" "1"
+  Write-Host "Tai FFmpeg 6.1 (~80MB)..."
+  # bản của Gyan (mirror chính thức trên GitHub GyanD/codexffmpeg)
+  curl.exe -fsSL -o "$R\ff.zip" "https://github.com/GyanD/codexffmpeg/releases/download/6.1.1/ffmpeg-6.1.1-essentials_build.zip"
+  if ($LASTEXITCODE -ne 0) { throw "Khong tai duoc FFmpeg 6.1 — gui ket qua cho ho tro" }
+  Set-Content "$R\ff61.ok" "1"
   Expand-Archive -Force "$R\ff.zip" "$R\fftmp"
   Copy-Item -Force (Get-ChildItem "$R\fftmp" -Recurse -Filter ffmpeg.exe | Select-Object -First 1).FullName "$R\ffmpeg.exe"
   Remove-Item -Recurse -Force "$R\ff.zip", "$R\fftmp" }

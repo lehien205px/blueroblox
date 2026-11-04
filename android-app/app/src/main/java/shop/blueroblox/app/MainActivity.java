@@ -204,6 +204,7 @@ public class MainActivity extends Activity {
     void refresh() {
         h.removeCallbacks(poll);
         Api.<Object[]>bg(() -> {
+            Api.siteOnce();                                  // lần đầu: tên miền web hiện tại (settings.data.web)
             JSONObject[] o = {Api.profile(), Api.pricing(), Api.status()};
             JSONArray ps = Api.phones();
             return new Object[]{o, ps};
@@ -750,8 +751,8 @@ public class MainActivity extends Activity {
                 mk.setEnabled(true);
                 String code = r instanceof JSONObject ? ((JSONObject) r).optString("code") : "";
                 newBox.removeAllViews();
-                newBox.addView(codeBox(code, Ui.L("Gửi mã cho người cần dùng. Họ vào app hoặc blueroblox.shop → ĐT đám mây → nhập mã.",
-                        "Send this code. They open the app or blueroblox.shop → Cloud phones → enter the code.")), Ui.fill());
+                newBox.addView(codeBox(code, Ui.L("Gửi mã cho người cần dùng. Họ vào app hoặc " + Api.webHost() + " → ĐT đám mây → nhập mã.",
+                        "Send this code. They open the app or " + Api.webHost() + " → Cloud phones → enter the code.")), Ui.fill());
                 load[0].run();
             }, msg -> { mk.setEnabled(true); Ui.toast(this, msg); });
         });
@@ -1056,7 +1057,7 @@ public class MainActivity extends Activity {
 
         LinearLayout l = Ui.card(this);
         l.addView(Ui.h2(this, Ui.L("Hỗ trợ", "Support")));
-        Button web = Ui.button(this, "🌐 " + Ui.L("Mở website blueroblox.shop", "Open blueroblox.shop"), Ui.GHOST);
+        Button web = Ui.button(this, "🌐 " + Ui.L("Mở website ", "Open ") + Api.webHost(), Ui.GHOST);
         web.setOnClickListener(v -> openWeb(Api.WEB));
         l.addView(web, Ui.fill());
         Button pol = Ui.button(this, "📄 " + Ui.L("Chính sách & điều khoản", "Policy & terms"), Ui.GHOST);
@@ -1087,12 +1088,7 @@ public class MainActivity extends Activity {
 
     /** need > 0: số tiền còn thiếu (điền sẵn, làm tròn lên 1.000đ). */
     void openTopup(double need) {
-        Api.<JSONObject>bg(() -> {
-            Object o = Api.get("settings?id=eq.1&select=data");
-            JSONArray a = o instanceof JSONArray ? (JSONArray) o : new JSONArray();
-            JSONObject d = a.length() > 0 ? a.getJSONObject(0).optJSONObject("data") : null;
-            return d == null ? new JSONObject() : d;
-        }, site -> topupSheet(site, need), m -> Ui.toast(this, m));
+        Api.<JSONObject>bg(Api::site, site -> topupSheet(site, need), m -> Ui.toast(this, m));
     }
 
     void topupSheet(JSONObject site, double need) {

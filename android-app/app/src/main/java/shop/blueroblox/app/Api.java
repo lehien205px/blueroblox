@@ -22,9 +22,39 @@ import java.util.concurrent.Executors;
 public final class Api {
     public static final String SB = "https://nprftgodswlpzomcttal.supabase.co";
     public static final String KEY = "sb_publishable_qfNcnOMv70nq5LIlYXDJzg_UtdWHVze";
-    public static final String PHONE = "https://phone.blueroblox.shop";
+    /** cpapi mặc định — chỉ dùng khi máy chủ chưa báo đường riêng (stream.api). */
+    public static final String PHONE = "https://phone.cloudblue.vn";
     public static final String CPAPI = PHONE + "/cpapi";
-    public static final String WEB = "https://blueroblox.shop";
+    /** Web chính. Admin đổi được trong Supabase (settings.data.web) → lần sau đổi tên miền không cần cập nhật app. */
+    public static volatile String WEB = "https://cloudblue.vn";
+    /** File app trên GitHub (app.json + APK) — dùng khi web không vào được. */
+    public static final String GH_DL = "https://raw.githubusercontent.com/lehien205px/blueroblox/main/blueroblox-site/download";
+    private static volatile boolean siteOk = false;
+
+    /** Nhận tên miền web mới (chỉ link https hợp lệ, không có đường dẫn). */
+    static void setWeb(String u) {
+        if (u == null) return;
+        u = u.trim();
+        while (u.endsWith("/")) u = u.substring(0, u.length() - 1);
+        if (u.matches("(?i)https://[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*\\.[a-z]{2,}")) WEB = u;
+    }
+
+    /** Tên miền để hiện cho người dùng (VD cloudblue.vn). */
+    public static String webHost() { return WEB.replaceFirst("(?i)^https://(www\\.)?", ""); }
+
+    /** Bảng settings (ngân hàng, tên miền web…). Chạy nền. */
+    public static JSONObject site() throws Exception {
+        Object o = get("settings?id=eq.1&select=data");
+        JSONArray a = o instanceof JSONArray ? (JSONArray) o : new JSONArray();
+        JSONObject d = a.length() > 0 ? a.getJSONObject(0).optJSONObject("data") : null;
+        if (d == null) d = new JSONObject();
+        setWeb(d.optString("web", null));
+        siteOk = true;
+        return d;
+    }
+
+    /** 1 lần mỗi lần mở app (nền): lấy tên miền web hiện tại. Lỗi thì bỏ qua, dùng tên miền mặc định. */
+    public static void siteOnce() { if (!siteOk) try { site(); } catch (Exception ignored) { } }
 
     private static final ExecutorService POOL = Executors.newFixedThreadPool(4);
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
@@ -261,7 +291,7 @@ public final class Api {
     }
 
     // ---------------- cpapi trên máy chủ đang giữ máy (stream.api của cloudphone_endpoint) ----------------
-    /** Gốc cpapi: base = stream.api (VD https://phone.blueroblox.shop); rỗng / không phải https → máy chủ mặc định. */
+    /** Gốc cpapi: base = stream.api (VD https://phone.cloudblue.vn); rỗng / không phải https → máy chủ mặc định. */
     public static String cpRoot(String base) {
         String b = base == null ? "" : base.trim();
         if (!b.startsWith("https://")) b = PHONE;

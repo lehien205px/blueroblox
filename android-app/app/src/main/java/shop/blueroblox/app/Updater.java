@@ -26,7 +26,8 @@ import java.net.URL;
 
 /**
  * Tự cập nhật app ngay trong app (không cần lên web tải file):
- *  1) Đọc https://blueroblox.shop/download/app.json (GitHub tự ghi mỗi lần build).
+ *  1) Đọc <web>/download/app.json (GitHub tự ghi mỗi lần build); web không vào được (tên miền hỏng…)
+ *     thì đọc thẳng file đó trên GitHub (Api.GH_DL) → app luôn tự cập nhật được.
  *  2) Có bản mới → hiện thông báo "Cập nhật ngay".
  *  3) Bấm → app tự tải APK (có thanh %), rồi giao cho trình cài đặt của Android.
  * Android luôn hỏi xác nhận 1 lần ("Cập nhật") vì app không cài từ CH Play; lần đầu còn hỏi quyền
@@ -51,13 +52,15 @@ public final class Updater {
         lastCheck = now;
         SharedPreferences sp = a.getSharedPreferences(P, Context.MODE_PRIVATE);
         Api.bg(() -> {
-            HttpURLConnection c = (HttpURLConnection) new URL(Api.WEB + "/download/app.json?t=" + System.currentTimeMillis()).openConnection();
-            c.setConnectTimeout(10000); c.setReadTimeout(10000); c.setUseCaches(false);
-            try (InputStream in = c.getInputStream()) {
-                java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream(); byte[] b = new byte[4096]; int n;
-                while ((n = in.read(b)) > 0) bo.write(b, 0, n);
-                return new JSONObject(bo.toString("UTF-8"));
-            } finally { c.disconnect(); }
+            Exception last = null;
+            for (String base : order(null)) {
+                try {
+                    JSONObject j = readJson(base + "/app.json?t=" + System.currentTimeMillis());
+                    if (j.optLong("code", 0) <= 0) throw new java.io.IOException("app.json sai");
+                    return j.put("_src", base);
+                } catch (Exception e) { last = e; }
+            }
+            throw last != null ? last : new java.io.IOException("no source");
         }, j -> {
             long code = j.optLong("code", 0);
             if (code <= myCode(a)) { if (manual) Ui.toast(a, Ui.L("Bạn đang dùng bản mới nhất (v" + Api.version + ").", "You're on the latest version (v" + Api.version + ").")); return; }
@@ -101,7 +104,7 @@ public final class Updater {
             go.setEnabled(false); later.setEnabled(false); d.setCancelable(false);
             bar.setVisibility(android.view.View.VISIBLE); st.setVisibility(android.view.View.VISIBLE);
             st.setText(Ui.L("Đang tải bản mới…", "Downloading…"));
-            download(a, bar, st, () -> { d.dismiss(); }, m -> { go.setEnabled(true); later.setEnabled(true); d.setCancelable(true); st.setText(m); });
+            download(a, j.optString("_src", null), bar, st, () -> { d.dismiss(); }, m -> { go.setEnabled(true); later.setEnabled(true); d.setCancelable(true); st.setText(m); });
         });
         d.show();
     }
@@ -109,18 +112,54 @@ public final class Updater {
     interface Done { void run(); }
     interface Fail { void run(String m); }
 
-    /** Tải APK thẳng vào phiên cài đặt của Android (không cần lưu file ra bộ nhớ). */
-    private static void download(Activity a, ProgressBar bar, TextView st, Done ok, Fail fail) {
+    /** Thứ tự nguồn tải: nguồn vừa đọc được app.json trước, rồi web, rồi GitHub. */
+    private static String[] order(String first) {
+        java.util.LinkedHashSet<String> s = new java.util.LinkedHashSet<>();
+        if (first != null && first.startsWith("https://")) s.add(first);
+        s.add(Api.WEB + "/download");
+        s.add(Api.GH_DL);
+        return s.toArray(new String[0]);
+    }
+
+    private static JSONObject readJson(String url) throws Exception {
+        HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
+        c.setConnectTimeout(8000); c.setReadTimeout(10000); c.setUseCaches(false);
+        try {
+            if (c.getResponseCode() != 200) throw new java.io.IOException("HTTP " + c.getResponseCode());
+            try (InputStream in = c.getInputStream()) {
+                java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream(); byte[] b = new byte[4096]; int n;
+                while ((n = in.read(b)) > 0) bo.write(b, 0, n);
+                return new JSONObject(bo.toString("UTF-8"));
+            }
+        } finally { c.disconnect(); }
+    }
+
+    /** Tải APK (thử lần lượt các nguồn) thẳng vào phiên cài đặt của Android (không cần lưu file ra bộ nhớ). */
+    private static void download(Activity a, String src, ProgressBar bar, TextView st, Done ok, Fail fail) {
         Api.bg(() -> {
-            PackageInstaller pi = a.getPackageManager().getPackageInstaller();
-            PackageInstaller.SessionParams sp = new PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL);
-            sp.setAppPackageName(a.getPackageName());
-            if (Build.VERSION.SDK_INT >= 31) sp.setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED);
-            int id = pi.createSession(sp);
-            HttpURLConnection c = (HttpURLConnection) new URL(Api.WEB + "/download/blueroblox-cloud.apk?t=" + System.currentTimeMillis()).openConnection();
-            c.setConnectTimeout(15000); c.setReadTimeout(30000); c.setUseCaches(false);
+            Exception last = null;
+            for (String base : order(src)) {
+                try { install(a, base + "/blueroblox-cloud.apk?t=" + System.currentTimeMillis(), bar, st); return Boolean.TRUE; }
+                catch (Exception e) { last = e; }
+            }
+            throw last != null ? last : new java.io.IOException("no source");
+        }, r -> { st.setText(Ui.L("Đang mở trình cài đặt… bấm \"Cập nhật\" để hoàn tất.", "Opening installer… tap \"Update\" to finish.")); ok.run(); },
+           m -> fail.run(Ui.L("Tải bản mới bị lỗi: ", "Download failed: ") + m + Ui.L(" — thử lại nhé.", " — please try again.")));
+    }
+
+    private static void install(Activity a, String url, ProgressBar bar, TextView st) throws Exception {
+        PackageInstaller pi = a.getPackageManager().getPackageInstaller();
+        PackageInstaller.SessionParams sp = new PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL);
+        sp.setAppPackageName(a.getPackageName());
+        if (Build.VERSION.SDK_INT >= 31) sp.setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED);
+        int id = pi.createSession(sp);
+        HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
+        c.setConnectTimeout(15000); c.setReadTimeout(30000); c.setUseCaches(false);
+        boolean committed = false;
+        try (PackageInstaller.Session s = pi.openSession(id)) {
+            if (c.getResponseCode() != 200) throw new java.io.IOException("HTTP " + c.getResponseCode());
             long total = c.getContentLengthLong();
-            try (PackageInstaller.Session s = pi.openSession(id); InputStream in = c.getInputStream()) {
+            try (InputStream in = c.getInputStream()) {
                 OutputStream out = s.openWrite("base.apk", 0, total > 0 ? total : -1);
                 byte[] b = new byte[65536]; long done = 0; int n, last = -1;
                 while ((n = in.read(b)) > 0) {
@@ -128,15 +167,18 @@ public final class Updater {
                     final int pct = total > 0 ? (int) (done * 100 / total) : -1;
                     if (pct != last) { last = pct; Api.ui(() -> { if (pct >= 0) { bar.setProgress(pct); st.setText(Ui.L("Đang tải… ", "Downloading… ") + pct + "%"); } }); }
                 }
+                if (total > 0 && done != total) throw new java.io.IOException("tải thiếu " + done + "/" + total);
                 s.fsync(out);
                 out.close();
-                Intent i = new Intent(a, Updater.Result.class);
-                int fl = PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= 31 ? PendingIntent.FLAG_MUTABLE : 0);
-                s.commit(PendingIntent.getBroadcast(a, id, i, fl).getIntentSender());
-            } finally { c.disconnect(); }
-            return Boolean.TRUE;
-        }, r -> { st.setText(Ui.L("Đang mở trình cài đặt… bấm \"Cập nhật\" để hoàn tất.", "Opening installer… tap \"Update\" to finish.")); ok.run(); },
-           m -> fail.run(Ui.L("Tải bản mới bị lỗi: ", "Download failed: ") + m + Ui.L(" — thử lại nhé.", " — please try again.")));
+            }
+            Intent i = new Intent(a, Updater.Result.class);
+            int fl = PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= 31 ? PendingIntent.FLAG_MUTABLE : 0);
+            s.commit(PendingIntent.getBroadcast(a, id, i, fl).getIntentSender());
+            committed = true;
+        } finally {
+            c.disconnect();
+            if (!committed) try { pi.abandonSession(id); } catch (Exception ignored) { }
+        }
     }
 
     /** Nhận kết quả cài: cần người dùng xác nhận → mở hộp "Cập nhật" của Android. */

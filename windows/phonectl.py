@@ -393,7 +393,13 @@ def cmd_create(a):
             idx = int(m.group(1)) if m else next(iter(sorted(set(vms()) - before)), None)
             if idx is None: print("LỖI tạo máy:", ((r.stdout or "") + (r.stderr or "")).strip()[-300:]); sys.exit(4)
             print(f"[2/4] Đã tạo MEmu #{idx} → đặt tên, RAM, CPU, root…", flush=True)
-            memuc("rename", "-i", idx, a.name, timeout=60)
+            for _t in range(4):                                          # đổi tên PHẢI thành công — máy tìm theo TÊN (không thì thành "MEmuNN" mồ côi)
+                memuc("rename", "-i", idx, a.name, timeout=60)
+                if (vms().get(idx) or {}).get("name") == a.name: break
+                time.sleep(3)
+            else:
+                print(f"LỖI: MEmu không đổi tên được máy #{idx} → xoá máy dở", flush=True)
+                memuc("remove", "-i", idx, timeout=180); sys.exit(4)
             dpi = a.dpi or auto_dpi(a.res)
             configure(idx, a.ram, a.cpu, a.res, dpi)
             memuc("setconfigex", "-i", idx, "fps", clamp_fps(a.fps), timeout=60)

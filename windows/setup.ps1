@@ -60,7 +60,7 @@ if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
   if ($WG) { winget install -e --id OpenJS.NodeJS.LTS --scope machine --accept-source-agreements --accept-package-agreements | Out-Null }
   else { Get "https://nodejs.org/dist/v20.18.0/node-v20.18.0-x64.msi" "$B\node.msi"; Start-Process -Wait msiexec.exe -ArgumentList "/i `"$B\node.msi`" /qn /norestart"; Remove-Item "$B\node.msi" }
   $env:Path = [Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [Environment]::GetEnvironmentVariable("Path", "User") }
-$NODE = (Get-Command node).Source; Ok "node $(node --version)"
+$NODEEXE = (Get-Command node).Source; Ok "node $(node --version)"   # KHÔNG đặt tên $NODE — PowerShell không phân biệt hoa/thường, sẽ ghi đè tham số -Node
 
 Step "3/7 adb (Google platform-tools)"
 if (-not (Test-Path "$B\platform-tools\adb.exe")) {

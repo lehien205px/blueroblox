@@ -3,7 +3,9 @@
 #  Chạy trong PowerShell (Run as administrator):
 #     Set-ExecutionPolicy -Scope Process Bypass -Force; & C:\blue\setup.ps1
 #  Làm: Node.js · adb (Google) · cloudflared · ws-scrcpy (trình phát hình) · tải phonectl/cloudphoned/cpapi · tự chạy khi bật máy
+#  MÁY CHỦ THỨ 2, 3…:  & C:\blue\setup.ps1 -Node win2 -PubHost phone2.blueroblox.shop
 # =====================================================================
+param([string]$Node = "win1", [string]$PubHost = "phone.blueroblox.shop")
 $ErrorActionPreference = "Stop"
 $B = "C:\blue"
 $RAW = "https://raw.githubusercontent.com/lehien205px/blueroblox/main"   # thêm ?t=… để luôn lấy bản mới nhất (không bị giới hạn lượt như api.github.com)
@@ -85,20 +87,28 @@ netsh advfirewall firewall add rule name="BlueRoblox chan 8000" dir=in action=bl
 Step "6/7 Tai chuong trinh BlueRoblox"
 & $PY -m pip install --quiet --disable-pip-version-check pillow 2>$null | Out-Null   # ảnh màn hình nhỏ (màn hình trực tiếp trong danh sách máy)
 foreach ($f in "cloudphoned.py", "cpapi.py") { Get "$RAW/$f" "$B\$f" }
-foreach ($f in "phonectl.py", "run.py", "remake.py", "keep.bat", "start-blue.bat", "panel.py", "wallpaper.png") { Get "$RAW/windows/$f" "$B\$f" }
+foreach ($f in "phonectl.py", "run.py", "remake.py", "keep.bat", "start-blue.bat", "panel.py", "wallpaper.png", "donweb.py", "kiemtra.py", "suachua.ps1") { Get "$RAW/windows/$f" "$B\$f" }
 if (-not (Test-Path "$B\cloudphone.conf")) {
+$PRI = if ($Node -eq "win1") { "1" } else { "0" }
 @"
 SUPABASE_URL=https://nprftgodswlpzomcttal.supabase.co
 SUPABASE_SERVICE_KEY=DAN_SERVICE_ROLE_KEY_VAO_DAY
-PUBLIC_BASE=https://phone.blueroblox.shop
-NODE_ID=win1
-PRIMARY=1
+PUBLIC_BASE=https://$PubHost
+NODE_ID=$Node
+PRIMARY=$PRI
 LIMIT_PCT=90
 RAM_OVER=1
-CPU_OVER=2
-WIN_RAM_RESERVE=4
+CPU_OVER=1
+WIN_VCPU_OVER=1
+WIN_RAM_RESERVE=3
+RAM_BUSY_PCT=98
+MEMU_MAX_RAM=16
+MEMU_MAX_CPU=8
+MEMU_RENDER=1
+MEMU_GMEM_OPT=1
+POOL_SIZE=1
 "@ | Set-Content -Encoding utf8 "$B\cloudphone.conf" }
-Ok "$B\cloudphone.conf"
+Ok "$B\cloudphone.conf  (may chu: $((Select-String "$B\cloudphone.conf" -Pattern '^NODE_ID=').Line) · $((Select-String "$B\cloudphone.conf" -Pattern '^PUBLIC_BASE=').Line))"
 
 Step "7/7 Tu chay khi bat may"
 $lnk = "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\StartUp\BlueRoblox.lnk"

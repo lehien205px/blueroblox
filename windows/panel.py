@@ -6,7 +6,7 @@
 #   • Nút: Cài đặt/Cập nhật · Dán khoá Supabase · Nối Cloudflare · Bật/Tắt tất cả · Tạo/Xoá máy thử · Làm mới máy khách
 #   • Nhật ký từng phần, dòng lỗi tô đỏ. Chương trình nào bị tắt → tự bật lại.
 # =====================================================================
-import ctypes, json, os, queue, re, socket, subprocess, sys, threading, time, tkinter as tk, urllib.request
+import ctypes, json, os, queue, re, socket, subprocess, sys, threading, time, tkinter as tk, urllib.parse, urllib.request
 from tkinter import messagebox, simpledialog, ttk
 
 B = os.path.dirname(os.path.abspath(__file__))
@@ -39,6 +39,11 @@ SERVICES = {   # tên: (thư mục chạy, lệnh)
 }
 FAST_HOST, FAST_PORT, ZONE = "fast.blueroblox.shop", 8443, "blueroblox.shop"
 CADDY_URL = "https://caddyserver.com/api/download?os=windows&arch=amd64&p=github.com%2Fcaddy-dns%2Fcloudflare"
+
+def pub_host():
+    """Tên miền của MÁY CHỦ NÀY (máy 1: phone.blueroblox.shop, máy 2: phone2.blueroblox.shop…) — lấy từ PUBLIC_BASE."""
+    try: return urllib.parse.urlparse(conf().get("PUBLIC_BASE", "")).netloc or "phone.blueroblox.shop"
+    except Exception: return "phone.blueroblox.shop"
 
 def conf():
     d = {}
@@ -184,7 +189,7 @@ class App:
         self.lights = {}
         grid = tk.Frame(r, bg=BG); grid.pack(fill="x", padx=14)
         items = [("memu", "MEmu"), ("adb", "adb (Google)"), ("key", "Khoá Supabase"), ("ws", "Trình phát hình :8000"),
-                 ("api", "Cổng bảo vệ :8010"), ("daemon", "Nhận đơn (cloudphoned)"), ("cf", "Đường hầm Cloudflare"), ("web", "phone.blueroblox.shop")]
+                 ("api", "Cổng bảo vệ :8010"), ("daemon", "Nhận đơn (cloudphoned)"), ("cf", "Đường hầm Cloudflare"), ("web", pub_host())]
         for i, (k, t) in enumerate(items):
             c = tk.Frame(grid, bg=CARD, highlightbackground=LINE, highlightthickness=1); c.grid(row=i // 4, column=i % 4, sticky="nsew", padx=4, pady=4)
             grid.columnconfigure(i % 4, weight=1)
@@ -495,7 +500,7 @@ Write-Host '[OK] Khong ngu, khong tat man hinh'
                 cf = "RUNNING" in q
                 L(0, self.light, "cf", cf if "SERVICE_NAME" in q else False, "đang chạy" if cf else ("đã cài, đang tắt" if "SERVICE_NAME" in q else "chưa nối — bấm ③"))
                 try:
-                    with urllib.request.urlopen(urllib.request.Request("https://phone.blueroblox.shop/", headers={"User-Agent": "BlueRoblox-panel"}), timeout=8) as rr:
+                    with urllib.request.urlopen(urllib.request.Request(f"https://{pub_host()}/", headers={"User-Agent": "BlueRoblox-panel"}), timeout=8) as rr:
                         L(0, self.light, "web", True, f"mở được (HTTP {rr.status})")
                 except urllib.error.HTTPError as e:
                     L(0, self.light, "web", e.code < 500, f"HTTP {e.code}" + (" — máy chủ chưa chạy" if e.code >= 500 else ""))
@@ -589,7 +594,7 @@ Write-Host '[OK] Khong ngu, khong tat man hinh'
         except OSError: pass
         exe = r'$c = (Get-Command cloudflared -ErrorAction SilentlyContinue).Source; if (-not $c) { $c = "C:\Program Files (x86)\cloudflared\cloudflared.exe" }'
         run_admin(f"{exe}\n& $c service uninstall 2>$null\n& $c service install {token}\nStart-Sleep 3\n"
-                  + "Set-Content -Encoding ascii C:\\blue\\cloudflared.yml \"ingress:`n  - hostname: phone.blueroblox.shop`n    service: http://localhost:8010`n  - service: http_status:404\"\n"
+                  + f"Set-Content -Encoding ascii C:\\blue\\cloudflared.yml \"ingress:`n  - hostname: {pub_host()}`n    service: http://localhost:8010`n  - service: http_status:404\"\n"
                   + "$k='HKLM:\\SYSTEM\\CurrentControlSet\\Services\\cloudflared'; $p=(Get-ItemProperty $k).ImagePath\n"
                   + "if ($p -notmatch '--config') { Set-ItemProperty $k ImagePath ($p -replace ' tunnel run', ' tunnel --config C:\\blue\\cloudflared.yml run') }\n"
                   + "Restart-Service cloudflared\nsc.exe start cloudflared\nStart-Sleep 2\nsc.exe query cloudflared", log)
@@ -794,12 +799,12 @@ Write-Host '[OK] Tat Xbox Game DVR'
             # 6) web
             okw, note = False, ""
             try:
-                rr = urllib.request.urlopen(urllib.request.Request("https://phone.blueroblox.shop/", headers={"User-Agent": "BlueRoblox-panel"}), timeout=15)
+                rr = urllib.request.urlopen(urllib.request.Request(f"https://{pub_host()}/", headers={"User-Agent": "BlueRoblox-panel"}), timeout=15)
                 okw = True; note = f"HTTP {rr.status}"
             except urllib.error.HTTPError as e:
                 okw = e.code < 500; note = f"HTTP {e.code}" + ("" if okw else " — đường hầm chưa tới được máy này")
             except Exception as e: note = str(e)[:80]
-            step("6/6 Web phone.blueroblox.shop", okw, note)
+            step(f"6/6 Web {pub_host()}", okw, note)
             bad = [r for r in res if not r[1]]
             S("🎉 ========== XONG: mọi thứ đã chạy! ==========" if not bad else f"⚠ ========== XONG, còn {len(bad)} mục lỗi (dòng ✗ ở trên) ==========")
             if not bad:

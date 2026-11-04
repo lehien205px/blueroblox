@@ -21,9 +21,11 @@ ph = {p["name"]: p for p in json.load(open(os.path.join(B, "redroid", "phones.js
 web = {}
 try:
     K = C["SUPABASE_SERVICE_KEY"]
-    q = urllib.request.Request(C["SUPABASE_URL"].rstrip("/") + "/rest/v1/cloud_phones?container=like.cp_*&status=neq.cancelled&select=container,status,port&limit=500",
+    q = urllib.request.Request(C["SUPABASE_URL"].rstrip("/") + "/rest/v1/cloud_phones?container=like.cp_*&status=neq.cancelled&select=container,status,port,node&limit=500",
                                headers={"apikey": K, "Authorization": "Bearer " + K})
-    for r in json.loads(urllib.request.urlopen(q, timeout=30).read()): web[r["container"]] = r
+    NODE = C.get("NODE_ID", "win1"); PRI = C.get("PRIMARY", "1") == "1"
+    for r in json.loads(urllib.request.urlopen(q, timeout=30).read()):
+        if r.get("node") == NODE or (not r.get("node") and PRI): web[r["container"]] = r   # chỉ máy của máy chủ này
 except Exception as e: print("(không đọc được web:", e, ")")
 names = sorted(set(mem) | set(ph))
 print(f"{'MÁY':16} {'MEmu':10} {'NHÂN THẬT':9} {'DS BLUE':8} {'WEB':10} {'CỔNG':6}  GHI CHÚ")

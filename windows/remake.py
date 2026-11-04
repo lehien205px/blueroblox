@@ -33,10 +33,14 @@ def local():
     try: return {p["name"]: p for p in json.load(open(PHONES, encoding="utf-8")).get("phones", [])}
     except Exception: return {}
 
+PRIMARY = C.get("PRIMARY", "1") == "1"
 def rows():
     rs = sb("GET", "cloud_phones?status=eq.active&select=id,name,container,node,ram,cpu,res,fps,expires_at,user_id&order=created_at.asc") or []
     L = local()
-    return [r for r in rs if not (r.get("node") == NODE and (r.get("container") in L))]
+    # CHỈ máy của MÁY CHỦ NÀY (nhiều máy chủ: không bao giờ làm lại máy đang chạy ở máy chủ khác).
+    # Máy cũ chưa ghi máy chủ → thuộc máy chủ chính (PRIMARY=1).
+    mine = [r for r in rs if r.get("node") == NODE or (not r.get("node") and PRIMARY)]
+    return [r for r in mine if not (r.get("container") in L)]
 
 def remake(r):
     name = r.get("container") or ("cp_" + r["id"].replace("-", "")[:10])

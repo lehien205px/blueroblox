@@ -40,11 +40,14 @@ def age_min(r):
     try: return (datetime.datetime.now(datetime.timezone.utc) - datetime.datetime.fromisoformat(t.replace("Z", "+00:00"))).total_seconds() / 60
     except Exception: return 999
 
+NODE = C.get("NODE_ID") or os.environ.get("COMPUTERNAME", "win1"); PRIMARY = C.get("PRIMARY", "1") == "1"
+def mine(r): return r.get("node") == NODE or (not r.get("node") and PRIMARY)   # chỉ dọn đơn của MÁY CHỦ NÀY
 have = memu_names()
 rows = sb("GET", "cloud_phones?status=in.(pending,creating,cancelling,active,expired,error)"
                  "&select=id,name,container,status,paid,created_at,updated_at,node&order=created_at.asc") or []
 plan = []
 for r in rows:
+    if not mine(r): continue
     c = r.get("container") or ""; st = r["status"]; a = age_min(r); there = c and c in have
     tag = f"{(r.get('name') or '')[:22]:22} {c or '(chưa có máy)':16} {st:10} {a:6.0f} phút  trả {r.get('paid') or 0}đ"
     if st in ("pending", "creating") and not there and a > 5:

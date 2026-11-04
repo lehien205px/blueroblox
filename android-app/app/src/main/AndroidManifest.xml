@@ -35,13 +35,20 @@
             android:launchMode="singleTask"
             android:windowSoftInputMode="adjustResize" />
 
-        <!-- Màn điều khiển: xoay điện thoại không làm mất kết nối -->
+        <!-- Màn điều khiển: xoay điện thoại không làm mất kết nối. Mở thẳng 1 máy bằng link blueroblox://phone/<mã máy> -->
         <activity
             android:name=".ControlActivity"
-            android:exported="false"
+            android:exported="true"
             android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden|navigation|uiMode|density"
             android:screenOrientation="fullUser"
-            android:windowSoftInputMode="adjustResize" />
+            android:windowSoftInputMode="adjustResize|stateHidden">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="blueroblox" android:host="phone" />
+            </intent-filter>
+        </activity>
 
 
         <!-- Biểu tượng mở bản clone trên màn hình chính máy cloud (server bật bằng pm enable khi khách tạo clone) -->

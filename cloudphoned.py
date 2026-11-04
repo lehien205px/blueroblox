@@ -48,7 +48,7 @@ def _f(k, d):
 MEMU_MAX_RAM, MEMU_MAX_CPU = _f("MEMU_MAX_RAM", 16), _f("MEMU_MAX_CPU", 8)
 WIN_RESERVE = _f("WIN_RAM_RESERVE", 4)
 MEMU_MAX_VMS = int(_f("MEMU_MAX_VMS", 0))      # Windows: giới hạn SỐ máy (0 = không giới hạn số máy, chỉ tính theo tổng nhân + RAM)
-WIN_VCPU_OVER = _f("WIN_VCPU_OVER", 1.0)        # tổng nhân ảo cấp cho các máy ≤ số luồng thật × hệ số này (72 luồng × 1 = 72 nhân)
+WIN_VCPU_OVER = _f("WIN_VCPU_OVER", 0.9)        # tổng nhân ảo cấp cho các máy ≤ 90% số luồng thật (72 luồng → 64 nhân) — chừa 10% cho Windows + phát hình
 def want(row):
     """RAM/CPU THẬT sẽ cấp cho đơn: Windows/MEmu tối đa 16GB · 16 nhân mỗi máy (gói to hơn vẫn nhận, chạy mức tối đa)."""
     r, c = float(row.get("ram") or 0), float(row.get("cpu") or 0)

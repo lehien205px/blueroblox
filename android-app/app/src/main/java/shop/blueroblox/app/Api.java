@@ -209,7 +209,7 @@ public final class Api {
     }
 
     public static JSONObject profile() throws Exception {
-        JSONArray a = (JSONArray) get("profiles?id=eq." + uid + "&select=username,email,balance,ctv_status,ctv_discount,locked");
+        JSONArray a = (JSONArray) get("profiles?id=eq." + uid + "&select=username,email,balance,ctv_status,ctv_discount,locked,role");
         return a.length() > 0 ? a.getJSONObject(0) : new JSONObject();
     }
 
@@ -315,6 +315,14 @@ public final class Api {
                 {"SESSION_EXPIRED", "Phiên đăng nhập hết hạn, hãy đăng nhập lại.", "Session expired, please log in again."},
                 {"NOT_LOGGED_IN", "Hãy đăng nhập.", "Please log in."},
                 {"INSUFFICIENT_BALANCE", "Số dư không đủ.", "Not enough balance."},
+                {"MIN_AMOUNT", "Số tiền thấp hơn mức nạp tối thiểu.", "The amount is below the minimum top-up."},
+                {"TOO_MANY", "Bạn có quá nhiều lệnh nạp đang chờ. Thử lại sau ít phút.", "Too many pending top-ups. Try again in a few minutes."},
+                {"FREE_NO_RENEW", "Máy miễn phí không gia hạn được — hãy thuê máy mới.", "Free phones can't be renewed — rent a new one."},
+                {"FREE_NO_UPGRADE", "Máy miễn phí không nâng cấp được.", "Free phones can't be upgraded."},
+                {"UPGRADE_PENDING", "Máy đang được nâng cấp, đợi khoảng 1 phút.", "An upgrade is in progress, wait about a minute."},
+                {"BAD_UPGRADE", "Cấu hình nâng cấp không hợp lệ.", "Invalid upgrade."},
+                {"FREE_ONE", "Máy miễn phí chỉ nhận 1 máy mỗi lần.", "Only one free phone at a time."},
+                {"NO_PHONE", "Không tìm thấy máy.", "Phone not found."},
                 {"MAINTENANCE", "Hệ thống đang bảo trì.", "Under maintenance."},
                 {"OUT_OF_CAPACITY", "Máy chủ đã hết chỗ cho cấu hình này.", "Server is full for this configuration."},
                 {"MAX_PER_USER", "Tài khoản đã đủ số máy cho phép — gia hạn hoặc xoá máy cũ để thuê máy khác.", "You already have the maximum number of phones."},

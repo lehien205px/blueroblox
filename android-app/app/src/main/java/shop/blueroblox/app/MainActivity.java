@@ -53,13 +53,57 @@ public class MainActivity extends Activity {
     String sRes = "720x1280", sAnd = "";
     boolean sFree = false;
 
-    /** Phiên bản Android admin đang bán (Android 12 lên đầu — chạy ổn nhất). */
+    /** Phiên bản Android admin đang bán — đúng thứ tự admin nhập (VD "9,12,7"); trống → Android 9.
+     *  LDPlayer 9 = Android 9 · MuMu = Android 12 + 7 — đơn tự chạy về đúng máy chủ. */
     java.util.List<String> andList() {
         java.util.List<String> l = new java.util.ArrayList<>();
-        for (String v : price.optString("android_versions", "11").split(",")) { v = v.trim(); if (v.matches("\\d{1,2}") && !l.contains(v)) l.add(v); }
-        if (l.isEmpty()) l.add("11");
-        if (l.remove("12")) l.add(0, "12");
+        for (String v : price.optString("android_versions", "9").split(",")) { v = v.trim(); if (v.matches("\\d{1,2}") && !l.contains(v)) l.add(v); }
+        if (l.isEmpty()) l.add("9");
         return l;
+    }
+    /** "" = còn chỗ · "off" = máy chủ bản này bảo trì / chưa có · "full" = không đủ RAM/CPU cho cấu hình đang chọn. */
+    String andWhy(String v) {
+        if (isAdmin()) return "";
+        JSONObject m = status.optJSONObject("android");
+        if (m == null) return "";                       // máy chủ chưa báo theo từng bản → không chặn (SQL vẫn kiểm tra)
+        JSONObject a = m.optJSONObject(v);
+        if (a == null || !a.optBoolean("online", true)) return "off";
+        return a.optDouble("free_ram", 0) < sRam || a.optDouble("free_cpu", 0) < sCpu ? "full" : "";
+    }
+    /** Mặc định Android 9; bản 9 hết chỗ / bảo trì → bản đầu tiên còn chỗ. */
+    String andPick() {
+        java.util.List<String> l = andList(), ok = new java.util.ArrayList<>();
+        for (String v : l) if (andWhy(v).isEmpty()) ok.add(v);
+        return ok.contains("9") ? "9" : !ok.isEmpty() ? ok.get(0) : l.contains("9") ? "9" : l.get(0);
+    }
+    static String andHint(String v) {
+        return "9".equals(v) ? Ui.L("LDPlayer 9 · ổn định", "LDPlayer 9 · stable") : "12".equals(v) ? Ui.L("MuMu · mới nhất", "MuMu · newest")
+                : "7".equals(v) ? Ui.L("MuMu · nhẹ", "MuMu · light") : "";
+    }
+    /** Vẽ lại các nút bản Android theo chỗ trống hiện tại (đổi RAM/CPU là cập nhật ngay). */
+    void paintAnd(Ui.Wrap aw) {
+        if (!andList().contains(sAnd) || !andWhy(sAnd).isEmpty()) sAnd = andPick();
+        for (int i = 0; i < aw.getChildCount(); i++) {
+            TextView ch = (TextView) aw.getChildAt(i);
+            String v = (String) ch.getTag(), why = andWhy(v);
+            ch.setText("Android " + v + "\n" + ("off".equals(why) ? Ui.L("Bảo trì", "Unavailable") : "full".equals(why) ? Ui.L("Hết chỗ", "Full") : andHint(v)));
+            Ui.setChip(ch, v.equals(sAnd));
+            ch.setEnabled(why.isEmpty());
+            ch.setAlpha(why.isEmpty() ? 1f : .4f);
+        }
+    }
+    /** Máy ảo tối đa 8GB · 8 nhân · 60 FPS — không bán vượt sức máy (giống web). */
+    static JSONObject clampHard(JSONObject p) {
+        try {
+            String[] k = {"max_ram", "max_cpu", "max_fps", "free_max_ram", "free_max_cpu"};
+            int[] hv = {8, 8, 60, 8, 8};
+            for (int i = 0; i < k.length; i++) {
+                if (p.isNull(k[i])) { if (i < 3) p.put(k[i], hv[i]); continue; }
+                int v = p.optInt(k[i], hv[i]);
+                p.put(k[i], Math.min(v <= 0 ? hv[i] : v, hv[i]));
+            }
+        } catch (Exception ignored) { }
+        return p;
     }
     boolean isAdmin() { return "admin".equals(prof.optString("role")); }
     /** Ưu đãi miễn phí đang mở (admin bật + chưa hết giờ). */
@@ -163,7 +207,7 @@ public class MainActivity extends Activity {
             return new Object[]{o, ps};
         }, r -> {
             JSONObject[] o = (JSONObject[]) r[0];
-            prof = o[0]; price = o[1]; status = o[2]; phones = (JSONArray) r[1];
+            prof = o[0]; price = clampHard(o[1]); status = o[2]; phones = (JSONArray) r[1];
             balTop.setText("💰 " + Ui.vnd(prof.optDouble("balance", 0)));
             ExpiryAlarm.schedule(this, phones);
             if (tab == 0) renderPhones();
@@ -497,7 +541,7 @@ public class MainActivity extends Activity {
         Dialog d = Ui.sheet(this, Ui.L("Gia hạn ", "Renew ") + p.optString("name"), c);
         ok.setOnClickListener(v -> {
             double total = ctv(perDay(p.optInt("ram"), p.optInt("cpu"))) * days[0];
-            if (prof.optDouble("balance", 0) < total) { d.dismiss(); openTopup(); return; }
+            if (prof.optDouble("balance", 0) < total) { d.dismiss(); openTopup(total - prof.optDouble("balance", 0)); return; }
             ok.setEnabled(false);
             Api.bg(() -> Api.rpc("cloudphone_renew", new JSONObject().put("p_id", p.optString("id")).put("p_days", days[0])), r -> {
                 d.dismiss();
@@ -534,9 +578,10 @@ public class MainActivity extends Activity {
         Runnable quote = () -> {
             if (nr[0] == R0 && nc[0] == C0) { cost[0] = 0; draw[0].run(); return; }
             final int qr = nr[0], qc = nc[0];
+            cost[0] = localQuote(p, qr, qc); draw[0].run();
             Api.bg(() -> Api.rpc("cloudphone_upgrade_quote", new JSONObject().put("p_id", p.optString("id")).put("p_ram", qr).put("p_cpu", qc)),
-                    r -> { if (qr == nr[0] && qc == nc[0]) { try { cost[0] = Long.parseLong(String.valueOf(r).replaceAll("[^0-9]", "")); } catch (Exception e) { cost[0] = 0; } draw[0].run(); } },
-                    m -> { sum.setText(m.contains("upgrade") ? Ui.L("Máy chủ chưa cập nhật tính năng nâng cấp.", "Upgrade isn't available yet.") : m); });
+                    r -> { if (qr == nr[0] && qc == nc[0]) { try { cost[0] = Long.parseLong(String.valueOf(r).replaceAll("[^0-9]", "")); } catch (Exception e) { cost[0] = localQuote(p, qr, qc); } draw[0].run(); } },
+                    m -> { });
         };
         draw[0] = () -> {
             for (int i = 0; i < wr.getChildCount(); i++) Ui.setChip((TextView) wr.getChildAt(i), (int) wr.getChildAt(i).getTag() == nr[0]);
@@ -560,7 +605,7 @@ public class MainActivity extends Activity {
             ch.setOnClickListener(x -> { nc[0] = (int) x.getTag(); draw[0].run(); quote.run(); }); wc.addView(ch); }
         Dialog d = Ui.sheet(this, "⬆️ " + Ui.L("Nâng cấp ", "Upgrade ") + p.optString("name"), c);
         ok.setOnClickListener(v -> {
-            if (prof.optDouble("balance", 0) < cost[0]) { d.dismiss(); openTopup(); return; }
+            if (prof.optDouble("balance", 0) < cost[0]) { d.dismiss(); openTopup(cost[0] - prof.optDouble("balance", 0)); return; }
             ok.setEnabled(false);
             Api.bg(() -> Api.rpc("cloudphone_upgrade", new JSONObject().put("p_id", p.optString("id")).put("p_ram", nr[0]).put("p_cpu", nc[0])), r -> {
                 d.dismiss();
@@ -577,6 +622,23 @@ public class MainActivity extends Activity {
         d.show();
     }
 
+    /** Giá nâng cấp dự tính giống web (máy chủ tính lại chính xác lúc trừ tiền). */
+    long localQuote(JSONObject p, int nr, int nc) {
+        double left = Math.max(0, (parseTime(p.optString("expires_at")) - System.currentTimeMillis()) / 86400000.0);
+        double raw = Math.round(((nr - p.optInt("ram")) * price.optDouble("price_ram_gb_day", 2500) + (nc - p.optInt("cpu")) * price.optDouble("price_cpu_day", 2000)) * left);
+        double pct = isCtv() ? prof.optDouble("ctv_discount", 0) : 0;
+        return (long) Math.ceil(raw * (100 - pct) / 100);
+    }
+
+    /** Huỷ máy: xoá máy + toàn bộ dữ liệu, không hoàn tiền (giống web). */
+    void cancelPhone(JSONObject p) {
+        Ui.confirm(this, Ui.L("Huỷ máy ", "Delete ") + p.optString("name") + "?",
+                Ui.L("Máy và TOÀN BỘ dữ liệu trong máy sẽ bị XOÁ vĩnh viễn, không hoàn tiền.", "The phone and ALL its data will be permanently deleted. No refund."),
+                Ui.L("Xoá máy", "Delete"), () -> Api.bg(() -> Api.rpc("cloudphone_cancel", new JSONObject().put("p_id", p.optString("id"))),
+                        r -> { Ui.toast(this, Ui.L("Đang huỷ máy — máy sẽ biến mất khỏi danh sách trong ít phút.", "Deleting — it will disappear shortly.")); refresh(); },
+                        m -> Ui.toast(this, m)));
+    }
+
     void moreMenu(JSONObject p) {
         LinearLayout c = Ui.col(this, 10);
         Button sh = Ui.button(this, "👥 " + Ui.L("Chia sẻ / chuyển nhượng", "Share / transfer"), Ui.GHOST);
@@ -586,8 +648,10 @@ public class MainActivity extends Activity {
         up.setEnabled(canUp); up.setAlpha(canUp ? 1f : .45f);
         boolean canShare = ("active".equals(p.optString("status")) || "pending".equals(p.optString("status"))) && !locked(p);
         sh.setEnabled(canShare); sh.setAlpha(canShare ? 1f : .45f);
-        c.addView(up, Ui.fill()); c.addView(sh, Ui.fill()); c.addView(rn, Ui.fill());
+        Button del = Ui.button(this, "🗑 " + Ui.L("Huỷ máy (xoá vĩnh viễn)", "Delete phone"), Ui.DANGER);
+        c.addView(up, Ui.fill()); c.addView(sh, Ui.fill()); c.addView(rn, Ui.fill()); c.addView(del, Ui.fill());
         Dialog d = Ui.sheet(this, p.optString("name"), c);
+        del.setOnClickListener(v -> { d.dismiss(); cancelPhone(p); });
         up.setOnClickListener(v -> { d.dismiss(); upgrade(p); });
         sh.setOnClickListener(v -> { d.dismiss(); share(p); });
         rn.setOnClickListener(v -> { d.dismiss(); rename(p); });
@@ -723,6 +787,9 @@ public class MainActivity extends Activity {
     void renderRent() {
         LinearLayout body = Ui.col(this, 14);
         body.addView(Ui.h1(this, Ui.L("Thuê điện thoại đám mây", "Rent a cloud phone")), Ui.fill());
+        if (isAdmin() && status.optBoolean("maint", false))
+            body.addView(Ui.text(this, Ui.L("⚠ Đang bật BẢO TRÌ — khách không thuê được. Tài khoản admin vẫn thuê được để thử máy.",
+                    "⚠ Maintenance is ON — customers can't rent. Admin can still rent to test."), 13, Ui.WAIT, true), Ui.fill());
         body.addView(Ui.muted(this, Ui.L("Chọn gợi ý bên dưới là xong — hoặc tự chỉnh RAM, CPU, số ngày. Máy mới tinh, có Play Store.",
                 "Pick a preset below — or set RAM, CPU and days yourself. Fresh device with Play Store.")), Ui.fill());
 
@@ -742,10 +809,11 @@ public class MainActivity extends Activity {
         }
         if (left <= 1) sQty = 1;
         java.util.List<String> avs = andList();
-        if (!avs.contains(sAnd)) sAnd = avs.get(0);
         if (!freeLive()) sFree = false;
         int minD = price.optInt("min_days", 1), maxD = price.optInt("max_days", 90), minF = price.optInt("min_fps", 10), maxF = price.optInt("max_fps", 120);
         sRam = clamp(sRam, minR, maxR); sCpu = clamp(sCpu, minC, maxC); sDays = clamp(sDays, minD, maxD); sFps = clamp(sFps, minF, maxF);
+        if (!avs.contains(sAnd) || !andWhy(sAnd).isEmpty()) sAnd = andPick();
+        final Ui.Wrap aw = new Ui.Wrap(this, 8);
 
         TextView total = Ui.text(this, "", 22, Ui.SKY, true);
         TextView calc = Ui.text(this, "", 11.5f, Ui.MUTED, false);
@@ -754,6 +822,7 @@ public class MainActivity extends Activity {
         Button buy = Ui.button(this, "", Ui.PRIMARY);
 
         Runnable upd = () -> {
+            paintAnd(aw);
             double t = sFree ? 0 : ctv(perDay(sRam, sCpu) * sDays) * sQty, bal = prof.optDouble("balance", 0);
             total.setText(Ui.vnd(t));
             calc.setText("(" + sRam + "GB × " + Ui.vnd(price.optDouble("price_ram_gb_day", 2500)) + " + " + sCpu + Ui.L(" nhân × ", " cores × ")
@@ -798,15 +867,14 @@ public class MainActivity extends Activity {
         }
         // Phiên bản Android
         LinearLayout ac = Ui.col(this, 8);
-        ac.addView(Ui.text(this, Ui.L("Phiên bản Android", "Android version"), 14, Ui.MUTED, true));
-        Ui.Wrap aw = new Ui.Wrap(this, 8);
+        ac.addView(Ui.text(this, Ui.L("Hệ điều hành", "Operating system"), 14, Ui.MUTED, true));
         for (String v : avs) {
-            TextView ch = Ui.chip(this, "Android " + v + ("9".equals(v) ? Ui.L("  🎮 64-bit · chạy Roblox", "  🎮 64-bit · runs Roblox") : "12".equals(v) ? Ui.L("  ⭐ Khuyên dùng", "  ⭐ Best")
-                    : "10".equals(v) ? Ui.L("  ⚡ GPU · app x86", "  ⚡ GPU · x86 apps") : ""), v.equals(sAnd));
+            TextView ch = Ui.chip(this, "Android " + v + "\n" + andHint(v), v.equals(sAnd));
+            ch.setTextSize(13);
             ch.setTag(v);
             ch.setOnClickListener(x -> {
+                if (!andWhy((String) x.getTag()).isEmpty()) return;      // bản đang bảo trì / hết chỗ
                 sAnd = (String) x.getTag();
-                for (int i = 0; i < aw.getChildCount(); i++) Ui.setChip((TextView) aw.getChildAt(i), aw.getChildAt(i).getTag().equals(sAnd));
                 upd.run();
             });
             aw.addView(ch);
@@ -856,7 +924,7 @@ public class MainActivity extends Activity {
 
         buy.setOnClickListener(v -> {
             double t = sFree ? 0 : ctv(perDay(sRam, sCpu) * sDays) * sQty;
-            if (prof.optDouble("balance", 0) < t) { openTopup(); return; }
+            if (prof.optDouble("balance", 0) < t) { openTopup(t - prof.optDouble("balance", 0)); return; }
             Ui.confirm(this, Ui.L("Xác nhận thuê máy", "Confirm"),
                     "Android " + sAnd + " · " + sQty + Ui.L(" máy · ", " phone(s) · ") + sRam + "GB · " + sCpu + Ui.L(" nhân · ", " cores · ") + sDays + Ui.L(" ngày · ", " days · ") + sRes + " · " + sFps + " FPS\n"
                             + Ui.L("Trừ ", "Charge ") + Ui.vnd(t) + Ui.L(" từ số dư.", " from balance."),
@@ -883,7 +951,7 @@ public class MainActivity extends Activity {
         buy.setEnabled(false);
         Api.bg(() -> Api.rpc("cloudphone_order_custom", new JSONObject().put("p_ram", sRam).put("p_cpu", sCpu).put("p_days", sDays)
                 .put("p_res", sRes).put("p_name", JSONObject.NULL).put("p_fps", sFps).put("p_qty", sFree ? 1 : sQty)
-                .put("p_android", sAnd.isEmpty() ? "12" : sAnd).put("p_free", sFree)), r -> {
+                .put("p_android", sAnd.isEmpty() ? "9" : sAnd).put("p_free", sFree)), r -> {
             Ui.toast(this, Ui.L("Đã đặt máy! Máy đang khởi tạo, khoảng 2–3 phút.", "Ordered! Your phone is being created (2–3 min)."));
             show(0);
             refresh();
@@ -891,12 +959,24 @@ public class MainActivity extends Activity {
     }
 
     String check() {
-        if (status.optBoolean("maint", false)) return Ui.L("Hệ thống đang bảo trì, vui lòng quay lại sau.", "Under maintenance, please come back later.");
-        if (status.has("online") && !status.optBoolean("online", true)) return Ui.L("Máy chủ đang tạm ngưng.", "Server is offline.");
+        if (status.optBoolean("maint", false) && !isAdmin()) return Ui.L("Hệ thống đang bảo trì, vui lòng quay lại sau.", "Under maintenance, please come back later.");
+        if (status.has("online") && !status.optBoolean("online", true) && !isAdmin()) return Ui.L("Máy chủ đang tạm ngưng.", "Server is offline.");
         if (sFree && !isAdmin() && (sRam > price.optInt("free_max_ram", 4) || sCpu > price.optInt("free_max_cpu", 4)))
             return Ui.L("Máy miễn phí tối đa " + price.optInt("free_max_ram", 4) + "GB RAM · " + price.optInt("free_max_cpu", 4) + " nhân — chọn nhỏ hơn.",
                     "Free phones are limited to " + price.optInt("free_max_ram", 4) + "GB RAM · " + price.optInt("free_max_cpu", 4) + " cores.");
-        if (status.has("free_ram") && (sRam * sQty > status.optDouble("free_ram") || sCpu * sQty > status.optDouble("free_cpu")))
+        if (!andList().contains(sAnd)) return Ui.L("Hãy chọn hệ điều hành (bản Android).", "Choose an Android version.");
+        JSONObject am = isAdmin() ? null : status.optJSONObject("android");
+        if (am != null) {
+            JSONObject a = am.optJSONObject(sAnd);
+            if (a == null || !a.optBoolean("online", true))
+                return Ui.L("Máy chủ Android " + sAnd + " đang bảo trì — chọn bản khác.", "The Android " + sAnd + " server is under maintenance — pick another version.");
+            int q = sFree ? 1 : sQty;
+            if (sRam * q > a.optDouble("free_ram", 0) || sCpu * q > a.optDouble("free_cpu", 0))
+                return Ui.L("Máy chủ Android " + sAnd + " chỉ còn trống " + (int) a.optDouble("free_ram", 0) + "GB RAM · " + (int) a.optDouble("free_cpu", 0) + " nhân — chọn cấu hình nhỏ hơn hoặc bản Android khác.",
+                        "The Android " + sAnd + " server only has " + (int) a.optDouble("free_ram", 0) + "GB RAM · " + (int) a.optDouble("free_cpu", 0) + " cores free.");
+            return "";
+        }
+        if (!isAdmin() && status.has("free_ram") && (sRam * sQty > status.optDouble("free_ram") || sCpu * sQty > status.optDouble("free_cpu")))
             return Ui.L("Máy chủ chỉ còn trống " + (int) status.optDouble("free_ram") + "GB RAM, " + (int) status.optDouble("free_cpu") + " nhân — chọn ít hơn.",
                     "Server only has " + (int) status.optDouble("free_ram") + "GB RAM, " + (int) status.optDouble("free_cpu") + " cores free.");
         return "";
@@ -993,7 +1073,202 @@ public class MainActivity extends Activity {
         page(body);
     }
 
-    void openTopup() { openWeb(Api.WEB + "/?topup=1"); }
+    // ---------------- Nạp tiền ngay trong app: chuyển khoản + mã VietQR, ngân hàng báo có là tự cộng số dư (giống web) ----------------
+    static final long[] TOP_AMTS = {50000, 100000, 200000, 500000, 1000000};
+    static final String[][] BANKS = {{"970422", "MB Bank"}, {"970436", "Vietcombank"}, {"970407", "Techcombank"}, {"970416", "ACB"}, {"970432", "VPBank"},
+            {"970418", "BIDV"}, {"970415", "VietinBank"}, {"970423", "TPBank"}, {"970403", "Sacombank"}, {"970405", "Agribank"}, {"970441", "VIB"},
+            {"970443", "SHB"}, {"970448", "OCB"}, {"970426", "MSB"}};
+
+    void openTopup() { openTopup(0); }
+
+    /** need > 0: số tiền còn thiếu (điền sẵn, làm tròn lên 1.000đ). */
+    void openTopup(double need) {
+        Api.<JSONObject>bg(() -> {
+            Object o = Api.get("settings?id=eq.1&select=data");
+            JSONArray a = o instanceof JSONArray ? (JSONArray) o : new JSONArray();
+            JSONObject d = a.length() > 0 ? a.getJSONObject(0).optJSONObject("data") : null;
+            return d == null ? new JSONObject() : d;
+        }, site -> topupSheet(site, need), m -> Ui.toast(this, m));
+    }
+
+    void topupSheet(JSONObject site, double need) {
+        final long min = Math.max(1000, site.optLong("minTop", 10000));
+        final String acc = site.optString("bankAcc", "").replaceAll("\\D", "");
+        final long[] amt = {need > 0 ? Math.max(min, (long) Math.ceil(need / 1000.0) * 1000) : Math.max(min, 50000)};
+        LinearLayout c = Ui.col(this, 12);
+        c.addView(Ui.muted(this, Ui.L("Số dư hiện tại: ", "Balance: ") + Ui.vnd(prof.optDouble("balance", 0))
+                + (need > 0 ? Ui.L("  ·  Cần thêm ", "  ·  Need ") + Ui.vnd(need) : "")));
+        Ui.Wrap w = new Ui.Wrap(this, 8);
+        java.util.TreeSet<Long> opts = new java.util.TreeSet<>();
+        for (long v : TOP_AMTS) if (v >= min) opts.add(v);
+        if (need > 0) opts.add(amt[0]);
+        EditText x = Ui.input(this, Ui.L("Hoặc nhập số tiền khác (tối thiểu ", "Or type an amount (min ") + Ui.vnd(min) + ")", InputType.TYPE_CLASS_NUMBER);
+        TextView err = Ui.text(this, "", 13, Ui.BAD, false);
+        Button make = Ui.button(this, "", Ui.PRIMARY);
+        Runnable draw = () -> {
+            for (int i = 0; i < w.getChildCount(); i++) Ui.setChip((TextView) w.getChildAt(i), (long) w.getChildAt(i).getTag() == amt[0]);
+            boolean ok = amt[0] >= min && !acc.isEmpty();
+            err.setText(acc.isEmpty() ? Ui.L("Shop chưa cài tài khoản ngân hàng — tạm thời nạp trên web.", "Bank transfer isn't set up yet — please use the website.")
+                    : amt[0] < min ? Ui.L("Số tiền tối thiểu là ", "The minimum is ") + Ui.vnd(min) + "." : "");
+            err.setVisibility(err.getText().length() == 0 ? View.GONE : View.VISIBLE);
+            make.setText(Ui.L("Tạo mã chuyển khoản ", "Create transfer code ") + Ui.vnd(amt[0]));
+            make.setEnabled(ok);
+            make.setAlpha(ok ? 1f : .5f);
+        };
+        for (long v : opts) {
+            TextView ch = Ui.chip(this, Ui.vnd(v), false);
+            ch.setTag(v);
+            ch.setOnClickListener(t -> { amt[0] = (long) t.getTag(); x.setText(""); draw.run(); });
+            w.addView(ch);
+        }
+        x.addTextChangedListener(new Simple(() -> {
+            String s = x.getText().toString().replaceAll("\\D", "");
+            if (s.isEmpty() || s.length() > 12) return;
+            amt[0] = Long.parseLong(s);
+            draw.run();
+        }));
+        c.addView(w, Ui.fill());
+        c.addView(x, Ui.fill());
+        c.addView(Ui.muted(this, Ui.L("Chuyển khoản ngân hàng: quét mã QR bằng app ngân hàng bất kỳ, tiền tự cộng vào số dư sau khoảng 1 phút.",
+                "Bank transfer: scan the QR with any banking app; your balance is credited in about a minute.")));
+        c.addView(err, Ui.fill());
+        c.addView(make, Ui.fill());
+        TextView cr = Ui.text(this, Ui.L("Nạp bằng USDT / LTC trên web ↗", "Top up with USDT / LTC on the website ↗"), 14, Ui.SKY, true);
+        cr.setPadding(0, Ui.dp(6), 0, Ui.dp(6));
+        cr.setOnClickListener(v -> openWeb(Api.WEB + "/?topup=1"));
+        c.addView(cr, Ui.fill());
+        Dialog d = Ui.sheet(this, "💳 " + Ui.L("Nạp tiền", "Top up"), c);
+        make.setOnClickListener(v -> {
+            if (amt[0] < min || acc.isEmpty()) return;
+            make.setEnabled(false);
+            final long a = amt[0];
+            Api.bg(() -> Api.rpc("create_topup", new JSONObject().put("p_amount", a)), r -> {
+                d.dismiss();
+                if (r instanceof JSONObject) paySheet(site, (JSONObject) r);
+            }, m -> { make.setEnabled(true); err.setText(m); err.setVisibility(View.VISIBLE); });
+        });
+        draw.run();
+        d.show();
+    }
+
+    void paySheet(JSONObject site, JSONObject t) {
+        final long amount = t.optLong("amount");
+        final String memo = t.optString("memo"), id = t.optString("id");
+        final String bin = site.optString("bankBin", "970422"), acc = site.optString("bankAcc", "").replaceAll("\\D", ""), name = site.optString("bankName", "");
+        String bank = bin;
+        for (String[] b : BANKS) if (b[0].equals(bin)) bank = b[1];
+        LinearLayout c = Ui.col(this, 10);
+        try {
+            android.graphics.drawable.BitmapDrawable bd = new android.graphics.drawable.BitmapDrawable(getResources(), qrBitmap(vietqr(bin, acc, amount, memo), Ui.dp(232)));
+            bd.setFilterBitmap(false);                     // giữ cạnh ô vuông sắc nét cho app ngân hàng quét
+            android.widget.ImageView qr = new android.widget.ImageView(this);
+            qr.setImageDrawable(bd);
+            qr.setBackgroundColor(Color.WHITE);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(Ui.dp(232), Ui.dp(232));
+            lp.gravity = Gravity.CENTER_HORIZONTAL;
+            c.addView(qr, lp);
+        } catch (Exception e) {
+            c.addView(Ui.muted(this, Ui.L("Không tạo được mã QR — chuyển khoản theo thông tin bên dưới.", "Couldn't create the QR — use the details below.")));
+        }
+        c.addView(Ui.muted(this, Ui.L("Mở app ngân hàng → Quét mã QR: số tiền và nội dung tự điền. Chuyển tay thì ghi đúng nội dung bên dưới. Mã có hiệu lực 20 phút.",
+                "Open your banking app → scan the QR: amount and note fill in automatically. Typing it in? Use the exact note below. Valid for 20 minutes.")));
+        LinearLayout box = Ui.card(this);
+        payRow(box, Ui.L("Ngân hàng", "Bank"), bank, null, false);
+        payRow(box, Ui.L("Số tài khoản", "Account number"), acc, acc, false);
+        payRow(box, Ui.L("Chủ tài khoản", "Account name"), name, null, false);
+        payRow(box, Ui.L("Số tiền", "Amount"), Ui.vnd(amount), String.valueOf(amount), false);
+        payRow(box, Ui.L("Nội dung chuyển khoản (ghi ĐÚNG)", "Transfer note (must match)"), memo, memo, true);
+        c.addView(box, Ui.fill());
+        TextView st = Ui.text(this, "⏳ " + Ui.L("Đang chờ ngân hàng báo có… (tự kiểm tra, không cần bấm gì)", "Waiting for the bank… (checks automatically)"), 14, Ui.WAIT, true);
+        c.addView(st, Ui.fill());
+        Button close = Ui.button(this, Ui.L("Đóng", "Close"), Ui.GHOST);
+        c.addView(close, Ui.fill());
+        Dialog d = Ui.sheet(this, Ui.L("Chuyển khoản ", "Transfer ") + Ui.vnd(amount), c);
+        close.setOnClickListener(v -> d.dismiss());
+        final long t0 = System.currentTimeMillis();
+        final Runnable[] tick = new Runnable[1];
+        tick[0] = () -> {
+            if (!d.isShowing()) return;
+            if (System.currentTimeMillis() - t0 > 25 * 60000L) {
+                st.setText(Ui.L("Chưa thấy tiền về. Nếu đã chuyển đúng nội dung mà quá 15 phút chưa cộng, liên hệ hỗ trợ kèm nội dung chuyển khoản.",
+                        "No payment seen yet. If you paid with the right note and it isn't credited after 15 minutes, contact support with the note."));
+                st.setTextColor(Ui.BAD);
+                return;
+            }
+            Api.bg(() -> Api.get("topups?id=eq." + id + "&select=status,amount"), r -> {
+                JSONArray a = r instanceof JSONArray ? (JSONArray) r : new JSONArray();
+                JSONObject o = a.length() > 0 ? a.optJSONObject(0) : null;
+                if (o != null && "done".equals(o.optString("status"))) {
+                    double got = o.optDouble("amount", amount);
+                    st.setText("✓ " + Ui.L("Đã nhận ", "Received ") + Ui.vnd(got) + Ui.L(" — số dư đã được cộng.", " — balance credited."));
+                    st.setTextColor(Ui.OK);
+                    close.setText(Ui.L("Xong", "Done"));
+                    Ui.toast(this, Ui.L("Nạp thành công +", "Top-up received +") + Ui.vnd(got));
+                    refresh();
+                    return;
+                }
+                h.postDelayed(tick[0], 5000);
+            }, m -> h.postDelayed(tick[0], 8000));
+        };
+        h.postDelayed(tick[0], 5000);
+        d.setOnDismissListener(z -> h.removeCallbacks(tick[0]));
+        d.show();
+    }
+
+    private void payRow(LinearLayout box, String label, String value, String copy, boolean strong) {
+        LinearLayout r = Ui.row(this, 8);
+        LinearLayout col = Ui.col(this, 0);
+        col.addView(Ui.text(this, label, 12, Ui.MUTED, false));
+        TextView v = Ui.text(this, value, strong ? 18 : 15, strong ? Ui.WAIT : Ui.FG, true);
+        v.setTextIsSelectable(true);
+        col.addView(v);
+        r.addView(col, Ui.weight(1));
+        if (copy != null) {
+            Button b = Ui.button(this, Ui.L("Chép", "Copy"), Ui.GHOST);
+            b.setOnClickListener(z -> {
+                android.content.ClipboardManager cm = (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+                if (cm != null) cm.setPrimaryClip(android.content.ClipData.newPlainText(label, copy));
+                Ui.toast(this, Ui.L("Đã chép: ", "Copied: ") + copy);
+            });
+            r.addView(b, Ui.wrap());
+        }
+        box.addView(r, Ui.fill());
+    }
+
+    // ---- mã VietQR (chuẩn EMVCo / NAPAS 247) — giống hệt web ----
+    static String tlv(String id, String v) { return id + String.format(Locale.US, "%02d", v.length()) + v; }
+
+    static String crc16(String s) {
+        int c = 0xFFFF;
+        for (int i = 0; i < s.length(); i++) {
+            c ^= s.charAt(i) << 8;
+            for (int j = 0; j < 8; j++) c = (c & 0x8000) != 0 ? ((c << 1) ^ 0x1021) & 0xFFFF : (c << 1) & 0xFFFF;
+        }
+        return String.format(Locale.US, "%04X", c);
+    }
+
+    static String vietqr(String bin, String acc, long amount, String memo) {
+        String cons = tlv("00", "A000000727") + tlv("01", tlv("00", bin) + tlv("01", acc)) + tlv("02", "QRIBFTTA");
+        String p = tlv("00", "01") + tlv("01", "12") + tlv("38", cons) + tlv("53", "704") + tlv("54", String.valueOf(amount))
+                + tlv("58", "VN") + tlv("62", tlv("08", memo)) + "6304";
+        return p + crc16(p);
+    }
+
+    /** Vẽ mã QR (viền trắng 4 ô) thành ảnh vuông ~px điểm ảnh. */
+    static android.graphics.Bitmap qrBitmap(String text, int px) {
+        QrCode q = QrCode.encodeText(text, QrCode.Ecc.MEDIUM);
+        int n = q.size, border = 4, total = n + border * 2, sc = Math.max(2, px / total), side = total * sc;
+        int[] pix = new int[side * side];
+        java.util.Arrays.fill(pix, Color.WHITE);
+        for (int y = 0; y < n; y++)
+            for (int x = 0; x < n; x++)
+                if (q.getModule(x, y))
+                    for (int dy = 0; dy < sc; dy++) {
+                        int row = ((y + border) * sc + dy) * side + (x + border) * sc;
+                        java.util.Arrays.fill(pix, row, row + sc, Color.BLACK);
+                    }
+        return android.graphics.Bitmap.createBitmap(pix, side, side, android.graphics.Bitmap.Config.ARGB_8888);
+    }
 
     void openWeb(String u) {
         try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(u))); }

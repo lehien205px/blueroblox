@@ -260,13 +260,34 @@ TUNE = (# CLONE TAB cần Android cho phép nhiều người dùng (máy ảo m�
         # Cổng VPN: Android mở /dev/tun (docker chỉ có /dev/net/tun) → thiếu thì VPN báo "Failed to connect"
         "[ -c /dev/tun ] || { rm -f /dev/tun; mknod /dev/tun c 10 200; }; chmod 666 /dev/tun")
 
+def android_ready(port, wait=120):
+    """Android SẴN SÀNG THẬT (dịch vụ settings + package chạy) — sys.boot_completed vẫn = 1 khi giao diện đang khởi động lại
+    (sau đặt ảnh nền) nên không tin được; chạy tối ưu lúc đó là mất hết."""
+    t0 = time.time()
+    while time.time() - t0 < wait:
+        o = (adb("-s", f"127.0.0.1:{port}", "shell", "settings get global device_provisioned; pm path android", timeout=15).stdout or "")
+        if "package:" in o and "rror" not in o and "an't find" not in o: return True
+        time.sleep(3)
+    return False
 def tune(name, port=None):
-    try: ashell(name, TUNE, port)
+    """Tối ưu máy (máy nhẹ, tắt hiệu ứng, chống ngủ đông…) — KIỂM TRA đã ăn chưa, chưa thì làm lại (tối đa 3 lần)."""
+    port = port or (rec(name) or {}).get("port")
+    if not port: return False
+    for _t in range(3):
+        android_ready(port)
+        try: adb("-s", f"127.0.0.1:{port}", "shell", TUNE, timeout=120)
+        except Exception: pass
+        o = (adb("-s", f"127.0.0.1:{port}", "shell", "settings get global window_animation_scale; [ -f /data/local/tmp/.br_lite ] && echo LITE", timeout=15).stdout or "")
+        if o.split()[:1] == ["0"] or o.startswith("0.0"):
+            if "LITE" in o: return True
+        time.sleep(10)
+    print(f"   ⚠ {name}: chưa tối ưu được hết (sẽ làm lại lần khởi động sau)", flush=True)
+    return False
+def grant_perms(name, port=None):
+    port = port or (rec(name) or {}).get("port")
+    if not port: return
+    try: adb("-s", f"127.0.0.1:{port}", "shell", PERM_SH, timeout=60)
     except Exception: pass
-def grant_perms(name):
-    try: ashell(name, PERM_SH)
-    except Exception: pass
-    tune(name)
 
 WP = os.path.join(HOME, "wallpaper.png")
 def set_wallpaper(name, port, force=False):
@@ -347,7 +368,7 @@ def wait_boot(name, port, apps=True):
         except Exception as e: print("   (ảnh nền lỗi:", e, ")")
         try: hide_window(name)
         except Exception: pass
-        tune(name, port); grant_perms(name)
+        tune(name, port); grant_perms(name, port)
         if apps: preinstall(name, port)
     return ok
 
@@ -552,6 +573,14 @@ def cmd_perms(a):
     v = vms()
     for p in load()["phones"]:
         if is_running(p["name"], p, v): grant_perms(p["name"])
+
+def cmd_tuneall(a):
+    """Tối ưu lại MỌI máy đang chạy (máy nhẹ, tắt hiệu ứng…) + in kết quả từng máy."""
+    v = vms()
+    for p in load()["phones"]:
+        if not is_running(p["name"], p, v): continue
+        adb_connect(p["port"]); ok = tune(p["name"], p["port"]); grant_perms(p["name"], p["port"])
+        print(("✅ " if ok else "⚠ ") + p["name"], flush=True)
 
 def cmd_rootfix(a):
     v = vms()
@@ -849,6 +878,7 @@ def main():
     he = s.add_parser("heal"); he.add_argument("--orphans", action="store_true"); he.set_defaults(f=cmd_heal)
     cl = s.add_parser("cleanup"); cl.add_argument("--all", action="store_true"); cl.add_argument("--yes", action="store_true"); cl.set_defaults(f=cmd_cleanup)
     s.add_parser("pool").set_defaults(f=cmd_pool)
+    s.add_parser("tuneall").set_defaults(f=cmd_tuneall)
     ba = s.add_parser("bootall"); ba.add_argument("--quiet", action="store_true"); ba.set_defaults(f=cmd_bootall)
     for nm, fn in (("connect-all", cmd_connect_all), ("reap", cmd_reap), ("perms", cmd_perms), ("capacity", cmd_capacity), ("list", cmd_list),
                    ("memfix", cmd_noop), ("boost", cmd_noop), ("gpuinfo", cmd_noop)):

@@ -45,8 +45,10 @@ WIN = os.name == "nt"                       # máy chủ Windows (MEmu)
 def _f(k, d):
     try: return float(CFG.get(k, d))
     except (TypeError, ValueError): return float(d)
-MEMU_MAX_RAM, MEMU_MAX_CPU = _f("MEMU_MAX_RAM", 16), _f("MEMU_MAX_CPU", 16)
+MEMU_MAX_RAM, MEMU_MAX_CPU = _f("MEMU_MAX_RAM", 16), _f("MEMU_MAX_CPU", 8)
 WIN_RESERVE = _f("WIN_RAM_RESERVE", 4)
+MEMU_MAX_VMS = int(_f("MEMU_MAX_VMS", 12))     # Windows: tối đa bao nhiêu máy ảo (MEmu chạy quá nhiều máy là lag CẢ máy chủ)
+WIN_VCPU_OVER = _f("WIN_VCPU_OVER", 1.0)        # tổng nhân ảo cấp cho các máy ≤ số luồng thật × hệ số này (72 luồng × 1 = 72 nhân)
 def want(row):
     """RAM/CPU THẬT sẽ cấp cho đơn: Windows/MEmu tối đa 16GB · 16 nhân mỗi máy (gói to hơn vẫn nhận, chạy mức tối đa)."""
     r, c = float(row.get("ram") or 0), float(row.get("cpu") or 0)
@@ -58,9 +60,12 @@ def win_caps(st):
     t_r, av_r = meminfo(); cpu_t = os.cpu_count() or 1
     c_r = a_r + max(0.0, av_r - WIN_RESERVE)
     c_c = a_c + cpu_t * CPU_OVER
+    c_c = max(a_c, min(c_c, cpu_t * WIN_VCPU_OVER))          # TỰ GIỚI HẠN: tổng nhân ảo không vượt số luồng thật
+    if t_r: c_r = max(a_r, min(c_r, t_r - WIN_RESERVE))      # tổng RAM cấp không vượt RAM thật (không cho thuê lố)
     if (cpu_avg5() or 0) >= CPU_BUSY: c_c = a_c
     if t_r and 100 * (1 - av_r / t_r) >= RAM_BUSY: c_r = a_r
     if disk_full(): c_r = a_r
+    if MEMU_MAX_VMS > 0 and len(st) >= MEMU_MAX_VMS: c_r, c_c = a_r, a_c   # đủ số máy tối đa → báo HẾT CHỖ, web ngừng bán
     return a_r, a_c, c_r, c_c
 
 def local_load():

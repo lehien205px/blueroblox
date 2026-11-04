@@ -395,6 +395,7 @@ html[data-theme] .langsw button{padding:5px 9px;font-size:12.5px;gap:5px}
       <button class="tb" data-key="25"><svg class="ic" viewBox="0 0 24 24"><path d="M4 10v4h4l5 4V6L8 10z"/><path d="M15 12h6"/></svg>Giảm âm</button>
       <h6>Màn hình</h6>
       <button class="tb" data-act="quality"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 15V9l3 3 3-3v6M16 9v6"/></svg><span id="qtxt">Chất lượng</span></button>
+      <button class="tb" data-act="gfx"><svg class="ic" viewBox="0 0 24 24"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M12 12l8-4.5M12 12v9M12 12L4 7.5"/></svg>Chế độ hình</button>
       <button class="tb" data-act="display"><svg class="ic" viewBox="0 0 24 24"><rect x="7" y="2.5" width="10" height="19" rx="2"/><path d="M10 7.5h4M10 11h4M10 14.5h2"/></svg>FPS &amp; độ nét</button>
       <button class="tb" data-act="rotate"><svg class="ic" viewBox="0 0 24 24"><path d="M20 12a8 8 0 11-3-6.2"/><path d="M20 4v4h-4"/></svg>Xoay</button>
       <button class="tb" data-act="shot"><svg class="ic" viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>Chụp màn</button>
@@ -1343,6 +1344,26 @@ const ACT = {
           openPhone(cur);
         } catch (e) { toast(e.message, 1); }
       } });
+  },
+  async gfx() {
+    let now = "unknown";
+    try { now = (await api(cur.id + "/gfx")).mode; } catch (e) {}
+    let m = now === "unknown" ? "opengl" : now;
+    ask({ title: L("Chế độ hình", "Graphics mode"),
+      desc: L(`Đang dùng: <b>${now === "directx" ? "⚡ Mượt" : now === "opengl" ? "🎮 Hiện 3D" : "?"}</b>. Đổi chế độ máy sẽ <b>khởi động lại khoảng 1–2 phút</b>, dữ liệu và app giữ nguyên.`,
+              `Current: <b>${now === "directx" ? "⚡ Smooth" : now === "opengl" ? "🎮 Show 3D" : "?"}</b>. Switching <b>restarts the phone (~1–2 min)</b>; data and apps are kept.`),
+      body: `<div id="g-box">${pick([["directx", "⚡ " + L("Mượt", "Smooth"), L("Điều khiển mượt, ít trễ. Game 3D (Roblox…) có thể chỉ thấy nút, cảnh 3D đen. Hợp treo app, game 2D.", "Smooth, low latency. 3D games (Roblox…) may show only buttons with a black scene. Best for apps & 2D games.")],
+                                         ["opengl", "🎮 " + L("Hiện 3D", "Show 3D"), L("Thấy đủ cảnh game 3D (Roblox…), hình hơi trễ hơn.", "Shows full 3D game scenes (Roblox…), slightly more latency.")]], m, "c2")}</div>`,
+      ok: L("Đổi chế độ", "Switch"),
+      onOk: async () => {
+        if (m === now) { toast(L("Máy đang dùng chế độ này rồi.", "Already using this mode.")); return false; }
+        try {
+          const j = await api(cur.id + "/gfx", { method: "POST", json: { mode: m } });
+          main.stop(); setTools(false); setState("wait", L("Đang đổi chế độ hình…", "Switching graphics mode…")); veil(true, L("Đang đổi chế độ hình…", "Switching graphics mode…"), L("Máy khởi động lại khoảng 1–2 phút, màn hình tự mở lại khi xong.", "The phone restarts (~1–2 min); the screen reopens by itself."));
+          const item = trayItem(L("Chế độ hình ", "Graphics ") + cur.name, 0); await pollJob(j.job, item); openPhone(cur);
+        } catch (e) { toast(e.message, 1); }
+      } });
+    chipsBind($("g-box"), v => m = v);
   },
   reboot() {
     ask({ title: L("Khởi động lại máy?", "Restart the phone?"), desc: L("Máy sẽ tắt rồi bật lại trong khoảng 1–3 phút. Dữ liệu và ứng dụng vẫn giữ nguyên.", "The phone turns off and back on in about 1–3 minutes. Your data and apps are kept."), ok: L("Khởi động lại", "Restart"),

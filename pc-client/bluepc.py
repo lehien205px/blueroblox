@@ -9,7 +9,7 @@
 #  Mỗi cửa sổ máy là 1 tiến trình riêng (mở nhiều máy cùng lúc không giật nhau).
 #  Không chứa khoá bí mật nào: chỉ khoá công khai Supabase (giống web/app Android) + phiên đăng nhập của chính khách.
 # =====================================================================================================
-import datetime, json, os, re, subprocess, sys, threading, time, traceback, urllib.error, urllib.parse, urllib.request, webbrowser
+import datetime, json, os, queue, re, subprocess, sys, threading, time, traceback, urllib.error, urllib.parse, urllib.request, webbrowser
 
 APP_VER = "1.0.0"
 SB = "https://nprftgodswlpzomcttal.supabase.co"
@@ -594,11 +594,685 @@ def fmt_left(iso):
         return ""
 
 
+# ================================================================ MUA MÁY · GIA HẠN · NẠP TIỀN (giống hệt web: cùng RPC Supabase, cùng giá)
+CP_RAM, CP_CPU, CP_DAYS, CP_FPS, CP_QTY = list(range(1, 9)), list(range(1, 9)), [7, 15, 30, 60], [30, 60], [1, 2, 5, 10]
+CP_RES = [("540x960", "Nhẹ máy"), ("720x1280", "HD"), ("720x1600", "HD+ dài"), ("1080x1920", "Full HD")]
+CP_HARD = {"ram": 8, "cpu": 8, "fps": 60}                    # máy ảo tối đa 8GB · 8 nhân · 60 FPS (giống web)
+CP_DEF = {"price_ram_gb_day": 2500, "price_cpu_day": 2000, "min_ram": 1, "max_ram": 16, "min_cpu": 1, "max_cpu": 8,
+          "min_days": 1, "max_days": 90, "min_fps": 10, "max_fps": 120}
+AND_HINT = {"9": "LDPlayer 9 · ổn định", "12": "MuMu · mới nhất", "7": "MuMu · nhẹ"}
+RENEW_DAYS = [1, 3, 7, 15, 30, 60, 90]
+TOP_AMTS = [50000, 100000, 200000, 500000, 1000000]
+BANKS = {"970422": "MB Bank", "970436": "Vietcombank", "970407": "Techcombank", "970416": "ACB", "970432": "VPBank", "970418": "BIDV",
+         "970415": "VietinBank", "970423": "TPBank", "970403": "Sacombank", "970405": "Agribank", "970441": "VIB", "970443": "SHB",
+         "970448": "OCB", "970426": "MSB"}
+ERRORS.update({                                                  # mã lỗi của SQL → câu dễ hiểu (PHONE_LOCKED phải đứng trước LOCKED)
+    "INSUFFICIENT_BALANCE": "Số dư không đủ.", "PHONE_LOCKED": "Máy đang bị khoá, không gia hạn được. Liên hệ hỗ trợ.",
+    "LOCKED": "Tài khoản đã bị khoá. Liên hệ hỗ trợ.", "MIN_AMOUNT": "Số tiền thấp hơn mức nạp tối thiểu.",
+    "TOO_MANY": "Bạn có quá nhiều lệnh nạp đang chờ. Thử lại sau ít phút.",
+    "BAD_RAM": "RAM nằm ngoài giới hạn cho phép.", "BAD_CPU": "Số nhân CPU nằm ngoài giới hạn cho phép.", "BAD_DAYS": "Số ngày nằm ngoài giới hạn cho phép.",
+    "BAD_RES": "Độ phân giải không hợp lệ.", "BAD_FPS": "FPS nằm ngoài giới hạn cho phép.", "BAD_QTY": "Số lượng không hợp lệ.",
+    "FPS_TOO_HIGH": "Máy dưới 4 nhân chỉ chọn tối đa 60 FPS.", "OUT_OF_STOCK": "Đã hết hàng.",
+    "MAX_PER_USER": "Tài khoản đã đủ số máy cho phép — gia hạn máy đang có hoặc xoá máy cũ để thuê máy khác.",
+    "FREE_OFF": "Ưu đãi miễn phí đã kết thúc.", "FREE_LIMIT": "Máy miễn phí vượt cấu hình tối đa cho phép.",
+    "FREE_USED": "Mỗi tài khoản chỉ được dùng thử 1 máy miễn phí — bạn đã nhận rồi.", "FREE_ONE": "Máy miễn phí chỉ nhận 1 máy mỗi lần.",
+    "FREE_NO_RENEW": "Máy miễn phí không gia hạn được — hãy thuê máy mới.",
+    "OUT_OF_CAPACITY": "Máy chủ đã hết chỗ cho cấu hình này. Chọn cấu hình nhỏ hơn hoặc quay lại sau.",
+    "SERVER_OFFLINE": "Máy chủ bản Android này đang bảo trì — chọn bản khác.", "BAD_ANDROID": "Bản Android này chưa bán — chọn bản khác.",
+    "PHONE_GONE": "Máy đã bị xoá vì hết hạn quá 30 phút — hãy thuê máy mới.", "NO_PHONE": "Không tìm thấy máy.",
+})
+
+
+def num(v):
+    try: return float(v)
+    except (TypeError, ValueError): return 0.0
+
+
+def vnd(v):
+    return f"{round(num(v)):,}".replace(",", ".") + "đ"
+
+
+def parse_iso(s):
+    try: return datetime.datetime.fromisoformat(str(s).replace("Z", "+00:00"))
+    except (TypeError, ValueError): return None
+
+
+def now_utc(): return datetime.datetime.now(datetime.timezone.utc)
+
+
+# ---- mã VietQR (chuẩn EMVCo / NAPAS 247) — giống hệt web: app ngân hàng quét là tự điền số tiền + nội dung ----
+def _tlv(i, v): return i + str(len(v)).zfill(2) + v
+
+
+def _crc16(s):
+    c = 0xFFFF
+    for ch in s:
+        c ^= ord(ch) << 8
+        for _ in range(8): c = ((c << 1) ^ 0x1021) & 0xFFFF if c & 0x8000 else (c << 1) & 0xFFFF
+    return f"{c:04X}"
+
+
+def vietqr(bin_, acc, amount, memo):
+    cons = _tlv("00", "A000000727") + _tlv("01", _tlv("00", bin_) + _tlv("01", acc)) + _tlv("02", "QRIBFTTA")
+    p = (_tlv("00", "01") + _tlv("01", "12") + _tlv("38", cons) + _tlv("53", "704") + _tlv("54", str(int(round(amount))))
+         + _tlv("58", "VN") + _tlv("62", _tlv("08", memo)) + "6304")
+    return p + _crc16(p)
+
+
+def notify_admin(text):
+    """Báo Telegram cho shop (giống web) — không chờ, lỗi thì thôi."""
+    def job():
+        try: http("POST", WEB + "/api/notify-admin", {"text": text}, timeout=8)
+        except Exception: pass
+    threading.Thread(target=job, daemon=True).start()
+
+
+class Shop:
+    """Đọc giá, chỗ trống, số dư, tài khoản ngân hàng — cùng bảng/RPC với web."""
+    def __init__(self, auth): self.auth = auth
+
+    def profile(self):
+        rows = self.auth.rest(f"profiles?id=eq.{self.auth.uid}&select=*") or []
+        return rows[0] if rows else {}
+
+    def pricing(self):
+        p = dict(CP_DEF)
+        try:
+            rows = self.auth.rest("cloudphone_pricing?id=eq.1&select=*") or []
+            if rows: p.update({k: v for k, v in rows[0].items() if v is not None})
+        except ApiError as e:
+            if e.code == 401: raise
+            log("pricing:", e)
+        for k, h in (("max_ram", "ram"), ("max_cpu", "cpu"), ("free_max_ram", "ram"), ("free_max_cpu", "cpu"), ("max_fps", "fps")):
+            if p.get(k) is not None: p[k] = min(int(num(p[k])) or CP_HARD[h], CP_HARD[h])     # không bán vượt sức máy ảo
+        return p
+
+    def status(self):
+        try: return self.auth.rpc("cloudphone_status") or {}
+        except ApiError as e:
+            if e.code == 401: raise
+            return {}
+
+    def site(self):
+        rows = self.auth.rest("settings?id=eq.1&select=data") or []
+        return (rows[0].get("data") or {}) if rows else {}
+
+    def live_count(self):
+        try: return len(self.auth.rest(f"cloud_phones?user_id=eq.{self.auth.uid}&status=in.(pending,creating,active,expired,cancelling)&select=id") or [])
+        except ApiError: return 0
+
+
+def is_ctv(prof): return prof.get("ctv_status") == "approved" and num(prof.get("ctv_discount")) > 0
+def ctv(prof, v): return round(v * (100 - num(prof.get("ctv_discount"))) / 100) if is_ctv(prof) else v
+def per_day(pr, ram, cpu): return ram * num(pr.get("price_ram_gb_day")) + cpu * num(pr.get("price_cpu_day"))
+
+
+def free_live(pr):
+    if not pr.get("free_on"): return False
+    u = pr.get("free_until")
+    if not u: return True
+    d = parse_iso(u)
+    return bool(d and d > now_utc())
+
+
+def and_list(pr):
+    out = []
+    for v in str(pr.get("android_versions") or "9").split(","):
+        v = v.strip()
+        if re.fullmatch(r"\d{1,2}", v) and v not in out: out.append(v)
+    return out or ["9"]
+
+
+def and_room(st, v):
+    """Chỗ trống của máy chủ bản Android v → (online?, RAM trống, nhân trống) · None = máy chủ chưa báo theo từng bản."""
+    m = st.get("android") if isinstance(st.get("android"), dict) else None
+    if not m: return None
+    a = m.get(v)
+    if not isinstance(a, dict) or a.get("online") is False: return (False, 0, 0)
+    return (True, num(a.get("free_ram")), num(a.get("free_cpu")))
+
+
+def and_why(st, v, ram, cpu):
+    """'' = còn chỗ · 'off' = máy chủ bản này đang bảo trì / chưa có · 'full' = không đủ RAM/CPU cho cấu hình đang chọn."""
+    r = and_room(st, v)
+    if r is None: return ""
+    if not r[0]: return "off"
+    return "full" if r[1] < ram or r[2] < cpu else ""
+
+
+class Chips:
+    """Hàng nút chọn 1 trong nhiều (giống web): bấm → set_(giá trị) → on_change()."""
+    def __init__(self, app, parent, items, get, set_, on_change, why=None, wrap=0):
+        tk = app.tk; self.get, self.why = get, why
+        self.frame = tk.Frame(parent, bg=BG); self.labels = []
+        row = None
+        for i, (val, text) in enumerate(items):
+            if row is None or (wrap and i % wrap == 0):
+                row = tk.Frame(self.frame, bg=BG); row.pack(fill="x", anchor="w")
+            lb = tk.Label(row, text=text, font=("Segoe UI", 10, "bold"), bg=CARD, fg=TXT, padx=12, pady=6, justify="center",
+                          highlightthickness=1, highlightbackground=LINE, cursor="hand2")
+            lb.pack(side="left", padx=(0, 6), pady=3)
+            def click(_e, v=val):
+                if self.why and self.why(v): return
+                set_(v); on_change()
+            lb.bind("<Button-1>", click)
+            self.labels.append((val, lb))
+        self.paint()
+
+    def paint(self):
+        cur = self.get()
+        for v, lb in self.labels:
+            off = bool(self.why and self.why(v)); on = (v == cur) and not off
+            lb.config(bg=ACC if on else CARD, fg="#55607a" if off else TXT, cursor="arrow" if off else "hand2",
+                      highlightbackground=ACC if on else LINE)
+
+
+class Dlg:
+    """Cửa sổ con (mua / gia hạn / nạp): phần trên cuộn được, phần dưới (tổng tiền + nút) đứng yên."""
+    def __init__(self, app, title, w=580, h=700):
+        tk = app.tk; self.app = app; self.alive = True
+        self.win = d = tk.Toplevel(app.root); d.title(title); d.configure(bg=BG); d.transient(app.root)
+        app.root.update_idletasks()
+        sw, sh = d.winfo_screenwidth(), d.winfo_screenheight(); h = min(h, sh - 80)
+        x = app.root.winfo_rootx() + (app.root.winfo_width() - w) // 2; y = app.root.winfo_rooty() + 20
+        d.geometry(f"{w}x{h}+{max(0, min(x, sw - w))}+{max(0, min(y, sh - h - 40))}"); d.minsize(440, 380)
+        d.bind("<Escape>", lambda e: self.close())
+        d.protocol("WM_DELETE_WINDOW", self.close)
+        d.after(80, self._grab)
+        self.foot = tk.Frame(d, bg=CARD, highlightbackground=LINE, highlightthickness=1); self.foot.pack(side="bottom", fill="x")
+        wrap = tk.Frame(d, bg=BG); wrap.pack(side="top", fill="both", expand=True)
+        cv = tk.Canvas(wrap, bg=BG, highlightthickness=0); sb = tk.Scrollbar(wrap, orient="vertical", command=cv.yview)
+        self.body = tk.Frame(cv, bg=BG); win = cv.create_window((0, 0), window=self.body, anchor="nw")
+        self.body.bind("<Configure>", lambda e: cv.configure(scrollregion=cv.bbox("all")))
+        cv.bind("<Configure>", lambda e: cv.itemconfigure(win, width=e.width))
+        cv.configure(yscrollcommand=sb.set); cv.pack(side="left", fill="both", expand=True); sb.pack(side="right", fill="y")
+        app.scrollers[str(d)] = cv
+
+    def _grab(self):
+        try: self.win.grab_set(); self.win.focus_force()
+        except Exception: pass
+
+    def close(self):
+        self.alive = False
+        self.app.scrollers.pop(str(self.win), None)
+        try: self.win.grab_release()
+        except Exception: pass
+        try: self.win.destroy()
+        except Exception: pass
+
+    def clear(self):
+        for w in self.body.winfo_children(): w.destroy()
+        for w in self.foot.winfo_children(): w.destroy()
+
+    def label(self, parent, text, font=None, fg=TXT, **kw):
+        return self.app.tk.Label(parent, text=text, font=font or self.app.f_t, fg=fg, bg=parent["bg"], anchor="w", justify="left", **kw)
+
+    def section(self, title, right=""):
+        tk = self.app.tk
+        f = tk.Frame(self.body, bg=BG); f.pack(fill="x", padx=18, pady=(12, 2))
+        hr = tk.Frame(f, bg=BG); hr.pack(fill="x")
+        self.label(hr, title, ("Segoe UI", 10, "bold"), DIM).pack(side="left")
+        if right: self.label(hr, right, self.app.f_s, DIM).pack(side="right")
+        return f
+
+    def loading(self, text="Đang tải…"):
+        self.clear(); self.label(self.body, text, self.app.f_t, DIM).pack(padx=18, pady=30)
+
+    def bg(self, job, ok, fail=None):
+        """Chạy việc mạng ở luồng nền → gọi ok/fail trên luồng giao diện (cửa sổ đã đóng thì thôi)."""
+        def run():
+            try:
+                r = job()
+                self.app.ui(lambda: self.alive and ok(r))
+            except Exception as e:
+                m = str(e) or "Có lỗi, thử lại."; log("shop:", traceback.format_exc())
+                if isinstance(e, ApiError) and e.code == 401: self.app.ui(lambda: (self.close(), self.app.show_login(m)))
+                elif fail: self.app.ui(lambda: self.alive and fail(m))
+        threading.Thread(target=run, daemon=True).start()
+
+
+class OrderDlg(Dlg):
+    """Thuê máy mới — y như bảng thuê trên web (giá, giới hạn, chỗ trống từng bản Android, máy miễn phí, CTV)."""
+    def __init__(self, app):
+        super().__init__(app, "Thuê điện thoại đám mây", 600, 760)
+        self.loading("Đang tải bảng giá…")
+        def load():
+            sh = app.shop
+            return sh.pricing(), sh.status(), sh.profile(), sh.live_count()
+        self.bg(load, self._loaded, lambda m: self.loading(m))
+
+    def _loaded(self, r):
+        self.pr, self.st, self.prof, have = r
+        p = self.pr; cl = lambda v, lo, hi: max(int(num(lo)), min(int(num(hi)), v))
+        mpu = int(num(p.get("max_per_user")))
+        self.left = 20 if mpu <= 0 or self.prof.get("role") == "admin" else mpu - have
+        if self.left <= 0:
+            self.loading(f"Mỗi tài khoản chỉ được thuê tối đa {mpu} máy — bạn đã có {have} máy.\nGia hạn máy đang có, hoặc xoá máy cũ (trên web) để thuê máy khác.")
+            return
+        if self.st.get("maint"):
+            self.loading("Hệ thống đang bảo trì" + (": " + str(self.st.get("maint_msg")) if self.st.get("maint_msg") else "") + ". Vui lòng quay lại sau."); return
+        self.s = {"ram": cl(2, p["min_ram"], p["max_ram"]), "cpu": cl(2, p["min_cpu"], p["max_cpu"]), "days": cl(7, p["min_days"], p["max_days"]),
+                  "res": "720x1280", "fps": cl(30, p["min_fps"], p["max_fps"]), "qty": 1, "android": "9", "free": False}
+        avs = and_list(p); ok = [v for v in avs if not and_why(self.st, v, self.s["ram"], self.s["cpu"])]
+        self.s["android"] = "9" if "9" in ok else (ok[0] if ok else ("9" if "9" in avs else avs[0]))
+        self.build()
+
+    # ---------- vẽ ----------
+    def build(self):
+        tk = self.app.tk; p, s = self.pr, self.s; self.clear(); self.rows = []
+        lo = lambda k: int(num(p.get(k)))
+        if free_live(p):
+            fb = tk.Frame(self.body, bg=CARD, highlightbackground=WARN if s["free"] else LINE, highlightthickness=1); fb.pack(fill="x", padx=18, pady=(14, 0))
+            v = tk.BooleanVar(value=s["free"])
+            tk.Checkbutton(fb, text=f"  ★ Nhận máy MIỄN PHÍ {lo('free_days') or 1} ngày", variable=v, command=lambda: self.set_free(v.get()),
+                           font=("Segoe UI", 11, "bold"), fg=TXT, bg=CARD, selectcolor=BG, activebackground=CARD, activeforeground=TXT,
+                           anchor="w", cursor="hand2").pack(fill="x", padx=10, pady=(8, 0))
+            self.label(fb, f"Tối đa {lo('free_max_ram')}GB RAM · {lo('free_max_cpu')} nhân · mỗi tài khoản dùng thử 1 máy. Hết hạn máy tự tắt, không gia hạn được.",
+                       self.app.f_s, DIM, wraplength=520).pack(fill="x", padx=12, pady=(0, 8))
+        ch = lambda key: (lambda v: self.s.__setitem__(key, v))
+        get = lambda key: (lambda: self.s[key])
+        avs = and_list(p)
+        f = self.section("Hệ điều hành")
+        self.rows.append(Chips(self.app, f, [(v, f"Android {v}\n{AND_HINT.get(v, '')}".strip()) for v in avs], get("android"), ch("android"), self.upd,
+                               why=lambda v: and_why(self.st, v, self.s["ram"], self.s["cpu"]) if self.prof.get("role") != "admin" else ""))
+        self.rows[-1].frame.pack(fill="x")
+        self.and_note = self.label(f, "", self.app.f_s, DIM); self.and_note.pack(fill="x")
+        mr = min(lo("max_ram"), lo("free_max_ram") or 99) if s["free"] else lo("max_ram")
+        mc = min(lo("max_cpu"), lo("free_max_cpu") or 99) if s["free"] else lo("max_cpu")
+        f = self.section("RAM", f"{lo('min_ram')}–{mr} GB")
+        self.rows.append(Chips(self.app, f, [(v, f"{v}GB") for v in CP_RAM if lo("min_ram") <= v <= mr], get("ram"), ch("ram"), self.upd)); self.rows[-1].frame.pack(fill="x")
+        f = self.section("CPU (nhân)", f"{lo('min_cpu')}–{mc} nhân")
+        self.rows.append(Chips(self.app, f, [(v, str(v)) for v in CP_CPU if lo("min_cpu") <= v <= mc], get("cpu"), ch("cpu"), self.upd)); self.rows[-1].frame.pack(fill="x")
+        if not s["free"]:
+            f = self.section("Số ngày", f"{lo('min_days')}–{lo('max_days')} ngày")
+            line = tk.Frame(f, bg=BG); line.pack(fill="x")
+            self.days_x = tk.Entry(line, width=6, font=("Segoe UI", 11), bg=CARD, fg=TXT, insertbackground=TXT, relief="flat")
+            def typed(_e=None):
+                try: v = int(self.days_x.get())
+                except ValueError: return
+                if lo("min_days") <= v <= lo("max_days"): self.s["days"] = v; self.upd()
+            self.rows.append(Chips(self.app, line, [(v, f"{v} ngày") for v in CP_DAYS if lo("min_days") <= v <= lo("max_days")], get("days"),
+                                   lambda v: (self.s.__setitem__("days", v), self.days_x.delete(0, "end")), self.upd))
+            self.rows[-1].frame.pack(side="left")
+            self.label(line, "  khác:", self.app.f_s, DIM).pack(side="left"); self.days_x.pack(side="left", ipady=4)
+            self.days_x.bind("<KeyRelease>", typed)
+        f = self.section("Độ phân giải")
+        self.rows.append(Chips(self.app, f, [(r, f"{n}\n{r}") for r, n in CP_RES], get("res"), ch("res"), self.upd)); self.rows[-1].frame.pack(fill="x")
+        f = self.section("FPS (khung hình / giây)")
+        self.rows.append(Chips(self.app, f, [(v, f"{v} FPS") for v in CP_FPS if lo("min_fps") <= v <= lo("max_fps")], get("fps"), ch("fps"), self.upd)); self.rows[-1].frame.pack(fill="x")
+        if not s["free"] and self.left > 1:
+            f = self.section("Số lượng máy")
+            self.rows.append(Chips(self.app, f, [(v, f"{v} máy") for v in CP_QTY if v <= min(20, self.left)], get("qty"), ch("qty"), self.upd)); self.rows[-1].frame.pack(fill="x")
+        note = (p.get("order_note") or "").strip() or ("Máy mới tinh, không dính dữ liệu hay tài khoản Gmail của ai. Hết hạn máy tạm dừng — "
+                                                       "gia hạn trong 30 phút, quá thời gian máy và dữ liệu bị xoá.")
+        self.label(self.body, note, self.app.f_s, DIM, wraplength=530).pack(fill="x", padx=18, pady=(14, 18))
+        # ---- chân: tổng tiền + nút ----
+        ft = self.foot
+        self.calc = self.label(ft, "", self.app.f_s, DIM); self.calc.pack(fill="x", padx=16, pady=(10, 0))
+        r = tk.Frame(ft, bg=CARD); r.pack(fill="x", padx=16)
+        self.total = self.label(r, "", ("Segoe UI", 18, "bold"), TXT); self.total.pack(side="left")
+        self.bal = self.label(r, "", self.app.f_t, DIM); self.bal.pack(side="right")
+        self.err = self.label(ft, "", self.app.f_s, BAD, wraplength=540); self.err.pack(fill="x", padx=16)
+        bb = tk.Frame(ft, bg=CARD); bb.pack(fill="x", padx=16, pady=(6, 12))
+        self.app.btn(bb, "Huỷ", self.close, "soft").pack(side="left")
+        self.go = self.app.btn(bb, "Thuê ngay", self.buy); self.go.pack(side="right")
+        self.upd()
+
+    def set_free(self, on):
+        p, s = self.pr, self.s; s["free"] = bool(on)
+        if on and self.prof.get("role") != "admin":
+            s["ram"] = min(s["ram"], int(num(p.get("free_max_ram"))) or s["ram"]); s["cpu"] = min(s["cpu"], int(num(p.get("free_max_cpu"))) or s["cpu"]); s["qty"] = 1
+        if on: s["days"] = int(num(p.get("free_days"))) or 1
+        self.build()
+
+    def price(self):
+        s = self.s
+        return 0 if s["free"] else ctv(self.prof, per_day(self.pr, s["ram"], s["cpu"]) * s["days"]) * s["qty"]
+
+    def check(self):
+        p, s, st, adm = self.pr, self.s, self.st, self.prof.get("role") == "admin"
+        lo = lambda k: num(p.get(k))
+        if st.get("maint") and not adm: return "Hệ thống đang bảo trì, vui lòng quay lại sau."
+        if st.get("online") is False and not adm: return "Máy chủ điện thoại đang tạm ngưng, vui lòng quay lại sau."
+        if s["free"] and not adm:
+            if s["ram"] > lo("free_max_ram"): return f"Máy miễn phí tối đa {int(lo('free_max_ram'))}GB RAM."
+            if s["cpu"] > lo("free_max_cpu"): return f"Máy miễn phí tối đa {int(lo('free_max_cpu'))} nhân."
+        if not lo("min_ram") <= s["ram"] <= lo("max_ram"): return f"RAM phải từ {int(lo('min_ram'))} đến {int(lo('max_ram'))} GB."
+        if not lo("min_cpu") <= s["cpu"] <= lo("max_cpu"): return f"CPU phải từ {int(lo('min_cpu'))} đến {int(lo('max_cpu'))} nhân."
+        if not s["free"] and not lo("min_days") <= s["days"] <= lo("max_days"): return f"Số ngày phải từ {int(lo('min_days'))} đến {int(lo('max_days'))}."
+        if not lo("min_fps") <= s["fps"] <= lo("max_fps"): return f"FPS phải từ {int(lo('min_fps'))} đến {int(lo('max_fps'))}."
+        if s["cpu"] < 4 and s["fps"] > 60: return "Máy dưới 4 nhân chỉ chọn tối đa 60 FPS."
+        if s["qty"] > self.left and not adm: return f"Tài khoản của bạn chỉ còn được thuê thêm {self.left} máy."
+        if p.get("stock") is not None and s["qty"] > lo("stock") and not adm:
+            return "Đã hết hàng." if lo("stock") <= 0 else f"Chỉ còn {int(lo('stock'))} máy — chọn số lượng nhỏ hơn."
+        if s["android"] not in and_list(p): return "Hãy chọn hệ điều hành (bản Android)."
+        r = and_room(st, s["android"])
+        if r is not None and not adm:
+            if not r[0]: return f"Máy chủ Android {s['android']} đang bảo trì — chọn bản khác."
+            if s["ram"] * s["qty"] > r[1] or s["cpu"] * s["qty"] > r[2]:
+                return (f"Máy chủ Android {s['android']} chỉ còn trống {int(r[1])}GB RAM và {int(r[2])} nhân — chọn ít máy hơn, "
+                        "cấu hình nhỏ hơn hoặc bản Android khác.")
+        elif st and not adm and (s["ram"] * s["qty"] > num(st.get("free_ram")) or s["cpu"] * s["qty"] > num(st.get("free_cpu"))):
+            return f"Máy chủ chỉ còn trống {int(num(st.get('free_ram')))}GB RAM và {int(num(st.get('free_cpu')))} nhân — chọn ít máy hơn hoặc cấu hình nhỏ hơn."
+        return ""
+
+    def upd(self):
+        if not self.alive: return
+        p, s = self.pr, self.s
+        if s["android"] not in and_list(p) or and_why(self.st, s["android"], s["ram"], s["cpu"]):     # bản đang chọn hết chỗ → tự đổi sang bản còn chỗ
+            ok = [v for v in and_list(p) if not and_why(self.st, v, s["ram"], s["cpu"])]
+            if ok: s["android"] = "9" if "9" in ok else ok[0]
+        for r in self.rows: r.paint()
+        bad, price, bal = self.check(), self.price(), num(self.prof.get("balance"))
+        why = {v: and_why(self.st, v, s["ram"], s["cpu"]) for v in and_list(p)}           # giải thích vì sao bản Android bị mờ
+        self.and_note.config(text="   ".join(f"Android {v}: " + ("máy chủ đang bảo trì" if w == "off" else "hết chỗ cho cấu hình này")
+                                             for v, w in why.items() if w and self.prof.get("role") != "admin"))
+        if s["free"]:
+            self.calc.config(text=f"Miễn phí {int(num(p.get('free_days'))) or 1} ngày · Android {s['android']} · {s['ram']}GB · {s['cpu']} nhân")
+        else:
+            self.calc.config(text=f"({s['ram']}GB × {vnd(p.get('price_ram_gb_day'))} + {s['cpu']} nhân × {vnd(p.get('price_cpu_day'))}) × {s['days']} ngày"
+                                  + (f" − {int(num(self.prof.get('ctv_discount')))}% CTV" if is_ctv(self.prof) else "") + (f" × {s['qty']} máy" if s["qty"] > 1 else ""))
+        self.total.config(text="—" if bad else vnd(price)); self.bal.config(text="Số dư: " + vnd(bal))
+        warn = "" if bad else ("Số dư không đủ — cần nạp thêm " + vnd(price - bal) + "." if price > bal
+                               else "⚠ Cấu hình này chưa đủ chơi Roblox (cần tối thiểu 4GB · 4 nhân) — hợp treo app, game nhẹ." if s["ram"] < 4 or s["cpu"] < 4 else "")
+        self.err.config(text=bad or warn, fg=BAD if bad or price > bal else WARN)
+        self.go.config(text="Nhận máy miễn phí" if s["free"] else ("Nạp tiền" if not bad and price > bal else "Thuê ngay" + (f" {s['qty']} máy" if s["qty"] > 1 else "")),
+                       state="disabled" if bad else "normal", bg=LINE if bad else ACC)
+
+    def buy(self):
+        import tkinter.messagebox as mb
+        bad = self.check()
+        if bad: self.err.config(text=bad, fg=BAD); return
+        s, price, bal = self.s, self.price(), num(self.prof.get("balance"))
+        if not s["free"] and price > bal:
+            need = price - bal; self.close(); self.app.open_topup(need); return
+        what = f"Android {s['android']} · {s['qty']} máy · {s['ram']}GB · {s['cpu']} nhân · " + (f"{s['days']} ngày · " if not s["free"] else "") + f"{s['res']} · {s['fps']} FPS"
+        if not mb.askyesno("Xác nhận thuê máy", what + ("\n\nMáy miễn phí — không trừ tiền." if s["free"] else f"\n\nTrừ {vnd(price)} từ số dư?"), parent=self.win): return
+        self.go.config(state="disabled", text="Đang tạo đơn…")
+        args = {"p_ram": s["ram"], "p_cpu": s["cpu"], "p_days": s["days"], "p_res": s["res"], "p_name": None, "p_fps": s["fps"],
+                "p_qty": 1 if s["free"] else s["qty"], "p_android": s["android"]}
+        if s["free"]: args["p_free"] = True
+        def done(_r):
+            notify_admin(f"📱 <b>Đơn ĐT đám mây mới{' (MIỄN PHÍ)' if s['free'] else ''}</b> — app PC\n{s['qty']} máy × Android {s['android']} · "
+                         f"{s['ram']}GB / {s['cpu']} nhân / {s['days']} ngày / {s['res']} / {s['fps']} FPS\nGiá: {vnd(price)}\n{self.app.auth.email}")
+            self.close(); self.app.refresh()
+            mb.showinfo("BlueRoblox", ("Đã tạo đơn " + str(s["qty"]) + " máy!" if s["qty"] > 1 else "Đã tạo đơn!") +
+                        " Máy đang khởi tạo (khoảng 2–3 phút) — danh sách tự cập nhật khi máy chạy.", parent=self.app.root)
+        def fail(m):
+            self.err.config(text=m, fg=BAD); self.upd()
+        self.bg(lambda: self.app.auth.rpc("cloudphone_order_custom", args), done, fail)
+
+
+class RenewDlg(Dlg):
+    """Gia hạn 1 máy: chọn số ngày → trừ số dư (giá theo RAM/CPU của máy, có giảm CTV)."""
+    def __init__(self, app, phone):
+        super().__init__(app, "Gia hạn " + (phone.get("name") or "máy"), 540, 520)
+        self.p = phone; self.days = 30
+        self.loading("Đang tải giá…")
+        self.bg(lambda: (app.shop.pricing(), app.shop.profile()), self._loaded, lambda m: self.loading(m))
+
+    def _loaded(self, r):
+        tk = self.app.tk; self.pr, self.prof = r; p = self.p; self.clear()
+        mx = int(num(self.pr.get("max_days"))) or 90; self.days = min(30, mx)
+        self.label(self.body, p.get("name") or "Máy", self.app.f_h2).pack(fill="x", padx=18, pady=(16, 0))
+        self.label(self.body, f"{p.get('ram')}GB RAM · {p.get('cpu')} nhân · Android {p.get('android') or '9'} · {fmt_left(p.get('expires_at'))}",
+                   self.app.f_t, DIM, wraplength=490).pack(fill="x", padx=18)
+        f = self.section("Gia hạn thêm", f"tối đa {mx} ngày")
+        self.ch = Chips(self.app, f, [(d, f"{d} ngày") for d in RENEW_DAYS if d <= mx], lambda: self.days, lambda v: self._set(v, True), self.upd, wrap=4)
+        self.ch.frame.pack(fill="x")
+        line = tk.Frame(f, bg=BG); line.pack(fill="x", pady=(4, 0))
+        self.label(line, "Số ngày khác:", self.app.f_s, DIM).pack(side="left")
+        self.x = tk.Entry(line, width=6, font=("Segoe UI", 11), bg=CARD, fg=TXT, insertbackground=TXT, relief="flat"); self.x.pack(side="left", padx=6, ipady=4)
+        def typed(_e=None):
+            try: v = int(self.x.get())
+            except ValueError: return
+            if 1 <= v <= mx: self._set(v, False); self.upd()
+        self.x.bind("<KeyRelease>", typed)
+        ft = self.foot
+        self.sum = self.label(ft, "", self.app.f_t, TXT); self.sum.pack(fill="x", padx=16, pady=(10, 0))
+        self.err = self.label(ft, "", self.app.f_s, BAD, wraplength=500); self.err.pack(fill="x", padx=16)
+        bb = tk.Frame(ft, bg=CARD); bb.pack(fill="x", padx=16, pady=(6, 12))
+        self.app.btn(bb, "Huỷ", self.close, "soft").pack(side="left")
+        self.go = self.app.btn(bb, "Gia hạn", self.renew); self.go.pack(side="right")
+        self.upd()
+
+    def _set(self, v, clear):
+        self.days = v
+        if clear: self.x.delete(0, "end")
+
+    def total(self): return ctv(self.prof, per_day(self.pr, int(num(self.p.get("ram"))), int(num(self.p.get("cpu"))))) * self.days
+
+    def upd(self):
+        self.ch.paint()
+        per = ctv(self.prof, per_day(self.pr, int(num(self.p.get("ram"))), int(num(self.p.get("cpu"))))); tot = per * self.days; bal = num(self.prof.get("balance"))
+        exp = parse_iso(self.p.get("expires_at")); base = max(now_utc(), exp) if exp else now_utc()
+        new = (base + datetime.timedelta(days=self.days)).astimezone().strftime("%H:%M %d/%m/%Y")
+        self.sum.config(text=f"Đơn giá {vnd(per)} / ngày" + (f" (CTV −{int(num(self.prof.get('ctv_discount')))}%)" if is_ctv(self.prof) else "")
+                        + f"  ·  Hạn mới: {new}\nThanh toán: {vnd(tot)}   ·   Số dư: {vnd(bal)}")
+        self.err.config(text="" if tot <= bal else "Số dư không đủ — cần nạp thêm " + vnd(tot - bal) + ".")
+        self.go.config(text=f"Gia hạn {self.days} ngày" if tot <= bal else "Nạp tiền")
+
+    def renew(self):
+        import tkinter.messagebox as mb
+        tot, bal = self.total(), num(self.prof.get("balance"))
+        if tot > bal: self.close(); self.app.open_topup(tot - bal); return
+        if not mb.askyesno("Gia hạn", f"Gia hạn “{self.p.get('name')}” thêm {self.days} ngày, trừ {vnd(tot)} từ số dư?", parent=self.win): return
+        self.go.config(state="disabled", text="Đang gia hạn…"); d = self.days
+        def done(_r):
+            self.close(); self.app.refresh()
+            mb.showinfo("BlueRoblox", f"Đã gia hạn +{d} ngày.", parent=self.app.root)
+        def fail(m):
+            self.err.config(text=m); self.go.config(state="normal"); self.upd()
+        self.bg(lambda: self.app.auth.rpc("cloudphone_renew", {"p_id": self.p["id"], "p_days": d}), done, fail)
+
+
+class TopupDlg(Dlg):
+    """Nạp tiền bằng chuyển khoản: tạo mã nạp (create_topup) → mã VietQR → tự kiểm tra 5 giây/lần, ngân hàng báo có là cộng số dư."""
+    def __init__(self, app, need=0):
+        super().__init__(app, "Nạp tiền", 600, 640)
+        self.need = need; self.top = None
+        self.loading()
+        self.bg(lambda: (app.shop.site(), app.shop.profile()), self._loaded, lambda m: self.loading(m))
+
+    def _loaded(self, r):
+        tk = self.app.tk; self.site, self.prof = r; self.clear()
+        self.min = max(1000, int(num(self.site.get("minTop")) or 10000))
+        amt = max(self.min, int(-(-self.need // 1000) * 1000)) if self.need > 0 else max(self.min, 50000)
+        self.amt = amt
+        self.label(self.body, "Nạp tiền vào tài khoản", self.app.f_h2).pack(fill="x", padx=18, pady=(16, 0))
+        self.label(self.body, "Số dư hiện tại: " + vnd(self.prof.get("balance")) + (f"   ·   Cần thêm {vnd(self.need)}" if self.need > 0 else ""),
+                   self.app.f_t, DIM).pack(fill="x", padx=18)
+        f = self.section("Số tiền nạp", f"tối thiểu {vnd(self.min)}")
+        items = sorted(set([a for a in TOP_AMTS if a >= self.min] + ([amt] if self.need > 0 else [])))
+        self.ch = Chips(self.app, f, [(a, vnd(a)) for a in items], lambda: self.amt, lambda v: (setattr(self, "amt", v), self.x.delete(0, "end")), self.upd, wrap=3)
+        self.ch.frame.pack(fill="x")
+        line = tk.Frame(f, bg=BG); line.pack(fill="x", pady=(6, 0))
+        self.label(line, "Số khác:", self.app.f_s, DIM).pack(side="left")
+        self.x = tk.Entry(line, width=12, font=("Segoe UI", 11), bg=CARD, fg=TXT, insertbackground=TXT, relief="flat"); self.x.pack(side="left", padx=6, ipady=4)
+        self.label(line, "đ", self.app.f_t, DIM).pack(side="left")
+        def typed(_e=None):
+            v = int(re.sub(r"\D", "", self.x.get()) or 0)
+            if v: self.amt = v; self.upd()
+        self.x.bind("<KeyRelease>", typed)
+        self.label(self.body, "Chuyển khoản ngân hàng: quét mã QR bằng app ngân hàng bất kỳ, tiền tự cộng vào số dư sau khoảng 1 phút.",
+                   self.app.f_s, DIM, wraplength=540).pack(fill="x", padx=18, pady=(14, 4))
+        lk = self.label(self.body, "Nạp bằng USDT / LTC trên web ↗", self.app.f_s, ACC, cursor="hand2"); lk.pack(fill="x", padx=18)
+        lk.bind("<Button-1>", lambda e: webbrowser.open(WEB + "/?topup=1"))
+        ft = self.foot
+        self.err = self.label(ft, "", self.app.f_s, BAD, wraplength=540); self.err.pack(fill="x", padx=16, pady=(8, 0))
+        bb = tk.Frame(ft, bg=CARD); bb.pack(fill="x", padx=16, pady=(4, 12))
+        self.app.btn(bb, "Huỷ", self.close, "soft").pack(side="left")
+        self.go = self.app.btn(bb, "Tạo mã chuyển khoản", self.make); self.go.pack(side="right")
+        if not str(self.site.get("bankAcc") or "").strip():
+            self.err.config(text="Shop chưa cài tài khoản ngân hàng — tạm thời nạp trên web."); self.go.config(state="disabled", bg=LINE)
+        self.upd()
+
+    def upd(self):
+        self.ch.paint()
+        if self.top is None and hasattr(self, "go") and str(self.site.get("bankAcc") or "").strip():
+            ok = self.amt >= self.min
+            self.err.config(text="" if ok else "Số tiền tối thiểu là " + vnd(self.min) + ".")
+            self.go.config(text=f"Tạo mã chuyển khoản {vnd(self.amt)}", state="normal" if ok else "disabled", bg=ACC if ok else LINE)
+
+    def make(self):
+        if self.amt < self.min: return
+        self.go.config(state="disabled", text="Đang tạo mã…"); a = self.amt
+        def fail(m): self.err.config(text=m); self.upd()
+        self.bg(lambda: self.app.auth.rpc("create_topup", {"p_amount": a}), self._pay, fail)
+
+    def _pay(self, t):
+        tk = self.app.tk; self.top = t or {}; self.clear(); self.win.title("Chuyển khoản " + vnd(self.top.get("amount")))
+        bin_ = str(self.site.get("bankBin") or "970422"); acc = re.sub(r"\D", "", str(self.site.get("bankAcc") or ""))
+        name = str(self.site.get("bankName") or ""); amount = int(num(self.top.get("amount"))); memo = str(self.top.get("memo") or "")
+        wrap = tk.Frame(self.body, bg=BG); wrap.pack(fill="x", padx=18, pady=16)
+        cv = tk.Canvas(wrap, bg="white", highlightthickness=0)
+        try:
+            import qrcodegen
+            q = qrcodegen.QrCode.encode_text(vietqr(bin_, acc, amount, memo), qrcodegen.QrCode.Ecc.MEDIUM)
+            n = q.get_size(); sc = max(3, 248 // (n + 8)); side = (n + 8) * sc
+            cv.config(width=side, height=side)
+            for y in range(n):
+                for x in range(n):
+                    if q.get_module(x, y): cv.create_rectangle((x + 4) * sc, (y + 4) * sc, (x + 5) * sc, (y + 5) * sc, fill="black", width=0)
+        except Exception:
+            log("qr:", traceback.format_exc()); cv.config(width=248, height=60, bg=CARD)
+            cv.create_text(124, 30, text="Không tạo được mã QR —\nchuyển khoản theo thông tin bên cạnh", fill=TXT, font=self.app.f_s)
+        cv.pack(side="left", anchor="n")
+        info = tk.Frame(wrap, bg=BG); info.pack(side="left", fill="both", expand=True, padx=(16, 0))
+        def row(lab, val, copy=None, big=False, col=TXT):
+            r = tk.Frame(info, bg=BG); r.pack(fill="x", pady=3)
+            self.label(r, lab, self.app.f_s, DIM).pack(fill="x")
+            vr = tk.Frame(r, bg=BG); vr.pack(fill="x")
+            self.label(vr, val, ("Segoe UI", 13 if big else 11, "bold"), col).pack(side="left")
+            if copy: self.app.btn(vr, "Chép", lambda: self.copy(copy), "soft", padx=8, pady=2).pack(side="right")
+        row("Ngân hàng", BANKS.get(bin_, bin_)); row("Số tài khoản", acc, acc); row("Chủ tài khoản", name)
+        row("Số tiền", vnd(amount), str(amount)); row("Nội dung chuyển khoản (ghi ĐÚNG)", memo, memo, True, WARN)
+        self.label(self.body, "Mở app ngân hàng → Quét mã QR: số tiền và nội dung tự điền. Chuyển tay thì ghi đúng nội dung ở trên, "
+                              "nếu không tiền sẽ không tự cộng. Mã có hiệu lực 20 phút.", self.app.f_s, DIM, wraplength=540).pack(fill="x", padx=18)
+        ft = self.foot
+        self.state = self.label(ft, "⏳ Đang chờ ngân hàng báo có… (tự kiểm tra, không cần bấm gì)", ("Segoe UI", 10, "bold"), WARN, wraplength=540)
+        self.state.pack(fill="x", padx=16, pady=(10, 0))
+        bb = tk.Frame(ft, bg=CARD); bb.pack(fill="x", padx=16, pady=(6, 12))
+        self.done_btn = self.app.btn(bb, "Đóng", self.close, "soft"); self.done_btn.pack(side="right")
+        threading.Thread(target=self._poll, daemon=True).start()
+
+    def copy(self, v):
+        try: self.app.root.clipboard_clear(); self.app.root.clipboard_append(v)
+        except Exception: pass
+        if hasattr(self, "state") and self.state.winfo_exists(): self.state.config(text=f"Đã chép: {v}   ·   ⏳ vẫn đang chờ ngân hàng báo có…", fg=WARN)
+
+    def _poll(self):
+        t0, tid = time.time(), self.top.get("id")
+        while self.alive and time.time() - t0 < 25 * 60:
+            time.sleep(5)
+            if not self.alive: return
+            try: rows = self.app.auth.rest(f"topups?id=eq.{tid}&select=status,amount") or []
+            except Exception: continue
+            if rows and rows[0].get("status") == "done":
+                amt = rows[0].get("amount"); self.app.ui(lambda: self._done(amt)); return
+            if not rows and time.time() - t0 > 60:
+                self.app.ui(lambda: self.alive and self.state.config(
+                    text="Mã nạp này đã hết hạn. Nếu bạn đã chuyển tiền mà chưa được cộng, liên hệ hỗ trợ kèm nội dung chuyển khoản.", fg=BAD)); return
+        if self.alive:
+            self.app.ui(lambda: self.alive and self.state.config(
+                text="Chưa thấy tiền về. Nếu đã chuyển đúng nội dung mà quá 15 phút chưa cộng, liên hệ hỗ trợ kèm nội dung chuyển khoản.", fg=BAD))
+
+    def _done(self, amt):
+        if not self.alive: return
+        self.state.config(text=f"✓ Đã nhận {vnd(amt)} — số dư đã được cộng.", fg=OK)
+        self.done_btn.config(text="Xong", bg=ACC)
+        self.app.refresh()
+
+
+class UpgradeDlg(Dlg):
+    """Nâng RAM / CPU cho máy đang chạy: trả thêm cho thời gian còn lại (máy chủ tính giá, có giảm CTV) — app và dữ liệu giữ nguyên."""
+    def __init__(self, app, phone):
+        super().__init__(app, "Nâng cấp " + (phone.get("name") or "máy"), 560, 560)
+        self.p = phone; self.r0, self.c0 = int(num(phone.get("ram"))), int(num(phone.get("cpu"))); self.nr, self.nc = self.r0, self.c0
+        self.cost, self.qid = 0, 0
+        self.loading("Đang tải giá…")
+        self.bg(lambda: (app.shop.pricing(), app.shop.profile()), self._loaded, lambda m: self.loading(m))
+
+    def _loaded(self, r):
+        tk = self.app.tk; self.pr, self.prof = r; p = self.p; self.clear()
+        mr, mc = int(num(self.pr.get("max_ram"))) or 8, int(num(self.pr.get("max_cpu"))) or 8
+        self.label(self.body, p.get("name") or "Máy", self.app.f_h2).pack(fill="x", padx=18, pady=(16, 0))
+        self.label(self.body, f"Hiện tại {self.r0}GB RAM · {self.c0} nhân · {fmt_left(p.get('expires_at'))}", self.app.f_t, DIM, wraplength=500).pack(fill="x", padx=18)
+        rams = sorted({v for v in (2, 3, 4, 6, 8, 10, 12, 16, mr) if self.r0 < v <= mr})
+        cpus = sorted({v for v in (2, 3, 4, 6, 8, 10, 12, 16, mc) if self.c0 < v <= mc})
+        f = self.section("RAM")
+        self.cr = Chips(self.app, f, [(self.r0, f"Giữ {self.r0}GB")] + [(v, f"{v}GB") for v in rams], lambda: self.nr, lambda v: setattr(self, "nr", v), self.upd)
+        self.cr.frame.pack(fill="x")
+        if not rams: self.label(f, "RAM đã tối đa.", self.app.f_s, DIM).pack(fill="x")
+        f = self.section("CPU")
+        self.cc = Chips(self.app, f, [(self.c0, f"Giữ {self.c0} nhân")] + [(v, f"{v} nhân") for v in cpus], lambda: self.nc, lambda v: setattr(self, "nc", v), self.upd)
+        self.cc.frame.pack(fill="x")
+        if not cpus: self.label(f, "CPU đã tối đa.", self.app.f_s, DIM).pack(fill="x")
+        self.label(self.body, "Máy tự khởi động lại khoảng 1 phút để nhận cấu hình mới — app và dữ liệu giữ nguyên. "
+                              "Các lần gia hạn sau tính theo cấu hình mới.", self.app.f_s, DIM, wraplength=510).pack(fill="x", padx=18, pady=(14, 10))
+        ft = self.foot
+        self.sum = self.label(ft, "", self.app.f_t, TXT); self.sum.pack(fill="x", padx=16, pady=(10, 0))
+        self.err = self.label(ft, "", self.app.f_s, BAD, wraplength=500); self.err.pack(fill="x", padx=16)
+        bb = tk.Frame(ft, bg=CARD); bb.pack(fill="x", padx=16, pady=(6, 12))
+        self.app.btn(bb, "Huỷ", self.close, "soft").pack(side="left")
+        self.go = self.app.btn(bb, "Nâng cấp ngay", self.upgrade); self.go.pack(side="right")
+        self.upd()
+
+    def _local_quote(self):
+        """Giá dự tính giống web (máy chủ vẫn tính lại chính xác lúc trừ tiền)."""
+        exp = parse_iso(self.p.get("expires_at")); left = max(0.0, (exp - now_utc()).total_seconds() / 86400) if exp else 0.0
+        raw = round(((self.nr - self.r0) * num(self.pr.get("price_ram_gb_day")) + (self.nc - self.c0) * num(self.pr.get("price_cpu_day"))) * left)
+        pct = num(self.prof.get("ctv_discount")) if is_ctv(self.prof) else 0
+        return int(-(-(raw * (100 - pct)) // 100))
+
+    def upd(self):
+        self.cr.paint(); self.cc.paint()
+        same = self.nr == self.r0 and self.nc == self.c0
+        if same: self.cost = 0; self._draw(); return
+        self.cost = self._local_quote(); self._draw()
+        self.qid += 1; q, nr, nc = self.qid, self.nr, self.nc
+        def got(v):
+            if q != self.qid: return
+            try: self.cost = int(num(v))
+            except Exception: pass
+            self._draw()
+        self.bg(lambda: self.app.auth.rpc("cloudphone_upgrade_quote", {"p_id": self.p["id"], "p_ram": nr, "p_cpu": nc}), got, lambda m: None)
+
+    def _draw(self):
+        same = self.nr == self.r0 and self.nc == self.c0; bal = num(self.prof.get("balance"))
+        self.sum.config(text="Chọn RAM hoặc CPU muốn nâng." if same else
+                        f"Cấu hình mới: {self.nr}GB RAM · {self.nc} nhân\nTrả thêm cho thời gian còn lại: {vnd(self.cost)}   ·   Số dư: {vnd(bal)}")
+        self.err.config(text="" if same or self.cost <= bal else "Số dư không đủ — cần nạp thêm " + vnd(self.cost - bal) + ".")
+        self.go.config(state="disabled" if same else "normal", bg=LINE if same else ACC, text="Nạp tiền" if not same and self.cost > bal else "Nâng cấp ngay")
+
+    def upgrade(self):
+        import tkinter.messagebox as mb
+        if self.nr == self.r0 and self.nc == self.c0: return
+        bal = num(self.prof.get("balance"))
+        if self.cost > bal: need = self.cost - bal; self.close(); self.app.open_topup(need); return
+        if not mb.askyesno("Nâng cấp", f"Nâng “{self.p.get('name')}” lên {self.nr}GB RAM · {self.nc} nhân, trừ khoảng {vnd(self.cost)} từ số dư?\n"
+                                       "Máy sẽ tự khởi động lại khoảng 1 phút.", parent=self.win): return
+        self.go.config(state="disabled", text="Đang nâng cấp…"); nr, nc = self.nr, self.nc
+        def done(_r):
+            self.close(); self.app.refresh()
+            mb.showinfo("BlueRoblox", f"Đã nâng lên {nr}GB · {nc} nhân — máy nhận cấu hình mới trong khoảng 1 phút.", parent=self.app.root)
+        def fail(m):
+            self.err.config(text=m); self.go.config(state="normal"); self._draw()
+        self.bg(lambda: self.app.auth.rpc("cloudphone_upgrade", {"p_id": self.p["id"], "p_ram": nr, "p_cpu": nc}), done, fail)
+
+
+ERRORS.update({"UPGRADE_PENDING": "Máy đang được nâng cấp, đợi khoảng 1 phút rồi thử lại.", "FREE_NO_UPGRADE": "Máy miễn phí không nâng cấp được — thuê máy trả phí để nâng.",
+               "PHONE_NOT_ACTIVE": "Máy phải đang chạy mới làm được việc này.", "BAD_UPGRADE": "Cấu hình nâng cấp không hợp lệ."})
+
+
 class Launcher:
     def __init__(self, open_id=None):
         import tkinter as tk
-        self.tk = tk; self.auth = Auth(); self.open_id = open_id; self.rows = []; self.busy = False
-        self.root = tk.Tk(); self.root.title("BlueRoblox PC"); self.root.configure(bg=BG); self.root.geometry("560x720"); self.root.minsize(460, 520)
+        self.tk = tk; self.auth = Auth(); self.shop = Shop(self.auth); self.open_id = open_id; self.rows = []; self.busy = False
+        self.scrollers = {}; self._fast = None; self._q = queue.Queue()
+        self.root = tk.Tk(); self.root.title("BlueRoblox PC"); self.root.configure(bg=BG); self.root.geometry("600x760"); self.root.minsize(480, 540)
+        self.root.bind_all("<MouseWheel>", self._wheel)
+        self.root.after(40, self._pump)
         try:
             ico = os.path.join(getattr(sys, "_MEIPASS", HERE), "icon.png")
             if os.path.isfile(ico): self.root.iconphoto(True, tk.PhotoImage(file=ico))
@@ -612,10 +1286,59 @@ class Launcher:
         for w in self.body.winfo_children(): w.destroy()
 
     def btn(self, parent, text, cmd, kind="primary", **kw):
-        bg = {"primary": ACC, "ghost": CARD, "danger": "#3a1d27"}[kind]; fg = TXT
-        b = self.tk.Button(parent, text=text, command=cmd, bg=bg, fg=fg, activebackground="#4b8cff" if kind == "primary" else LINE,
-                           activeforeground=TXT, relief="flat", bd=0, padx=14, pady=7, font=("Segoe UI", 10, "bold"), cursor="hand2", **kw)
+        bg = {"primary": ACC, "ghost": CARD, "soft": LINE, "danger": "#3a1d27"}[kind]; fg = TXT
+        o = dict(padx=14, pady=7); o.update(kw)
+        b = self.tk.Button(parent, text=text, command=cmd, bg=bg, fg=fg, activebackground="#4b8cff" if kind == "primary" else "#2a3a5c",
+                           activeforeground=TXT, relief="flat", bd=0, font=("Segoe UI", 10, "bold"), cursor="hand2", **o)
         return b
+
+    def ui(self, fn):
+        """Luồng nền gửi việc cập nhật giao diện về luồng chính (Tk chỉ an toàn khi gọi từ luồng chính)."""
+        self._q.put(fn)
+
+    def _pump(self):
+        try:
+            while True:
+                fn = self._q.get_nowait()
+                try: fn()
+                except Exception: log("ui:", traceback.format_exc())
+        except queue.Empty: pass
+        try: self.root.after(40, self._pump)
+        except Exception: pass
+
+    def _wheel(self, e):
+        """Lăn chuột cuộn đúng cửa sổ đang trỏ vào (danh sách máy hoặc hộp thoại mua / nạp)."""
+        try: cv = self.scrollers.get(str(e.widget.winfo_toplevel()))
+        except Exception: return
+        if cv is not None and cv.winfo_exists(): cv.yview_scroll(int(-e.delta / 120), "units")
+
+    # ---------- mua / nạp / gia hạn / nâng cấp / huỷ (cửa sổ con) ----------
+    def open_order(self): OrderDlg(self)
+    def open_topup(self, need=0): TopupDlg(self, need)
+    def open_renew(self, p): RenewDlg(self, p)
+    def open_upgrade(self, p): UpgradeDlg(self, p)
+
+    def cancel(self, p):
+        import tkinter.messagebox as mb
+        if not mb.askyesno("Huỷ máy", f"Huỷ máy “{p.get('name')}”?\n\nMáy và TOÀN BỘ dữ liệu trong máy sẽ bị XOÁ vĩnh viễn, không hoàn tiền.",
+                           icon="warning", default="no", parent=self.root): return
+        def job():
+            try:
+                self.auth.rpc("cloudphone_cancel", {"p_id": p["id"]})
+                self.ui(lambda: (self.refresh(), mb.showinfo("BlueRoblox", "Đang huỷ máy — máy sẽ biến mất khỏi danh sách trong ít phút.", parent=self.root)))
+            except Exception as e:
+                m = str(e); self.ui(lambda m=m: mb.showerror("BlueRoblox", m, parent=self.root))
+        threading.Thread(target=job, daemon=True).start()
+
+    def more(self, p, widget):
+        """Menu "Khác" của 1 máy: nâng cấp RAM/CPU, huỷ máy."""
+        m = self.tk.Menu(self.root, tearoff=0, bg=CARD, fg=TXT, activebackground=ACC, activeforeground=TXT, font=("Segoe UI", 10))
+        can_up = p.get("status") == "active" and not p.get("locked") and not p.get("is_free") and p.get("pending_ram") is None
+        m.add_command(label="Nâng cấp RAM / CPU", command=lambda: self.open_upgrade(p), state="normal" if can_up else "disabled")
+        m.add_separator()
+        m.add_command(label="Huỷ máy (xoá vĩnh viễn)", command=lambda: self.cancel(p))
+        try: m.tk_popup(widget.winfo_rootx(), widget.winfo_rooty() + widget.winfo_height())
+        finally: m.grab_release()
 
     # ---------- đăng nhập ----------
     def show_login(self, msg=""):
@@ -637,9 +1360,9 @@ class Launcher:
             self.busy = True; b.config(text="Đang đăng nhập…")
             def job():
                 try:
-                    self.auth.login(em, pw); prefs({"email": em}); self.root.after(0, self.show_list)
+                    self.auth.login(em, pw); prefs({"email": em}); self.ui(self.show_list)
                 except Exception as e:
-                    m = str(e); self.root.after(0, lambda m=m: (err.config(text=m), b.config(text="Đăng nhập")))
+                    m = str(e); self.ui(lambda m=m: (err.config(text=m), b.config(text="Đăng nhập")))
                 finally: self.busy = False
             threading.Thread(target=job, daemon=True).start()
         b = self.btn(box, "Đăng nhập", go); b.pack(fill="x", pady=(8, 10))
@@ -657,15 +1380,21 @@ class Launcher:
         self.btn(top, "⟳ Làm mới", self.refresh, "ghost").pack(side="right", padx=6)
         sub = tk.Frame(self.body, bg=BG); sub.pack(fill="x", padx=18)
         tk.Label(sub, text=self.auth.email, font=self.f_s, fg=DIM, bg=BG).pack(side="left")
-        lk = tk.Label(sub, text="Mua / gia hạn trên web ↗", font=self.f_s, fg=ACC, bg=BG, cursor="hand2"); lk.pack(side="right")
+        lk = tk.Label(sub, text="Mở web ↗", font=self.f_s, fg=ACC, bg=BG, cursor="hand2"); lk.pack(side="right")
         lk.bind("<Button-1>", lambda *_: webbrowser.open(WEB))
+        shop = tk.Frame(self.body, bg=CARD, highlightbackground=LINE, highlightthickness=1); shop.pack(fill="x", padx=18, pady=(10, 0))
+        bl = tk.Frame(shop, bg=CARD); bl.pack(side="left", padx=14, pady=8)
+        tk.Label(bl, text="Số dư", font=self.f_s, fg=DIM, bg=CARD, anchor="w").pack(fill="x")
+        self.bal = tk.Label(bl, text="…", font=("Segoe UI", 15, "bold"), fg=TXT, bg=CARD, anchor="w"); self.bal.pack(fill="x")
+        self.btn(shop, "+ Thuê máy", self.open_order).pack(side="right", padx=(6, 12), pady=10)
+        self.btn(shop, "Nạp tiền", self.open_topup, "soft").pack(side="right", pady=10)
         wrap = tk.Frame(self.body, bg=BG); wrap.pack(fill="both", expand=True, padx=10, pady=10)
         cv = tk.Canvas(wrap, bg=BG, highlightthickness=0); sb = tk.Scrollbar(wrap, orient="vertical", command=cv.yview)
         self.list = tk.Frame(cv, bg=BG); win = cv.create_window((0, 0), window=self.list, anchor="nw")
         self.list.bind("<Configure>", lambda e: cv.configure(scrollregion=cv.bbox("all")))
         cv.bind("<Configure>", lambda e: cv.itemconfigure(win, width=e.width))
         cv.configure(yscrollcommand=sb.set); cv.pack(side="left", fill="both", expand=True); sb.pack(side="right", fill="y")
-        cv.bind_all("<MouseWheel>", lambda e: cv.yview_scroll(int(-e.delta / 120), "units"))
+        self.scrollers[str(self.root)] = cv
         self.msg = tk.Label(self.list, text="Đang tải…", font=self.f_t, fg=DIM, bg=BG); self.msg.pack(pady=30)
         self.refresh()
         self._tick()
@@ -679,11 +1408,19 @@ class Launcher:
         def job():
             try:
                 rows = self.auth.phones()
-                self.root.after(0, lambda: self.render(rows))
+                try: prof = self.shop.profile()
+                except ApiError as e:
+                    if e.code == 401: raise
+                    prof = None
+                def show():
+                    if prof is not None and hasattr(self, "bal") and self.bal.winfo_exists():
+                        self.bal.config(text=vnd(prof.get("balance")) + (f"  · CTV −{int(num(prof.get('ctv_discount')))}%" if is_ctv(prof) else ""))
+                    self.render(rows)
+                self.ui(show)
             except ApiError as e:
                 m = str(e)
-                if e.code == 401: self.root.after(0, lambda m=m: self.show_login(m))
-                elif not quiet: self.root.after(0, lambda m=m: self.msg.config(text=m) if self.msg.winfo_exists() else None)
+                if e.code == 401: self.ui(lambda m=m: self.show_login(m))
+                elif not quiet: self.ui(lambda m=m: self.msg.config(text=m) if self.msg.winfo_exists() else None)
             except Exception as e:
                 log("refresh:", traceback.format_exc())
         threading.Thread(target=job, daemon=True).start()
@@ -692,10 +1429,13 @@ class Launcher:
         tk = self.tk
         if not self.list.winfo_exists(): return
         for w in self.list.winfo_children(): w.destroy()
+        if self._fast: self.root.after_cancel(self._fast); self._fast = None
+        if any(p.get("status") in ("pending", "cancelling") or p.get("pending_ram") is not None for p in rows):
+            self._fast = self.root.after(6000, lambda: self.refresh(quiet=True))         # máy đang tạo / nâng cấp → cập nhật nhanh hơn
         if not rows:
             tk.Label(self.list, text="Bạn chưa có máy nào.", font=self.f_h2, fg=TXT, bg=BG).pack(pady=(40, 6))
-            tk.Label(self.list, text="Mua máy trên web, rồi quay lại đây để điều khiển.", font=self.f_t, fg=DIM, bg=BG).pack()
-            self.btn(self.list, "Mua máy trên web ↗", lambda: webbrowser.open(WEB)).pack(pady=14)
+            tk.Label(self.list, text="Thuê máy ngay trong app — chọn cấu hình, thanh toán bằng số dư.", font=self.f_t, fg=DIM, bg=BG).pack()
+            self.btn(self.list, "+ Thuê máy", self.open_order).pack(pady=14)
             self.msg = tk.Label(self.list, bg=BG); return
         self.msg = tk.Label(self.list, bg=BG)
         for p in rows: self._card(p)
@@ -715,12 +1455,17 @@ class Launcher:
         tk.Label(c, text=info, font=self.f_t, fg=DIM, bg=CARD, anchor="w").pack(fill="x", padx=14)
         if p.get("expires_at"): tk.Label(c, text="⏱ " + fmt_left(p["expires_at"]), font=self.f_s, fg=DIM, bg=CARD, anchor="w").pack(fill="x", padx=14, pady=(2, 0))
         if p.get("status") == "error" and p.get("error"): tk.Label(c, text=p["error"], font=self.f_s, fg=BAD, bg=CARD, anchor="w", wraplength=440, justify="left").pack(fill="x", padx=14)
+        if p.get("pending_ram") is not None:
+            tk.Label(c, text=f"⏳ Đang nâng cấp lên {p.get('pending_ram')}GB · {p.get('pending_cpu')} nhân…", font=self.f_s, fg=WARN, bg=CARD, anchor="w").pack(fill="x", padx=14)
         bar = tk.Frame(c, bg=CARD); bar.pack(fill="x", padx=14, pady=(10, 12))
-        active = p.get("status") == "active" and not p.get("locked")
+        st = p.get("status"); active = st == "active" and not p.get("locked")
         b = self.btn(bar, "▶  Điều khiển", lambda pid=str(p["id"]): spawn_viewer(pid)); b.pack(side="left")
         if not active: b.config(state="disabled", bg=LINE)
         if active: self.btn(bar, "Khởi động lại", lambda q=p: self.reboot(q), "ghost").pack(side="left", padx=8)
-        self.btn(bar, "Gia hạn ↗", lambda: webbrowser.open(WEB), "ghost").pack(side="right")
+        if p.get("shared"): return                                  # máy người khác chia sẻ: chỉ điều khiển
+        mo = self.btn(bar, "Khác ▾", None, "soft", padx=10); mo.config(command=lambda q=p, w=mo: self.more(q, w)); mo.pack(side="right")
+        if st in ("active", "expired") and not p.get("is_free"):
+            self.btn(bar, "Gia hạn", lambda q=p: self.open_renew(q), "soft").pack(side="right", padx=(0, 6))
 
     def reboot(self, p):
         import tkinter.messagebox as mb
@@ -730,9 +1475,9 @@ class Launcher:
                 ep = self.auth.rpc("cloudphone_endpoint", {"p_id": p["id"]}) or {}
                 base = ((ep.get("stream") or {}).get("api") or PHONE_API).rstrip("/")
                 self.auth.cp("POST", base, f"{p['id']}/reboot")
-                self.root.after(0, lambda: mb.showinfo("BlueRoblox", "Đang khởi động lại máy — chờ khoảng 1 phút rồi mở lại."))
+                self.ui(lambda: mb.showinfo("BlueRoblox", "Đang khởi động lại máy — chờ khoảng 1 phút rồi mở lại."))
             except Exception as e:
-                m = str(e); self.root.after(0, lambda m=m: mb.showerror("BlueRoblox", m))
+                m = str(e); self.ui(lambda m=m: mb.showerror("BlueRoblox", m))
         threading.Thread(target=job, daemon=True).start()
 
     def logout(self):
@@ -745,7 +1490,7 @@ def selftest(out):
     """Mở thử mọi thư viện cửa sổ máy cần (giải mã H.264, cửa sổ GPU, tkinter) → ghi kết quả ra file."""
     res = []
     try:
-        import av, numpy, pygame, tkinter, ssl, brstream                         # noqa: F401,E401
+        import av, numpy, pygame, tkinter, ssl, brstream, qrcodegen              # noqa: F401,E401
         from pygame._sdl2.video import Window, Renderer, Texture                 # noqa: F401
         ctx = av.CodecContext.create("h264", "r"); ctx.options = {"flags": "+low_delay"}
         res.append(f"av {av.__version__} · pygame {pygame.version.ver} · numpy {numpy.__version__} · {ssl.OPENSSL_VERSION}")

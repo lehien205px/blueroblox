@@ -637,8 +637,16 @@ def _cleanup(v=None, quiet=False, all_=False):
         if nm == tpl or (nm in mine and not all_) or (nm.startswith("spare_") and not all_): continue
         if quiet and not nm.startswith("cp_"): continue     # tự động: chỉ dọn máy do BlueRoblox tạo (cp_…)
         print(f"XOA_THUA {nm} (MEmu #{i})", flush=True)
-        if v[i]["running"]: memuc("stop", "-i", i, timeout=120); time.sleep(3)
-        memuc("remove", "-i", i, timeout=180); gone += 1
+        for _t in range(3):                                  # tắt HẲN rồi mới xoá (MEmu không xoá máy đang chạy) → kiểm tra đã mất thật
+            if (vms().get(i) or {}).get("running"):
+                memuc("stop", "-i", i, timeout=120)
+                for _w in range(20):
+                    if not (vms().get(i) or {}).get("running"): break
+                    time.sleep(3)
+            r = memuc("remove", "-i", i, timeout=180)
+            if (vms().get(i) or {}).get("name") != nm: gone += 1; break
+            print(f"   (chưa xoá được, thử lại: {((r.stdout or '') + (r.stderr or '')).strip()[-120:]})", flush=True); time.sleep(5)
+        else: print(f"   ✗ KHÔNG xoá được {nm} — tắt bằng tay trong MEmu Multi-Instance rồi chạy lại", flush=True)
     if all_:
         st = load(); st["phones"] = []; save(st)
     if not quiet or gone: print(f"Đã xoá {gone} giả lập.")
@@ -720,9 +728,22 @@ def cmd_pool(a):
             before = set(vms())
             r = memuc("create", "96", timeout=90)        # bình thường ~10–30 giây; treo → bỏ, không giữ khoá lâu
             m = re.search(r"index\D*(\d+)", r.stdout or "")
-            idx = int(m.group(1)) if m else next(iter(sorted(set(vms()) - before)), None)
-            if idx is None: print("LỖI dựng máy sẵn:", ((r.stdout or "") + (r.stderr or "")).strip()[-200:]); return
-            memuc("rename", "-i", idx, nm, timeout=60)
+            v2 = vms(); new = sorted(set(v2) - before)
+            idx = int(m.group(1)) if m else next(iter(new), None)
+            def _drop(ix):                               # máy dở không đặt được tên → XOÁ NGAY (không để thành "MEmuNN" mồ côi ăn CPU)
+                print(f"XOA_DO MEmu #{ix} (không đặt tên được)", flush=True)
+                if (vms().get(ix) or {}).get("running"): memuc("stop", "-i", ix, timeout=120); time.sleep(3)
+                memuc("remove", "-i", ix, timeout=180)
+            if idx is None:
+                for ix in reversed(new):
+                    if re.match(r"^MEmu\d*$", v2[ix]["name"]): _drop(ix)
+                print("LỖI dựng máy sẵn:", ((r.stdout or "") + (r.stderr or "")).strip()[-200:]); return
+            for _t in range(4):
+                memuc("rename", "-i", idx, nm, timeout=60)
+                if (vms().get(idx) or {}).get("name") == nm: break
+                time.sleep(3)
+            else:
+                _drop(idx); return
             d = _pl(); d.setdefault("building", []).append(nm); _ps(d)
         # chỉnh cài đặt NGOÀI khoá "memu" → đơn máy khách chen vào được bất cứ lúc nào; có đơn khách → dừng, lần sau làm tiếp
         if _creating_now(): print(f"LỖI {nm}: nhường đơn máy khách — dựng lại sau"); return
@@ -741,7 +762,7 @@ def cmd_pool(a):
             tune(nm, port); preinstall(nm, port)
         adb("disconnect", f"127.0.0.1:{port}", timeout=15)
         i2 = next((k for k, x in vms().items() if x["name"] == nm), None)
-        if i2 is not None: memuc("stop", "-i", i2, timeout=120)
+        memuc("stop", "-i", idx if i2 is None else i2, timeout=120)     # LUÔN tắt máy dựng sẵn (không để chạy ngầm ăn CPU)
         if ok:
             d = _pl(); d["ready"].append(nm); d["building"] = [x for x in d.get("building", []) if x != nm]; _ps(d)
             print(f"SAN_SANG {nm}: máy dựng sẵn đã xong ({len(d['ready'])}/{POOL_SIZE})")

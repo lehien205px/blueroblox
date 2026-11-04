@@ -9,6 +9,9 @@ import base64, hashlib, hmac, http.client, ipaddress, json, os, re, secrets, shl
 import subprocess, sys, threading, time, urllib.error, urllib.parse, urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 SHOTS = {}          # (cổng, cỡ) → (lúc chụp, ảnh, loại) — ảnh màn hình nhỏ cho danh sách máy
+LIVE = {}           # cổng → số người ĐANG điều khiển/xem trực tiếp (luồng hình) — máy đó KHÔNG chụp ảnh nhỏ để luồng hình không bị giật
+import threading as _th
+SHOT_SEM = _th.Semaphore(2)   # cả máy chủ chỉ chụp 2 ảnh cùng lúc — tránh dồn ảnh thô (~3.7MB/ảnh) làm nghẽn adb của mọi máy
 
 HOME = os.path.expanduser("~")
 CONF = os.path.join(HOME, "cloudphone.conf")
@@ -948,38 +951,46 @@ class H(BaseHTTPRequestHandler):
             try: w = max(0, min(720, int(q.get("w") or 0)))
             except ValueError: w = 0
             key = (int(port), w); c = SHOTS.get(key)
-            ttl = 0.4 if w > 300 else 1.5                          # ảnh to (xem lớn) cập nhật nhanh hơn
-            if c and time.time() - c[0] < ttl: data, ctype = c[1], c[2]
+            ttl = 1.0 if w > 300 else 5.0                          # ảnh nhỏ: 5 giây/ảnh là đủ cho danh sách
+            if LIVE.get(int(port)): ttl = 30.0                     # máy đang được điều khiển → hầu như không chụp (giữ luồng hình mượt)
+            busy = c is not None and not SHOT_SEM.acquire(blocking=False)   # đang có 2 ảnh khác chụp → trả ảnh cũ ngay
+            if busy or (c and time.time() - c[0] < ttl):
+                if not busy: SHOT_SEM.release()
+                data, ctype = c[1], c[2]
             else:
-                data, ctype = None, "image/png"
-                if w:
-                    try:                                            # NHANH: ảnh thô (không nén PNG trong máy ảo) → thu nhỏ + JPEG trên Windows
-                        import io
-                        from PIL import Image
-                        r = adb(port, ["exec-out", "screencap"], 20)
-                        raw = r.stdout or b""
-                        if not r.returncode and len(raw) > 16:
-                            W, H = int.from_bytes(raw[0:4], "little"), int.from_bytes(raw[4:8], "little")
-                            n = W * H * 4
-                            if 0 < W <= 4096 and 0 < H <= 4096 and len(raw) >= n + 12:
-                                im = Image.frombuffer("RGBA", (W, H), raw[len(raw) - n:], "raw", "RGBA", 0, 1).convert("RGB")
-                                im = im.resize((w, max(1, round(H * w / W))), Image.BILINEAR)
-                                b = io.BytesIO(); im.save(b, "JPEG", quality=65); data, ctype = b.getvalue(), "image/jpeg"
-                    except Exception: data = None
-                if data is None:
-                    r = adb(port, ["exec-out", "screencap", "-p"], 30)
-                    if r.returncode or not r.stdout.startswith(b"\x89PNG"): return self.send_json(500, {"error": "Không chụp được màn hình."})
-                    data, ctype = r.stdout, "image/png"
-                    if w:
-                        try:
-                            import io
-                            from PIL import Image
-                            im = Image.open(io.BytesIO(data)).convert("RGB")
-                            im = im.resize((w, max(1, round(im.height * w / im.width))))
-                            b = io.BytesIO(); im.save(b, "JPEG", quality=62); data, ctype = b.getvalue(), "image/jpeg"
-                        except Exception: pass
-                SHOTS[key] = (time.time(), data, ctype)
-                if len(SHOTS) > 200: SHOTS.clear()
+              got = True if c is not None else SHOT_SEM.acquire(timeout=25)
+              try:
+                  data, ctype = None, "image/png"
+                  if w:
+                      try:                                            # NHANH: ảnh thô (không nén PNG trong máy ảo) → thu nhỏ + JPEG trên Windows
+                          import io
+                          from PIL import Image
+                          r = adb(port, ["exec-out", "screencap"], 20)
+                          raw = r.stdout or b""
+                          if not r.returncode and len(raw) > 16:
+                              W, H = int.from_bytes(raw[0:4], "little"), int.from_bytes(raw[4:8], "little")
+                              n = W * H * 4
+                              if 0 < W <= 4096 and 0 < H <= 4096 and len(raw) >= n + 12:
+                                  im = Image.frombuffer("RGBA", (W, H), raw[len(raw) - n:], "raw", "RGBA", 0, 1).convert("RGB")
+                                  im = im.resize((w, max(1, round(H * w / W))), Image.BILINEAR)
+                                  b = io.BytesIO(); im.save(b, "JPEG", quality=65); data, ctype = b.getvalue(), "image/jpeg"
+                      except Exception: data = None
+                  if data is None:
+                      r = adb(port, ["exec-out", "screencap", "-p"], 30)
+                      if r.returncode or not r.stdout.startswith(b"\x89PNG"): return self.send_json(500, {"error": "Không chụp được màn hình."})
+                      data, ctype = r.stdout, "image/png"
+                      if w:
+                          try:
+                              import io
+                              from PIL import Image
+                              im = Image.open(io.BytesIO(data)).convert("RGB")
+                              im = im.resize((w, max(1, round(im.height * w / im.width))))
+                              b = io.BytesIO(); im.save(b, "JPEG", quality=62); data, ctype = b.getvalue(), "image/jpeg"
+                          except Exception: pass
+                  SHOTS[key] = (time.time(), data, ctype)
+                  if len(SHOTS) > 200: SHOTS.clear()
+              finally:
+                if got: SHOT_SEM.release()
             self.send_response(200)
             self.cors()
             self.send_header("Content-Type", ctype)
@@ -1284,7 +1295,7 @@ class H(BaseHTTPRequestHandler):
             m2 = re.match(r"^127\.0\.0\.1:(\d{4,5})$", q.get("udid", ""))
             viewer = re.sub(r"[^\w-]", "", q.get("cpv", ""))[:40]
             key = (int(m2.group(1)) if m2 and q.get("action") == "proxy-adb" else None)
-            return self.pipe_ws(key if key and viewer and not auth.get("a") else None, viewer)
+            return self.pipe_ws(key if key and viewer and not auth.get("a") else None, viewer, live=key)
         if self.command not in ("GET", "HEAD") and not (auth and auth.get("a")):
             return self.deny(403, "Không được phép.")
         return self.pipe_http()
@@ -1313,7 +1324,9 @@ class H(BaseHTTPRequestHandler):
         self.end_headers()
         if self.command != "HEAD": self.wfile.write(body)
 
-    def pipe_ws(self, port=None, viewer=""):
+    def pipe_ws(self, port=None, viewer="", live=None):
+        if live:
+            with VLOCK: LIVE[live] = LIVE.get(live, 0) + 1
         up = socket.create_connection(UPSTREAM, timeout=10)
         me = {"viewer": viewer, "close": None}
         if port:                                  # mỗi máy chỉ 1 nơi xem (khách): nơi mở sau thay nơi cũ → không giành luồng hình
@@ -1368,9 +1381,11 @@ class H(BaseHTTPRequestHandler):
             except Exception: pass
             try: cli.shutdown(socket.SHUT_RDWR)
             except Exception: pass
-            if port:
-                with VLOCK:
-                    if VIEWERS.get(port) is me: VIEWERS.pop(port, None)
+            with VLOCK:
+                if port and VIEWERS.get(port) is me: VIEWERS.pop(port, None)
+                if live:
+                    LIVE[live] = LIVE.get(live, 1) - 1
+                    if LIVE[live] <= 0: LIVE.pop(live, None)
         t.join(timeout=3)
 
 

@@ -129,7 +129,7 @@ def _ld(a, timeout):
         if k == "memory": return _ldrun(["modify", "--index", ix(), "--memory", v], timeout)
         if k == "cpus": return _ldrun(["modify", "--index", ix(), "--cpu", v], timeout)
         if k == "enable_su": return _ldrun(["modify", "--index", ix(), "--root", "1"], timeout)
-        if k == "fps": return _ldrun(["globalsetting", "--fps", v, "--audio", "0"], timeout)
+        if k == "fps": return _ldrun(["globalsetting", "--fps", CONF.get("LD_FPS", "60"), "--audio", "0"], timeout)   # FPS của LDPlayer là CHUNG mọi máy → giữ 60 (kéo/lướt mượt)
         return _ok()                                                     # chế độ vẽ, gmem… LDPlayer không có → bỏ qua
     if c == "getconfigex":
         k = a[-1]
@@ -414,7 +414,7 @@ def configure(idx, ram, cpu, res, dpi):
         _ldrun(["modify", "--index", idx, "--resolution", f"{w},{h},{d}", "--cpu", min(c, 4), "--memory", min(mb, 8192), "--root", "1"], 60)
         ld_cfg(idx, **{"advancedSettings.cpuCount": c, "advancedSettings.memorySize": mb,
                        "advancedSettings.resolution": {"width": int(w), "height": int(h)}, "advancedSettings.resolutionDpi": d})
-        _ldrun(["globalsetting", "--audio", "0", "--fps", 30], 60)
+        _ldrun(["globalsetting", "--audio", "0", "--fps", CONF.get("LD_FPS", "60")], 60)
         return
     if float(ram) > MAX_RAM: print(f"   (gói {float(ram):g}GB → MEmu chỉ chạy tối đa {MAX_RAM:g}GB/máy, đặt {MAX_RAM:g}GB)", flush=True)
     ram = min(float(ram), MAX_RAM); cpu = min(float(cpu), MAX_CPU)

@@ -1,6 +1,8 @@
 # Hướng dẫn thêm MÁY CHỦ mới (máy 2, 3, 4…) cho BlueRoblox Cloud Phone
 
-Mỗi máy Windows là **một máy chủ độc lập**: tự chạy máy ảo MEmu của khách, tự nối internet qua đường hầm Cloudflare riêng.
+Giả lập dùng: **LDPlayer 9** (Android 9 · tối đa **8 nhân / 8GB** mỗi máy ảo · tạo máy ~1 phút). Tool vẫn chạy được MEmu nếu máy chỉ có MEmu.
+
+Mỗi máy Windows là **một máy chủ độc lập**: tự chạy máy ảo LDPlayer của khách, tự nối internet qua đường hầm Cloudflare riêng.
 Các máy **không nối với nhau** — cùng đọc đơn hàng trên Supabase. Có đơn mới: **máy nào còn trống nhiều nhất nhận**;
 máy đầy thì nhường máy khác; tất cả đầy thì web báo hết chỗ. Máy khách đã tạo nằm yên ở máy đã tạo ra nó.
 
@@ -17,7 +19,9 @@ máy đầy thì nhường máy khác; tất cả đầy thì web báo hết ch�
 
 ## Bước 0 — Chuẩn bị máy mới
 1. Bật **ảo hoá (VT-x / Intel Virtualization)** trong BIOS.
-2. Cài **MEmu Play** bản chính thức từ memuplay.com (nên cùng bản với máy 1 — hiện 9.5.8).
+2. Cài **LDPlayer 9** bản chính thức từ **ldplayer.net** (để thư mục mặc định `C:\LDPlayer\LDPlayer9`). Mở 1 lần cho nó tạo máy số 0 rồi tắt.
+   KHÔNG cài chung MEmu trên cùng máy (2 giả lập tranh ảo hoá → lag/lỗi).
+   Không cần chỉnh gì trong Settings của LDPlayer — tool tự bật ADB, Root, 60 FPS, tắt âm thanh, cấu hình từng máy.
 3. **Cắm dây mạng (LAN)**, không dùng wifi. **Không cần** vào router 192.168.1.1, không cần mở cổng.
 
 ## Bước 1 — Tạo đường hầm Cloudflare (trên trình duyệt)
@@ -56,8 +60,10 @@ file cài đặt `C:\blue\cloudphone.conf` đã tối ưu sẵn. Dòng cuối ph
 ## Cài đặt sẵn trên mỗi máy (trong `C:\blue\cloudphone.conf`)
 | Dòng | Ý nghĩa |
 |---|---|
-| `MEMU_RENDER=1` | **DirectX — MƯỢT.** (OpenGL `0` thấy cảnh 3D trên web nhưng máy vẽ chậm gấp nhiều lần — ĐỪNG đổi) |
-| `MEMU_MAX_RAM=16` `MEMU_MAX_CPU=8` | Giới hạn MEmu mỗi máy ảo (gói lớn hơn vẫn nhận, chạy 16GB/8 nhân) |
+| `MEMU_MAX_RAM=8` `MEMU_MAX_CPU=8` | Giới hạn mỗi máy ảo (LDPlayer 9: 8GB / 8 nhân; gói lớn hơn vẫn nhận, chạy ở mức tối đa) |
+| `LD_FPS=60` (mặc định) | FPS của LDPlayer (chung mọi máy) — 60 cho kéo/lướt mượt |
+| `EMU=ld` / `EMU=memu` | Ép dùng giả lập nào (bỏ trống = tự nhận: có LDPlayer thì dùng LDPlayer) |
+| `MEMU_RENDER=1` | (chỉ MEmu) DirectX — mượt. OpenGL `0` làm máy vẽ chậm — đừng đổi |
 | `WIN_VCPU_OVER=1` | Tổng nhân ảo ≤ số luồng thật (lag thì đổi `0.9` = chừa 10%) |
 | `WIN_RAM_RESERVE=3` `RAM_BUSY_PCT=98` | Nhận máy tới khi RAM thật gần đầy, chừa 3GB cho Windows |
 | `POOL_SIZE=1` | Giữ sẵn 1 máy dựng trước (đang tắt) → khách mua có máy ~1 phút |
@@ -76,7 +82,8 @@ Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*run.py clo
 | Xoá máy thừa (không thuộc khách) | `& "C:\Program Files\Python312\python.exe" phonectl.py cleanup` |
 | Làm mới máy khách bị mất máy thật | `& "C:\Program Files\Python312\python.exe" run.py remake.py list` rồi `… remake.py all` |
 | Dọn đơn kẹt trên web (chỉ xem / làm thật) | `… donweb.py` / `… donweb.py --yes` |
-| Đổi chế độ hình 1 máy | `… phonectl.py render TÊN_MÁY directx` |
+| Đổi chế độ hình 1 máy (chỉ MEmu) | `… phonectl.py render TÊN_MÁY directx` |
+| Danh sách máy trong giả lập | `… phonectl.py vmlist` |
 
 Mỗi máy chủ chỉ làm mới / dọn **máy của chính nó** — không đụng máy chủ khác.
 
@@ -90,6 +97,18 @@ Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*run.py clo
 ```
 Không cập nhật khi đang có máy "Đang tạo…".
 
+## Cổng adb
+- LDPlayer: máy số N ⇄ `127.0.0.1:5555 + 2·N` (máy 1 = 5557, máy 2 = 5559…). Máy số 0 (`LDPlayer`) là máy gốc — tool giữ lại, không xoá.
+- MEmu: máy số N ⇄ `127.0.0.1:21503 + 10·N`.
+
+## Chất lượng hình (cpapi)
+| Chế độ | LDPlayer | MEmu |
+|---|---|---|
+| Tiết kiệm | 720 · 1,5 Mbps · 30 FPS | 720 · ≤1,2 Mbps · 24 FPS |
+| Ít trễ (mặc định) | 720 · 2,5 Mbps · 40 FPS | 720 · 1,8 Mbps · 30 FPS |
+| Siêu nét | 1280 · 4 Mbps · 45 FPS | 1280 · 4 Mbps · 30 FPS |
+Đặt cao hơn (60 FPS / 3,5 Mbps) → bộ nén nghẽn → hình đứng vài giây. Thử web thì đừng xem qua Chrome Remote Desktop (nén 2 lần → giựt).
+
 ## Lưu ý
 - **Không tắt máy chủ đang có khách** — khách ở máy đó mất máy tới khi bật lại (bật lại tự đăng nhập → tự bật máy khách, 10–20 phút).
 - Các máy cùng 1 đường mạng **chia nhau upload** (hiện 30 Mbps ≈ 15–20 khách xem cùng lúc). Đông khách → nâng gói mạng / đặt máy ở mạng khác.
@@ -100,6 +119,9 @@ Không cập nhật khi đang có máy "Đang tạo…".
 |---|---|
 | `'New-Item' is not recognized` | Đang ở cmd → gõ `powershell` rồi dán lại |
 | `curl.exe is not recognized` | Windows cũ → dùng đúng lệnh `Invoke-WebRequest` ở Bước 2 (setup tự cài curl) |
-| `Khong thay MEmu (memuc.exe)` | Cài MEmu trước rồi chạy lại lệnh Bước 2 |
+| `Khong thay gia lap` | Cài LDPlayer 9 trước rồi chạy lại lệnh Bước 2 |
+| adb `offline` với máy LDPlayer | Tool tự bật ADB khi bật máy; máy tạo tay trong LDPlayer → Settings → Other → ADB debugging = Open local connection |
+| Bảng vẫn ghi "MEmu" / đèn đỏ sau cập nhật | ⏻ Thoát hẳn → mở lại biểu tượng BlueRoblox → 🚀 |
+| Máy khách "Đang tạo…" mãi | Web → Bảng quản trị → Máy chủ → máy đó có đang **Ngừng nhận máy** không |
 | MEmu `connect console failed` / máy không tạo được | Khởi động lại Windows |
 | Lag cả máy | `kiemtra.py` xem tổng nhân (> số luồng = quá tải) · máy thừa → `cleanup` · chế độ hình phải DirectX |

@@ -375,8 +375,16 @@ def set_wallpaper(name, port, force=False):
     adb("-s", s_, "push", WP, "/data/local/tmp/br_wp.png", timeout=120)
     sc = ("D=/data/system/users/0; for f in wallpaper wallpaper_orig wallpaper_lock wallpaper_lock_orig; do "
           "cp /data/local/tmp/br_wp.png $D/$f; chown system:system $D/$f; chmod 600 $D/$f; done; "
-          "rm -f $D/wallpaper_info.xml; restorecon $D/wallpaper* 2>/dev/null; touch /data/local/tmp/.br_wp; stop; sleep 2; start")
-    adb("-s", s_, "shell", "su -c '" + sc + "'", timeout=60)
+          "rm -f $D/wallpaper_info.xml; restorecon $D/wallpaper* 2>/dev/null; touch /data/local/tmp/.br_wp; sync")
+    if EMU == "ld":
+        # LDPlayer: "stop; start" giao diện làm adb của máy treo → chép ảnh rồi KHỞI ĐỘNG LẠI CẢ MÁY bằng ldconsole (sạch, an toàn)
+        adb("-s", s_, "shell", "su -c '" + sc + "'", timeout=60)
+        i = next((k for k, x in vms().items() if x["name"] == name), None)
+        if i is not None:
+            adb("disconnect", s_, timeout=15)
+            _ldrun(["reboot", "--index", i], 60); time.sleep(20)
+    else:
+        adb("-s", s_, "shell", "su -c '" + sc + "; stop; sleep 2; start'", timeout=60)
     print(f"   🖼 {name}: đã đặt ảnh nền BlueRoblox", flush=True)
     time.sleep(8)
     t0 = time.time()

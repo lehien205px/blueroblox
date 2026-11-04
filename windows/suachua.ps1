@@ -30,19 +30,19 @@ Step "4/6 Go khoa ket"
 Remove-Item "$B\redroid\*.lock", "$B\*.lock" -Force -ErrorAction SilentlyContinue
 Ok "da go"
 
-Step "5/6 Tra moi may ve cai dat do hoa AN TOAN (DirectX, tat GPU memory optimization)"
+Step "5/6 Dat moi may ve cai dat do hoa CHUAN (OpenGL + GPU memory optimization: web/app thay hinh 3D)"
 $vms = (& $mc listvms) | Where-Object { $_ -match '^\d+,' }
 foreach ($l in $vms) {
   $i = ($l -split ',')[0]; $nm = ($l -split ',')[1]
-  & $mc setconfigex -i $i graphics_render_mode 1 | Out-Null
-  & $mc setconfigex -i $i gmem_opt 0 | Out-Null
-  Write-Host "   #$i $nm -> DirectX, gmem_opt 0" }
+  & $mc setconfigex -i $i graphics_render_mode 0 | Out-Null
+  & $mc setconfigex -i $i gmem_opt 1 | Out-Null
+  Write-Host "   #$i $nm -> OpenGL, gmem_opt 1" }
 # máy mới cũng dùng cài đặt an toàn cho tới khi thử xong; bỏ chép cài đặt từ máy mẫu
 $cf = "$B\cloudphone.conf"
 if (Test-Path $cf) {
   $t = Get-Content $cf -Encoding UTF8 | Where-Object { $_ -notmatch '^\s*(MEMU_GMEM_OPT|MEMU_RENDER)\s*=' } |
        ForEach-Object { if ($_ -match '^\s*MEMU_TEMPLATE\s*=') { "#" + $_ } else { $_ } }
-  $t += "MEMU_GMEM_OPT=0"; $t += "MEMU_RENDER=1"
+  $t += "MEMU_GMEM_OPT=1"; $t += "MEMU_RENDER=0"
   $t | Set-Content -Encoding utf8 $cf }
 Ok "xong ($($vms.Count) may)"
 

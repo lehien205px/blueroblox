@@ -291,14 +291,14 @@ def clamp_fps(v):
     return min(max(v, 10), 120)
 
 MAX_RAM = float(CONF.get("MEMU_MAX_RAM", "16") or 16)     # MEmu KHÔNG khởi động được máy > 16GB (báo "The computer memory is low")
-MAX_CPU = int(float(CONF.get("MEMU_MAX_CPU", "16") or 16))
+MAX_CPU = int(float(CONF.get("MEMU_MAX_CPU", "8") or 8))       # MEmu: máy > 8 nhân không khởi động được
 def configure(idx, ram, cpu, res, dpi):
     w, h = res.lower().split("x")
     if float(ram) > MAX_RAM: print(f"   (gói {float(ram):g}GB → MEmu chỉ chạy tối đa {MAX_RAM:g}GB/máy, đặt {MAX_RAM:g}GB)", flush=True)
     ram = min(float(ram), MAX_RAM); cpu = min(float(cpu), MAX_CPU)
     for k, v in (("memory", int(float(ram) * 1024)), ("cpus", max(1, int(round(float(cpu))))), ("is_customed_resolution", 1),
                  ("resolution_width", w), ("resolution_height", h), ("vbox_dpi", int(dpi or auto_dpi(res))), ("enable_su", 1),
-                 ("graphics_render_mode", CONF.get("MEMU_RENDER", "1")),          # 1 = DirectX (nhẹ, ổn định hơn trên Windows)
+                 ("graphics_render_mode", CONF.get("MEMU_RENDER", "0")),          # 0 = OpenGL: web/app THẤY ĐƯỢC hình 3D (Roblox…); DirectX (1) chỉ thấy nút, cảnh 3D đen
                  ("gmem_opt", CONF.get("MEMU_GMEM_OPT", "1")),                    # GPU memory optimization: BẬT (game cần). Tắt: MEMU_GMEM_OPT=0
                  ("enable_audio", 0)):                                            # máy cloud không cần âm thanh → đỡ CPU
         memuc("setconfigex", "-i", idx, k, v, timeout=60)

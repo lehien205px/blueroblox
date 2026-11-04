@@ -346,6 +346,7 @@ public class ControlActivity extends Activity {
                 {"📍", Ui.L("Vị trí GPS", "GPS"), (Runnable) this::gps},
                 {"🔓", Ui.L("Root máy", "Root"), (Runnable) this::root},
                 {"🛍️", Ui.L("Kho ứng dụng", "App store"), (Runnable) () -> page("cpApp.act('store')")},
+                {"🧊", Ui.L("Chế độ hình", "Graphics"), (Runnable) () -> page("cpApp.act('gfx')")},
                 {"🎚️", Ui.L("FPS & độ nét", "FPS & res"), (Runnable) () -> page("cpApp.act('display')")},
                 {"⏺️", "Macro", (Runnable) () -> page("cpApp.act('macro')")},
                 {"🎮", Ui.L("Gán phím", "Key map"), (Runnable) () -> page("cpApp.act('keymap')")},

@@ -108,6 +108,11 @@ if (-not (Test-Path "$B\ws-scrcpy\dist\index.js")) {
   Push-Location "$B\ws-scrcpy\dist"; & npm.cmd install --omit=dev --ignore-scripts --no-audit --no-fund; Pop-Location
   Remove-Item -Recurse -Force "$B\ws-src" }
 Ok "$B\ws-scrcpy\dist"
+# Trình phát hình trên trình duyệt mặc định GIỮ tới 100ms khung hình chờ vẽ (maxFps/10 khung) → hình chạy theo sau tay.
+# Sửa: chỉ giữ khung MỚI NHẤT (vẽ ngay khung mới, bỏ khung cũ) → bớt tới ~100ms trễ.
+Get-ChildItem "$B\ws-scrcpy\dist" -Recurse -Filter *.js -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notmatch '\\node_modules\\' } | ForEach-Object {
+  $t = [IO.File]::ReadAllText($_.FullName)
+  if ($t -match 'videoSettings\.maxFps\s*/\s*10') { [IO.File]::WriteAllText($_.FullName, ($t -replace 'videoSettings\.maxFps\s*/\s*10', '0')); Ok "it tre: $($_.Name)" } }
 # chặn máy khác trong mạng vào thẳng cổng 8000 (chỉ đi qua cpapi 8010 + Cloudflare)
 netsh advfirewall firewall delete rule name="BlueRoblox chan 8000" | Out-Null
 netsh advfirewall firewall add rule name="BlueRoblox chan 8000" dir=in action=block protocol=TCP localport=8000,8010 remoteip=localsubnet | Out-Null

@@ -3340,16 +3340,20 @@ $("or-list").onclick = async e => {
 async function openAdmin() { if (!isAdmin()) return; try { if (!$("noticedlg").hidden) { show("noticedlg", false); ntOpen = false; ntForce = false; } } catch (e) {} fillSite(); resetForm(); setTab("stats"); show("drawer"); await loadAdmin(); loadStats(); }
 async function loadAdmin() {
   if (!isAdmin()) return;
-  const [u, t, o] = await Promise.all([
-    sb.from("profiles").select("*").order("created_at", { ascending: false }).limit(1000),
-    sb.from("topups").select("*").order("created_at", { ascending: false }).limit(100),
-    sb.from("orders").select("*").order("created_at", { ascending: false }).limit(100)]);
-  const vm = await sb.from("vps_machines").select("*").order("expires_at");
-  ADM.vps = vm.data || [];
-  const pend = await sb.from("orders").select("*").eq("status", "pending").order("created_at");
+  // Tải SONG SONG + KHÔNG tải nội dung hàng của đơn (cột items có thể hàng nghìn dòng/đơn → vài MB) — nội dung chỉ tải khi bấm Xem/Giao
+  const OC = "id,user_id,product_id,product_name,qty,total,status,days,created_at,delivered_at";
+  const pU = sb.from("profiles").select("*").order("created_at", { ascending: false }).limit(1000),
+    pT = sb.from("topups").select("*").order("created_at", { ascending: false }).limit(100),
+    pO = sb.from("orders").select(OC).order("created_at", { ascending: false }).limit(100),
+    pV = sb.from("vps_machines").select("*").order("expires_at"),
+    pP = sb.from("orders").select(OC).eq("status", "pending").order("created_at");
+  renderTable();
+  const u = await pU;                                       // khách hàng hiện NGAY khi có, không chờ các mục khác
+  if (u.data) { ADM.users = u.data; try { renderCust(); } catch (e) {} }
+  const [t, o, vm, pend] = await Promise.all([pT, pO, pV, pP]);
   const seen = new Set(), orders = [...(pend.data || []), ...(o.data || [])].filter(x => !seen.has(x.id) && seen.add(x.id));
-  ADM = { users: u.data || [], topups: t.data || [], orders, vps: (ADM.vps || []) };
-  renderTable(); renderCust(); renderTx(); renderOrd(); renderVps(); try { renderCpaTbl(); } catch (e) {}
+  ADM = { users: u.data || ADM.users || [], topups: t.data || [], orders, vps: vm.data || ADM.vps || [] };
+  renderCust(); renderTx(); renderOrd(); renderVps(); try { renderCpaTbl(); } catch (e) {}
 }
 const uname = id => { const u = ADM.users.find(x => x.id === id) || CPA_U.get(id); return u && u.username ? u.username : "?"; };
 function renderTable() {
@@ -3394,9 +3398,14 @@ function renderOrd() {
 }
 function setBadge(n) { for (const id of ["ord-badge", "adm-badge"]) { $(id).textContent = n; show(id, n > 0); } document.title = (n > 0 ? `(${n}) ` : "") + document.title.replace(/^\(\d+\) /, ""); }
 let delOrder = null, refundArm = false, delVps = false, delAssign = false, delSrc = "home";
-$("otbl").onclick = e => {
+$("otbl").onclick = async e => {
   const d = e.target.closest("[data-deliver]"), v = e.target.closest("[data-view]");
   const o = ADM.orders.find(x => x.id === (d || v || {}).dataset?.deliver || x.id === (v || {}).dataset?.view); if (!o) return;
+  if (o.items === undefined) {                               // danh sách không tải nội dung hàng → tải riêng đơn này khi mở
+    const r = await sb.from("orders").select("items").eq("id", o.id).maybeSingle();
+    if (r.error) return toast(errMsg(r.error), 1);
+    o.items = (r.data && r.data.items) || "";
+  }
   delOrder = o; refundArm = false; $("dl-refund").textContent = "Huỷ đơn & hoàn tiền";
   const prod = P.find(x => x.id === o.product_id); delVps = prod ? !!prod.manual : (o.days != null);
   const hasMach = (ADM.vps || []).some(m => m.order_id === o.id);

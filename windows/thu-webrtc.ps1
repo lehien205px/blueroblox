@@ -21,7 +21,7 @@ if (-not (Test-Path "$R\ffmpeg.exe")) {
   Copy-Item -Force (Get-ChildItem "$R\fftmp" -Recurse -Filter ffmpeg.exe | Select-Object -First 1).FullName "$R\ffmpeg.exe"
   Remove-Item -Recurse -Force "$R\ff.zip", "$R\fftmp" }
 Ok "ffmpeg"
-if (-not (Test-Path "$R\mediamtx.exe")) {
+if (-not (Get-ChildItem $R -Recurse -Filter mediamtx.exe -ErrorAction SilentlyContinue)) {
   Write-Host "Tai MediaMTX..."
   $rel = Invoke-RestMethod -UseBasicParsing -UserAgent "BlueRoblox" "https://api.github.com/repos/bluenviron/mediamtx/releases/latest"
   $u = ($rel.assets | Where-Object { $_.name -like "*windows_amd64.zip" } | Select-Object -First 1).browser_download_url
@@ -59,7 +59,9 @@ Ok "cua so '$($p.MainWindowTitle)' tai ($x,$y) co ${w}x${hh}  — DUNG thu nho /
 
 # 4) Bật máy chủ WebRTC + bắt đầu quay & nén
 Get-Process mediamtx -ErrorAction SilentlyContinue | Stop-Process -Force
-$mtx = Start-Process -PassThru -WindowStyle Hidden -FilePath "$R\mediamtx.exe" -WorkingDirectory $R
+$mx = Get-ChildItem $R -Recurse -Filter mediamtx.exe | Select-Object -First 1
+if (-not $mx) { throw "Khong thay mediamtx.exe trong $R — xoa thu muc $R roi chay lai" }
+$mtx = Start-Process -PassThru -WindowStyle Hidden -FilePath $mx.FullName -WorkingDirectory $mx.DirectoryName
 Start-Sleep 2
 $ip = (Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.IPAddress -like "192.168.*" -or $_.IPAddress -like "10.*" } | Select-Object -First 1).IPAddress
 Write-Host "`n===== MO TREN DIEN THOAI / MAY TINH CUNG MANG NHA:  http://${ip}:8889/thu  =====" -ForegroundColor Yellow

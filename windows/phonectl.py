@@ -637,14 +637,21 @@ def _cleanup(v=None, quiet=False, all_=False):
         if nm == tpl or (nm in mine and not all_) or (nm.startswith("spare_") and not all_): continue
         if quiet and not nm.startswith("cp_"): continue     # tự động: chỉ dọn máy do BlueRoblox tạo (cp_…)
         print(f"XOA_THUA {nm} (MEmu #{i})", flush=True)
+        def _at(n):                                          # số máy HIỆN TẠI của máy tên n (MEmu đổi số khi xoá máy khác) — KHÔNG BAO GIỜ đụng máy khác tên
+            return next(((k, x) for k, x in vms().items() if x["name"] == n), (None, None))
         for _t in range(3):                                  # tắt HẲN rồi mới xoá (MEmu không xoá máy đang chạy) → kiểm tra đã mất thật
-            if (vms().get(i) or {}).get("running"):
-                memuc("stop", "-i", i, timeout=120)
+            k, x = _at(nm)
+            if k is None: gone += 1; break
+            if x["running"]:
+                memuc("stop", "-i", k, timeout=120)
                 for _w in range(20):
-                    if not (vms().get(i) or {}).get("running"): break
+                    k, x = _at(nm)
+                    if k is None or not x["running"]: break
                     time.sleep(3)
-            r = memuc("remove", "-i", i, timeout=180)
-            if (vms().get(i) or {}).get("name") != nm: gone += 1; break
+            k, x = _at(nm)
+            if k is None: gone += 1; break
+            r = memuc("remove", "-i", k, timeout=180)
+            if _at(nm)[0] is None: gone += 1; break
             print(f"   (chưa xoá được, thử lại: {((r.stdout or '') + (r.stderr or '')).strip()[-120:]})", flush=True); time.sleep(5)
         else: print(f"   ✗ KHÔNG xoá được {nm} — tắt bằng tay trong MEmu Multi-Instance rồi chạy lại", flush=True)
     if all_:

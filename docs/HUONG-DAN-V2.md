@@ -139,3 +139,24 @@ Giải nén vào `C:\blue\BlueRobloxServer\` → chạy `BlueRobloxServer.exe` (
 | Đen màn, tab phat-hinh báo "Không lấy được hình từ cửa sổ máy" | Cửa sổ giả lập bị thu nhỏ — bấm 🙈 Ẩn cửa sổ giả lập (ẩn đúng cách, không thu nhỏ) |
 | Chạm không ăn, tab phat-hinh báo "scrcpy lỗi → dùng lệnh input" | Vẫn dùng được (chậm hơn); gửi dòng lỗi cho hỗ trợ |
 | Đơn Android 12/7 hoàn tiền "không máy chủ nào nhận" | Chưa có máy chủ MuMu đang chạy |
+
+---
+
+## Điều khiển trên trình duyệt — iPhone / iPad / Mac (05/11/2026)
+
+Khách không có app (iPhone, iPad, Mac, máy tính chưa cài) mở máy ngay trên trình duyệt: **cloudblue.vn/play.html**.
+* Web: trên iPhone/iPad/Mac nút ở từng máy là **▶ Mở máy** (vào thẳng `/play.html?id=<mã máy>`); máy khác vẫn "Mở trong app" và có thêm mục "Mở ngay trên trình duyệt".
+* `play.html` tự lo: đăng nhập (cùng tài khoản web) → danh sách máy → điều khiển. iPhone: Chia sẻ → **Thêm vào MH chính** → mở như app (toàn màn hình, `play.webmanifest`).
+* Cùng giao thức BRS2 với app (client `"web"`), đi đường **WebSocket qua Cloudflare** (`STREAM_WS`, VD `wss://stream2.cloudblue.vn/v2/stream`) — trình duyệt không đi được đường thẳng TLS 8189/8190 (chứng chỉ tự ký).
+  Máy chủ không phải sửa gì, chỉ cần đường hầm có `stream…` → `localhost:8020`.
+* Giải mã H.264 bằng **WebCodecs**: iPhone/iPad cần **iOS 16.4+**; máy tính dùng Chrome / Edge / Safari mới.
+* Có: chạm nhiều ngón, vuốt, cuộn chuột, gõ phím (cả bàn phím iPhone, gõ tiếng Việt), dán chữ, Back/Home/Đa nhiệm, âm lượng, xoay, nút nguồn,
+  chất lượng hình (Tự động/Tiết kiệm/Cân bằng/Nét), thông số, cài APK (file / link), khởi động lại máy, tự nối lại khi mất mạng, giữ màn hình sáng.
+* Mở máy ở nơi khác → trình duyệt báo "Máy đang được mở ở nơi khác" (bấm **Mở lại ở đây** để giành lại).
+
+## Máy chủ MEmu bán Android 7 + 12
+
+`python C:\blue\phonectl.py setconf EMU=memu ANDROIDS=7,12 MEMU_MAX_RAM=128 MEMU_MAX_CPU=72` + trong Multi-MEmu tạo 1 máy **Android 12** tên `tpl_a12` (để tắt).
+Android 7 MEmu tạo sẵn được; Android 12 nhân bản từ `tpl_a12`. Máy chủ chỉ báo lên web bản Android **tạo được thật**
+(`phonectl.py engine`: chưa có `tpl_a12` → không bán Android 12 ở máy chủ này). Tạo máy mẫu xong: bảng ■ Tắt tất cả → ▶ Bật tất cả.
+Mỗi máy chủ chỉ nhận đơn đúng `ANDROIDS` của nó (máy 1 LDPlayer = 9; máy 2 MEmu = 7, 12).

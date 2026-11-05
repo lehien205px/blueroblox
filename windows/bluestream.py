@@ -1358,6 +1358,7 @@ class Session:
         self.inflight = collections.deque(); self.delivered = collections.deque(); self.lat = collections.deque()
         self.key_grace = 0.0
         self.from_android = False          # True: Windows không quay được cửa sổ máy này → cả phiên lấy hình thẳng từ Android (scrcpy)
+        self.dead = 0                      # số lần scrcpy chết khi CHƯA gửi được khung nào
 
     # ---------- hình ----------
     def _dims(self):
@@ -1626,6 +1627,11 @@ class Session:
                     _nvenc_broken["until"] = time.time() + 120
                     await self.restart_video(cpu=True); continue
                 if self.enc and self.enc.proc and self.enc.proc.poll() is not None and time.time() - self.last_restart > 3:
+                    if self.sent == 0 and getattr(self.enc, "enc", "") == "scrcpy":
+                        self.dead += 1                          # Android không xuất được hình (VD MEmu Android 12 màn 0x0) → đừng bật lại mãi
+                        if self.dead >= 3:
+                            log(f"  {self.name}: Android không xuất được hình (scrcpy lỗi {self.dead} lần, 0 khung) → báo app")
+                            raise Deny("OFFLINE", "Màn hình Android của máy này đang lỗi (máy chủ không lấy được hình) — báo hỗ trợ để làm lại máy.")
                     log(f"  {self.name}: bộ nén dừng → bật lại"); await self.restart_video(); continue
                 if self.restart_req and time.time() - self.last_restart > 1.0:
                     self.restart_req = None; await self.restart_video()
@@ -1823,6 +1829,62 @@ def firewall():
                     f"localport={PORT}"], capture_output=True, creationflags=NOWIN)
 
 
+def _save_png(frame, name):
+    if frame is None: return "(không có khung nào)"
+    p = os.path.join(B, "logs", "captest_" + re.sub(r"[^A-Za-z0-9_.-]", "_", name) + ".png")
+    try:
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        from PIL import Image
+        Image.fromarray(frame[:, :, 2::-1].copy()).save(p)          # BGRA → RGB
+        return p
+    except Exception as e:
+        return f"(không lưu được ảnh: {e!r})"
+
+
+def captest(name, port=None):
+    """THỬ LẤY HÌNH 1 máy ngay trên máy chủ — không cần app, không cần đăng nhập, không đụng phiên khách đang xem:
+         python bluestream.py --captest cp_xxx [cổng adb]
+       Quay cửa sổ giả lập 3 giây → in cỡ + khung/giây + lưu ảnh logs\\captest_<tên>.png. Windows không cho quay / không ra khung
+       → thử lấy hình thẳng từ Android (scrcpy) 3 giây. Trả 0 = lấy được hình."""
+    print(f"== Thử lấy hình máy {name}")
+    ok = False
+    if WIN:
+        hs = [y for xs in _same_name(name) for y in xs]
+        print("  cửa sổ:" if hs else "  ✗ không thấy cửa sổ nào mang tên này (máy đang tắt? sai tên?)")
+        for x in hs[:6]: print("   ·", win_info(x))
+    if WIN and wgc_ok() and (C.get("CAPTURE") or "").strip().lower() not in ("scrcpy", "gdi"):
+        src = WindowSource(name)
+        try:
+            w, h = src.open(); n0, t0 = src.n, time.time()
+            time.sleep(3)
+            fps = (src.n - n0) / max(0.1, time.time() - t0); fr = src.latest
+            dark = fr is not None and int(fr[::16, ::16, :3].max()) < 8
+            print(f"  ✓ quay cửa sổ được: phần Android {w}x{h}, {fps:.0f} khung/giây")
+            print(f"    ảnh: {_save_png(fr, name)} — " + ("TOÀN ĐEN (giả lập không vẽ hình?)" if dark else "có hình"))
+            ok = not dark
+        except CaptureBlocked as e: print("  ✗ quay cửa sổ:", e)
+        except Deny as d: print("  ✗ quay cửa sổ:", d.msg)
+        except Exception as e: print("  ✗ quay cửa sổ lỗi:", repr(e))
+        finally: src.stop()
+    if ok: return 0
+    port = port or (phones_json().get(name) or {}).get("port")
+    if not port:
+        print("  ✗ không biết cổng adb của máy này → thêm cổng: --captest TÊN CỔNG"); return 1
+    serial = f"127.0.0.1:{port}"; got = []; sv = None
+    print(f"== Thử lấy hình thẳng từ Android (scrcpy) {serial}")
+    try:
+        print("  màn hình Android: %dx%d" % ScrcpySource(serial).open())
+        sv = ScrcpyVideo(serial, 1280, 30, 3000, lambda d, k, c, p: got.append(len(d)))
+        w, h = sv.start(); time.sleep(3)
+        print(f"  {'✓' if got else '✗'} scrcpy: {w}x{h}, {len(got)} khung trong 3 giây")
+        ok = bool(got)
+    except Exception as e:
+        print("  ✗ scrcpy lỗi:", repr(e))
+    finally:
+        if sv: sv.stop()
+    return 0 if ok else 1
+
+
 async def main():
     if not SELFTEST and (not SB or not KEY):
         log("THIẾU SUPABASE_URL / SUPABASE_SERVICE_KEY trong cloudphone.conf"); sys.exit(1)
@@ -1854,6 +1916,10 @@ if __name__ == "__main__":
         sys.stdout.reconfigure(encoding="utf-8", line_buffering=True)
     except Exception:
         pass
+    if "--captest" in sys.argv:
+        _a = sys.argv[sys.argv.index("--captest") + 1:]
+        if not _a: print("Cách dùng: python bluestream.py --captest TÊN_MÁY [CỔNG_ADB]"); sys.exit(2)
+        sys.exit(captest(_a[0], _a[1] if len(_a) > 1 else None))
     if WIN:
         try: ctypes.windll.kernel32.SetPriorityClass(ctypes.windll.kernel32.GetCurrentProcess(), 0x00008000)   # ABOVE_NORMAL (ffmpeg con cũng vậy)
         except Exception: pass

@@ -1235,6 +1235,9 @@ def cmd_bootall(a):
 # ---------- CHỐNG KẸT: máy chạy mà Android không lên (kẹt 99%, màn đen, adb offline) ----------
 HEAL_F = os.path.join(HOME, "redroid", "heal.json")
 STUCK_MIN = 6          # chạy quá 6 phút mà Android chưa lên → coi là kẹt
+# Kẹt sau 2 lần khởi động lại → XOÁ máy + tạo lại máy mới (MẤT dữ liệu khách). MEmu mặc định TẮT (lỗi chung của giả lập —
+# VD màn đen do cấu hình — sẽ xoá hàng loạt máy khách); bật lại: HEAL_DELETE=1 trong cloudphone.conf.
+HEAL_DELETE = (CONF.get("HEAL_DELETE") or ("0" if EMU == "memu" else "1")).strip() == "1"
 def _hl():
     try: return json.load(open(HEAL_F, encoding="utf-8"))
     except Exception: return {}
@@ -1251,6 +1254,11 @@ def cmd_heal(a):
         e = h.setdefault(nm, {"since": t, "tries": 0})
         if t - e["since"] < STUCK_MIN * 60: continue
         if e["tries"] >= 2:
+            if not HEAL_DELETE:                          # không tự xoá máy khách → chỉ báo 1 lần, để admin xem tay
+                if not e.get("warned"):
+                    print(f"KHOI_DONG_LAI {nm}: Android vẫn không lên sau {e['tries']} lần khởi động lại — KHÔNG tự xoá, cần xem tay", flush=True)
+                    e["warned"] = 1
+                continue
             print(f"XOA_HONG {nm}: kẹt sau {e['tries']} lần khởi động lại → xoá máy hỏng (máy khách sẽ được tạo lại mới)", flush=True)
             a.name = nm; cmd_delete(a); h.pop(nm, None); continue
         e["tries"] += 1; e["since"] = t

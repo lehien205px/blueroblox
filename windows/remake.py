@@ -53,7 +53,7 @@ def local():
 
 PRIMARY = C.get("PRIMARY", "1") == "1"
 def rows():
-    rs = sb("GET", "cloud_phones?status=eq.active&select=id,name,container,node,ram,cpu,res,fps,expires_at,user_id,android&order=created_at.asc") or []
+    rs = sb("GET", "cloud_phones?status=eq.active&select=id,name,container,node,ram,cpu,pending_ram,pending_cpu,res,fps,expires_at,user_id,android&order=created_at.asc") or []
     L = local(); names = vm_names() if L else set()
     # CHỈ máy của MÁY CHỦ NÀY (nhiều máy chủ: không bao giờ làm lại máy đang chạy ở máy chủ khác).
     # Máy cũ chưa ghi máy chủ → thuộc máy chủ chính (PRIMARY=1).
@@ -69,13 +69,14 @@ def rows():
 def remake(r):
     name = r.get("container") or ("cp_" + r["id"].replace("-", "")[:10])
     ver = want_android(r)
-    print(f"\n######## {r.get('name') or name}  (Android {ver or r.get('android') or '?'} · {r['ram']}GB/{r['cpu']} nhân · hết hạn {str(r.get('expires_at'))[:16]}) ########", flush=True)
+    ram = r.get("pending_ram") or r["ram"]; cpu = r.get("pending_cpu") or r["cpu"]     # đang chờ đổi cấu hình (VD hạ về trần mới) → tạo luôn theo cấu hình mới
+    print(f"\n######## {r.get('name') or name}  (Android {ver or r.get('android') or '?'} · {ram}GB/{cpu} nhân · hết hạn {str(r.get('expires_at'))[:16]}) ########", flush=True)
     if not ver:
         print(f"   ✗ bỏ qua: máy chủ này không chạy Android {r.get('android') or '?'} (bán: {', '.join(ENG.get('androids') or [])})"); return False
     if name in local():                                        # máy "ma" → bỏ khỏi danh sách (phonectl forget: CHỈ bỏ khi giả lập chắc chắn không còn máy, không bao giờ xoá máy thật)
         d = pc("forget", name)
         if name in local(): print("   ✗ chưa bỏ được máy cũ khỏi danh sách:", ((d.stdout or "") + (d.stderr or "")).strip()[-160:]); return False
-    p = pc("create", name, "--ram", str(r["ram"]), "--cpu", str(r["cpu"]), "--days", "1", "--res", r.get("res") or "720x1280",
+    p = pc("create", name, "--ram", str(ram), "--cpu", str(cpu), "--days", "1", "--res", r.get("res") or "720x1280",
            "--fps", str(r.get("fps") or 30), "--android", ver)
     print("   " + ((p.stdout or "") + (p.stderr or "")).strip().replace("\n", "\n   "))
     q = local().get(name)
@@ -85,7 +86,8 @@ def remake(r):
         if x["name"] == name and r.get("expires_at"): x["expires"] = r["expires_at"]
     json.dump(st, open(PHONES, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
     sb("PATCH", f"cloud_phones?id=eq.{r['id']}", {"container": name, "port": q["port"], "stream_url": stream_url(q["port"]),
-                                                 "node": NODE, "android": str(q.get("android") or ver), "error": None, "updated_at": datetime.datetime.now().isoformat()})
+                                                 "node": NODE, "android": str(q.get("android") or ver), "ram": ram, "cpu": cpu, "pending_ram": None, "pending_cpu": None,
+                                                 "error": None, "updated_at": datetime.datetime.now().isoformat()})
     print(f"   ✓ ĐÃ LÀM MỚI → {name} (Android {q.get('android') or ver}, cổng {q['port']})"); return True
 
 if __name__ == "__main__":
@@ -93,7 +95,7 @@ if __name__ == "__main__":
     OK = [r for r in L if want_android(r)]; SKIP = [r for r in L if not want_android(r)]
     if act == "list":
         print(f"Máy khách đang thuê cần làm mới trên Windows: {len(OK)}  (tổng RAM {sum(float(r['ram']) for r in OK):g} GB)")
-        for r in OK: print(f"  {(r.get('container') or '')[:16]:16} {str(r.get('name'))[:24]:24} Android {want_android(r)} · {r['ram']}GB/{r['cpu']} nhân"
+        for r in OK: print(f"  {(r.get('container') or '')[:16]:16} {str(r.get('name'))[:24]:24} Android {want_android(r)} · {r.get('pending_ram') or r['ram']}GB/{r.get('pending_cpu') or r['cpu']} nhân"
                            f"  hết hạn {str(r.get('expires_at'))[:16]} · {r.get('_why', '')}")
         if SKIP: print(f"Bỏ qua {len(SKIP)} máy (máy chủ này không chạy bản Android đó): " +
                        ", ".join(f"{r.get('container') or r.get('name')} (Android {r.get('android') or '?'})" for r in SKIP))

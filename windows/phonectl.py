@@ -181,8 +181,25 @@ def run(args, timeout=180, text=True):
     if text: out, err = out.decode("utf-8", "replace"), err.decode("utf-8", "replace")
     if code == 124: err = (err or "") + ("timeout" if text else b"timeout")
     return subprocess.CompletedProcess(args, code, out, err)
+LONG_F = os.path.join(HOME, "redroid", "memuc_long.flag")
+_LONG_OPS = ("clone", "create", "import", "export")
+def _long_mark(on):
+    """Đánh dấu "đang chạy lệnh MEmu DÀI" (nhân bản / tạo máy, có thể vài phút) → chương trình khác chờ, không coi là treo."""
+    try:
+        if on: open(LONG_F, "w").write(str(os.getpid()))
+        elif open(LONG_F).read().strip() == str(os.getpid()): os.remove(LONG_F)
+    except OSError: pass
+def _long_busy():
+    try:
+        pid = open(LONG_F).read().strip()
+        return pid.isdigit() and int(pid) != os.getpid() and _pid_alive(pid) and time.time() - os.path.getmtime(LONG_F) < 960
+    except OSError: return False
 def _unstick_memuc():
     """Khoá memuc bị giữ quá lâu (1 lệnh memuc treo) → tắt các memuc.exe đang treo + gỡ khoá, để đơn khách không bị huỷ."""
+    if _long_busy():          # đang nhân bản / tạo máy cho khách (hợp lệ, vài phút) → CHỜ, không tắt (tắt giữa chừng = máy hỏng + đơn lỗi)
+        t0 = time.time()
+        while _long_busy() and time.time() - t0 < 600: time.sleep(3)
+        return
     run(["powershell", "-NoProfile", "-Command",
          "Get-CimInstance Win32_Process | Where-Object { $_.Name -in 'memuc.exe','ldconsole.exe' } | Where-Object { $_.CreationDate -lt (Get-Date).AddSeconds(-45) } | "
          "ForEach-Object { Stop-Process -Id $_.ProcessId -Force }"], 60)
@@ -380,15 +397,20 @@ def memuc(*a, timeout=300):
         except RuntimeError: _unstick_memuc(); lk = _Lock("memuc", wait=60); lk.__enter__()
         try: return _ld(a, timeout)
         finally: lk.__exit__()
-    r = None
+    r = None; long_op = bool(a) and str(a[0]) in _LONG_OPS
     for i in range(4):
         lk = _Lock("memuc", wait=min(max(120, timeout), 260))
         try: lk.__enter__()
         except RuntimeError:
-            _unstick_memuc(); lk = _Lock("memuc", wait=60); lk.__enter__()
+            _unstick_memuc(); lk = _Lock("memuc", wait=60)
+            try: lk.__enter__()
+            except RuntimeError: return subprocess.CompletedProcess([], 1, "", "MEmu đang bận quá lâu (đợi khoá memuc) — thử lại sau")
         try:
+            if long_op: _long_mark(True)
             r = run([os.path.join(MEMU, "memuc.exe")] + list(a), timeout)
-        finally: lk.__exit__()
+        finally:
+            if long_op: _long_mark(False)
+            lk.__exit__()
         o = (r.stdout or "") + (r.stderr or "")
         if "read failed" not in o and "connect failed" not in o.lower(): return r
         time.sleep(2 + 2 * i)
@@ -418,23 +440,68 @@ def port_of(idx):
         try: return int(v.get("adb_port"))
         except (TypeError, ValueError): return 16384 + 32 * int(idx)
     return 21503 + 10 * int(idx)
-def create_vm(android):
+def vms_sure(tries=3):
+    """vms() nhưng đọc lại khi danh sách rỗng (memuc bận / lỗi) — giả lập luôn có ít nhất 1 máy."""
+    for k in range(tries):
+        v = vms()
+        if v: return v
+        if k < tries - 1: time.sleep(2)
+    return {}
+def _new_vm(before, after, name=None):
+    """Số máy VỪA tạo — chỉ nhận máy có TÊN mới xuất hiện thêm (máy cũ bị MEmu đánh lại số vẫn giữ tên → không bao giờ bị nhận nhầm).
+       Ưu tiên máy mang tên đặt sẵn (memuc clone -r TÊN). Không có → None (chờ tiếp / đơn lỗi, an toàn)."""
+    from collections import Counter
+    old = {(i, x["name"]) for i, x in before.items()}
+    extra = Counter(x["name"] for x in after.values()) - Counter(x["name"] for x in before.values())
+    cand = [i for i, x in sorted(after.items()) if (i, x["name"]) not in old and extra.get(x["name"])]
+    if name:
+        hit = [i for i in cand if after[i]["name"] == name]
+        if hit: return max(hit)
+    return max(cand) if cand else None                   # máy mới luôn nằm cuối danh sách
+def create_vm(android, name=None):
     """Tạo 1 máy ảo mới ĐÚNG bản Android → (kết quả lệnh, số máy hoặc None). Không tạo được đúng bản → lỗi (đơn được hoàn tiền),
-       KHÔNG BAO GIỜ tạo nhầm bản khác (khách trả tiền Android 7 mà nhận Android 12)."""
-    ver = norm_android(android); before = set(vms())
-    has_tpl = any(x["name"] == tpl_name(ver) for x in vms().values())
+       KHÔNG BAO GIỜ tạo nhầm bản khác (khách trả tiền Android 7 mà nhận Android 12).
+       name: tên sẽ đặt cho máy (MEmu nhân bản đặt tên luôn lúc nhân bản → tìm lại máy chắc chắn theo tên)."""
+    ver = norm_android(android)
+    cur = vms_sure()
+    if not cur: return subprocess.CompletedProcess([], 1, "", f"không đọc được danh sách máy của {EMU_NAME} — thử lại sau"), None
+    has_tpl = any(x["name"] == tpl_name(ver) for x in cur.values())
+    clone = False
     if EMU == "ld": r = memuc("create", "96", timeout=240)
     elif EMU == "mumu":
         if not has_tpl and ver != DEF_ANDROID:            # MuMu tạo mới = bản mặc định của MuMu (ANDROIDS[0]); bản khác phải có máy mẫu
             return subprocess.CompletedProcess([], 1, "", f"chưa có máy mẫu {tpl_name(ver)} (Android {ver}) trong MuMu"), None
         r = memuc("create", ver, timeout=300)
     else:
-        tpl = next((i for i, x in vms().items() if x["name"] == tpl_name(ver)), None)
-        if tpl is not None: r = memuc("clone", "-i", tpl, timeout=600)            # MEmu: bản không có mã tạo sẵn (VD Android 12) → nhân bản máy mẫu
+        tpl = next((i for i, x in sorted(cur.items()) if x["name"] == tpl_name(ver)), None)
+        if tpl is not None:                               # MEmu: bản không có mã tạo sẵn (VD Android 12) → nhân bản máy mẫu
+            clone = True
+            if cur[tpl]["running"]:                       # máy mẫu đang bật → tắt hẳn rồi mới nhân bản
+                memuc("stop", "-i", tpl, timeout=120)
+                for _ in range(20):
+                    if not (vms().get(tpl) or {}).get("running"): break
+                    time.sleep(3)
+            r = memuc(*(["clone", "-i", tpl] + (["-r", name] if name else [])), timeout=900)
+            o = ((r.stdout or "") + (r.stderr or "")).lower()
+            if name and "success" not in o and re.search(r"invalid|unknown|usage|param|argument|error", o):
+                r = memuc("clone", "-i", tpl, timeout=900)       # memuc bản này không nhận "-r TÊN" → nhân bản thường
         elif ver in MEMU_CODES: r = memuc("create", MEMU_CODES[ver], timeout=240)
         else: return subprocess.CompletedProcess([], 1, "", f"MEmu không có sẵn Android {ver} — tạo máy mẫu {tpl_name(ver)}"), None
-    m = re.search(r"index\D*(\d+)", r.stdout or "")
-    idx = int(m.group(1)) if m else next(iter(sorted(set(vms()) - before)), None)
+    o = ((r.stdout or "") + (r.stderr or "")).lower()
+    m = None if clone else re.search(r"index\D*(\d+)", r.stdout or "")
+    idx = int(m.group(1)) if m else None
+    if idx is not None and idx in cur: idx = None          # số máy trong kết quả là máy CŨ → không tin, dò lại
+    if idx is None and ("success" in o or r.returncode in (0, None)):
+        t_end = time.time() + (240 if clone else 60)       # MEmu báo "clone vm finished" nhưng máy mới hiện trong danh sách có thể trễ
+        while idx is None and time.time() < t_end:
+            after = vms()
+            if after: idx = _new_vm(cur, after, name)
+            if idx is None: time.sleep(3)
+    if idx is None:                                       # ghi danh sách máy lúc lỗi vào nhật ký → biết MEmu đặt máy mới ra sao
+        after = vms()
+        lst = " ".join(f"{i}:{x['name']}" for i, x in sorted(after.items()))
+        r = subprocess.CompletedProcess(r.args, r.returncode or 1,
+                                        (r.stdout or "").strip() + f" | không thấy máy mới trong {EMU_NAME} | máy hiện có: {lst[:170] or '(không đọc được)'}", r.stderr)
     return r, idx
 
 def _pid_alive(pid):
@@ -806,7 +873,7 @@ def cmd_create(a):
             for oi, ox in sorted(vms().items(), reverse=True):   # máy trùng tên còn sót trong MEmu (lần tạo trước bị ngắt) → xoá trước
                 if ox["name"] == a.name:
                     print(f"   (xoá máy sót cùng tên #{oi})", flush=True); memuc("stop", "-i", oi, timeout=60); memuc("remove", "-i", oi, timeout=180)
-            r, idx = create_vm(ver)
+            r, idx = create_vm(ver, a.name)
             if idx is None: print("LỖI tạo máy:", ((r.stdout or "") + (r.stderr or "")).strip()[-300:]); sys.exit(4)
             print(f"[2/4] Đã tạo máy #{idx} → đặt tên, RAM, CPU, root…", flush=True)
             for _t in range(4):                                          # đổi tên PHẢI thành công — máy tìm theo TÊN (không thì thành "MEmuNN" mồ côi)
@@ -842,7 +909,9 @@ def _need(name):
 def cmd_delete(a):
     st = load(); p = rec(a.name, st)
     if not p: print("Không có máy tên này."); sys.exit(1)
-    if IDX(p) is None:                     # máy đã không còn trong MEmu → chỉ xoá khỏi danh sách
+    v = vms_sure()
+    if not v: print(f"LỖI: không đọc được danh sách máy của {EMU_NAME} — thử lại sau."); sys.exit(4)
+    if IDX(p, v) is None:                  # máy đã không còn trong MEmu → chỉ xoá khỏi danh sách
         st = load(); st["phones"] = [x for x in st["phones"] if x["name"] != a.name]; save(st)
         print(f"🗑️  '{a.name}' không còn trong MEmu — đã bỏ khỏi danh sách."); return
     adb("disconnect", serial(p), timeout=15)
@@ -851,6 +920,16 @@ def cmd_delete(a):
         memuc("remove", "-i", IDX(p), timeout=180)
     st = load(); st["phones"] = [x for x in st["phones"] if x["name"] != a.name]; save(st)
     print(f"🗑️  Đã xoá máy '{a.name}' và toàn bộ dữ liệu.")
+
+def cmd_forget(a):
+    """forget TÊN: bỏ máy khỏi danh sách CHỈ KHI giả lập chắc chắn không còn máy đó (máy "ma") — không bao giờ xoá máy thật."""
+    st = load(); p = rec(a.name, st)
+    if not p: print("Không có máy tên này trong danh sách."); return
+    v = vms_sure()
+    if not v: print(f"LỖI: không đọc được danh sách máy của {EMU_NAME} — thử lại sau."); sys.exit(4)
+    if any(x["name"] == a.name for x in v.values()): print(f"LỖI: '{a.name}' vẫn còn trong {EMU_NAME} — không bỏ khỏi danh sách."); sys.exit(3)
+    st["phones"] = [x for x in st["phones"] if x["name"] != a.name]; save(st)
+    print(f"Đã bỏ '{a.name}' khỏi danh sách ({EMU_NAME} không còn máy này).")
 
 def set_hold(name, on):
     """hold = máy CỐ Ý tắt (admin khoá / hết hạn) → bộ tự bật lại không đụng vào. Tắt ngoài ý muốn (bấm Close trong MEmu, MEmu văng) → tự bật lại."""
@@ -1064,6 +1143,7 @@ def cmd_heal(a):
 
 def _cleanup(v=None, quiet=False, all_=False):
     """Xoá máy trong MEmu KHÔNG thuộc danh sách BlueRoblox (giả lập cũ / thừa / tạo dở). Giữ máy mẫu (MEMU_TEMPLATE)."""
+    if quiet and _creating_now(): return                 # đang tạo máy khách → để lần sau
     v = v if v is not None else vms(); mine = {p["name"] for p in load()["phones"]}; tpl = CONF.get("MEMU_TEMPLATE", "")
     gone = 0
     for i in sorted(v, reverse=True):          # xoá từ số lớn xuống → số máy còn lại ít bị đổi
@@ -1072,6 +1152,7 @@ def _cleanup(v=None, quiet=False, all_=False):
         if nm.startswith("tpl_") or nm in {tpl_name(x) for x in ANDROIDS}: continue      # máy MẪU từng bản Android — không bao giờ xoá
         if EMU in ("ld", "mumu") and i == 0: continue        # LDPlayer / MuMu: giữ máy gốc số 0 (giả lập cần)
         if quiet and not nm.startswith("cp_"): continue     # tự động: chỉ dọn máy do BlueRoblox tạo (cp_…)
+        if quiet and (_creating_now() or nm in {p["name"] for p in load()["phones"]}): continue   # kiểm lại ngay trước khi xoá
         print(f"XOA_THUA {nm} (MEmu #{i})", flush=True)
         def _at(n):                                          # số máy HIỆN TẠI của máy tên n (MEmu đổi số khi xoá máy khác) — KHÔNG BAO GIỜ đụng máy khác tên
             return next(((k, x) for k, x in vms().items() if x["name"] == n), (None, None))
@@ -1169,7 +1250,8 @@ def cmd_pool(a):
         print(f"DUNG_SAN {nm}: tạo + khởi động + cài sẵn…", flush=True)
         with _Lock("memu", wait=5):                     # không chờ: đang có việc MEmu khác (máy khách) → để lần sau
             before = set(vms())
-            r, idx = create_vm(DEF_ANDROID)              # bản Android mặc định của máy chủ
+            d = _pl(); d.setdefault("building", []).append(nm); _ps(d)      # ghi trước: chương trình bị ngắt giữa chừng → lần sau tự xoá máy dở
+            r, idx = create_vm(DEF_ANDROID, nm)          # bản Android mặc định của máy chủ
             v2 = vms(); new = sorted(set(v2) - before)
             def _drop(ix):                               # máy dở không đặt được tên → XOÁ NGAY (không để thành "MEmuNN" mồ côi ăn CPU)
                 print(f"XOA_DO MEmu #{ix} (không đặt tên được)", flush=True)
@@ -1177,7 +1259,7 @@ def cmd_pool(a):
                 memuc("remove", "-i", ix, timeout=180)
             if idx is None:
                 for ix in reversed(new):
-                    if re.match(r"^(MEmu\d*|new_\d+|MuMu.*)$", v2[ix]["name"]) and ix != 0: _drop(ix)
+                    if re.match(r"^(MEmu(_?\d+)?|new_\d+|MuMu.*)$", v2[ix]["name"]) and ix != 0: _drop(ix)
                 print("LỖI dựng máy sẵn:", ((r.stdout or "") + (r.stderr or "")).strip()[-200:]); return
             for _t in range(4):
                 memuc("rename", "-i", idx, nm, timeout=60)
@@ -1185,7 +1267,6 @@ def cmd_pool(a):
                 time.sleep(3)
             else:
                 _drop(idx); return
-            d = _pl(); d.setdefault("building", []).append(nm); _ps(d)
         # chỉnh cài đặt NGOÀI khoá "memu" → đơn máy khách chen vào được bất cứ lúc nào; có đơn khách → dừng, lần sau làm tiếp
         if _creating_now(): print(f"LỖI {nm}: nhường đơn máy khách — dựng lại sau"); return
         configure(idx, 2, 2, "720x1280", auto_dpi("720x1280")); memuc("setconfigex", "-i", idx, "fps", 30, timeout=60); apply_template(idx)
@@ -1208,6 +1289,60 @@ def cmd_pool(a):
             d = _pl(); d["ready"].append(nm); d["building"] = [x for x in d.get("building", []) if x != nm]; _ps(d)
             print(f"SAN_SANG {nm}: máy dựng sẵn đã xong ({len(d['ready'])}/{POOL_SIZE})")
         else: print(f"LỖI {nm}: Android không lên — sẽ dựng lại lần sau")
+    finally: lk.__exit__()
+
+def _roles(v):
+    """Vai trò từng máy trong giả lập → {số: tên vai trò}; None = máy THỪA (VD bản nhân bản hỏng, máy dựng sẵn mồ côi, cp_… không có trong danh sách)."""
+    mine = {p["name"] for p in load()["phones"]}; d = _pl(); spares = set(d.get("ready", [])) | set(d.get("building", []))
+    tnames = {tpl_name(x) for x in ANDROIDS} | ({CONF.get("MEMU_TEMPLATE", "")} - {""})
+    first = {}
+    for i, x in sorted(v.items()):
+        nm = x["name"]
+        if (nm in tnames or nm.startswith("tpl_")) and nm not in first: first[nm] = i      # trùng tên máy mẫu → máy số nhỏ nhất là máy mẫu thật
+    out = {}
+    for i, x in sorted(v.items()):
+        nm = x["name"]
+        if nm in mine: out[i] = "máy khách"
+        elif first.get(nm) == i: out[i] = "máy mẫu"
+        elif nm in spares: out[i] = "máy dựng sẵn"
+        elif i == 0: out[i] = "máy gốc"
+        else: out[i] = None
+    return out
+def cmd_strays(a):
+    """strays          : liệt kê mọi máy trong giả lập + vai trò; máy THỪA = không phải máy khách / máy mẫu / máy dựng sẵn / máy gốc #0
+       strays --remove : xoá các máy THỪA (tắt rồi xoá từng máy, số lớn trước, đọc lại danh sách sau mỗi lần xoá)"""
+    lk = _Lock("memu", wait=180)
+    try: lk.__enter__()
+    except RuntimeError: print(f"{EMU_NAME} đang bận tạo máy — chạy lại sau ít phút."); sys.exit(1)
+    try:
+        gone, fail = 0, {}
+        for rnd in range(40):
+            if _creating_now(): print("Đang có đơn tạo máy khách — chạy lại sau ít phút."); sys.exit(1)
+            v = vms_sure()
+            if not v: print(f"LỖI: không đọc được danh sách máy của {EMU_NAME}."); sys.exit(4)
+            ro = _roles(v); bad = [i for i in sorted(v) if ro[i] is None]
+            if rnd == 0:
+                print(f"{EMU_NAME}: {len(v)} máy · {len(bad)} máy THỪA")
+                for i in sorted(v): print(f"  #{i} {v[i]['name']} — {ro[i] or 'THỪA'}{' · đang chạy' if v[i]['running'] else ''}")
+                if not bad: print("✓ Không có máy thừa."); return
+                if not a.remove: print("→ Xoá các máy THỪA:  python phonectl.py strays --remove"); return
+            if not bad: break
+            i = bad[-1]; nm = v[i]["name"]
+            if fail.get((i, nm), 0) >= 2: print(f"   ✗ KHÔNG xoá được #{i} {nm} — tắt bằng tay trong {EMU_NAME} rồi chạy lại"); break
+            print(f"XOA_THUA #{i} {nm}", flush=True)
+            if v[i]["running"]:
+                memuc("stop", "-i", i, timeout=120)
+                for _ in range(20):
+                    x = vms().get(i)
+                    if not x or x["name"] != nm or not x["running"]: break
+                    time.sleep(3)
+            x = vms().get(i)
+            if not x or x["name"] != nm: continue                 # số máy đã đổi → đọc lại danh sách, không đụng máy khác
+            memuc("remove", "-i", i, timeout=180)
+            x = vms().get(i)
+            if x and x["name"] == nm: fail[(i, nm)] = fail.get((i, nm), 0) + 1; time.sleep(3)
+            else: gone += 1
+        print(f"Đã xoá {gone} máy thừa.")
     finally: lk.__exit__()
 
 def cmd_noop(a): print("(bản Windows: không cần lệnh này)")
@@ -1274,8 +1409,8 @@ def cmd_probe(a):
     print(f"Giả lập: {EMU_NAME} (EMU={EMU}) · thư mục: {MEMU or 'KHÔNG THẤY'}" + (f" · lệnh: {MUMU_CLI}" if EMU == "mumu" else ""))
     print(f"Bản Android bán ở máy chủ này: {', '.join(ANDROIDS)} (mặc định {DEF_ANDROID}) · máy mẫu: {', '.join(tpl_name(x) for x in ANDROIDS)}")
     print(f"1 máy tối đa: {MAX_RAM:g}GB RAM · {MAX_CPU} nhân (đổi bằng MEMU_MAX_RAM / MEMU_MAX_CPU trong cloudphone.conf)")
-    v = vms(); print(f"Có {len(v)} máy:")
-    for i, x in sorted(v.items()): print(f"  #{i} {x['name']} {'đang chạy' if x['running'] else 'tắt'} · cổng adb {port_of(i)}")
+    v = vms(); print(f"Có {len(v)} máy:"); ro = _roles(v)
+    for i, x in sorted(v.items()): print(f"  #{i} {x['name']} {'đang chạy' if x['running'] else 'tắt'} · cổng adb {port_of(i)} · {ro[i] or 'THỪA (xoá: phonectl strays)'}")
     names = {x["name"] for x in v.values()}
     if EMU != "ld":
         for ver in ANDROIDS:
@@ -1330,7 +1465,7 @@ def main():
     c.add_argument("--days", type=int, default=7); c.add_argument("--res", default="720x1280"); c.add_argument("--dpi", type=int, default=0)
     c.add_argument("--fps", type=int, default=30); c.add_argument("--nowait", action="store_true"); c.add_argument("--android", default="9")
     c.add_argument("--nogpu", action="store_true"); c.set_defaults(f=cmd_create)
-    for nm, fn in (("delete", cmd_delete), ("stop", cmd_stop), ("start", cmd_start), ("restart", cmd_restart), ("show", cmd_show)):
+    for nm, fn in (("delete", cmd_delete), ("forget", cmd_forget), ("stop", cmd_stop), ("start", cmd_start), ("restart", cmd_restart), ("show", cmd_show)):
         x = s.add_parser(nm); x.add_argument("name"); x.set_defaults(f=fn)
     r = s.add_parser("renew"); r.add_argument("name"); r.add_argument("--days", type=int, default=7); r.set_defaults(f=cmd_renew)
     z = s.add_parser("resize"); z.add_argument("name"); z.add_argument("--ram", type=float, default=0); z.add_argument("--cpu", type=float, default=0); z.set_defaults(f=cmd_resize)
@@ -1348,6 +1483,7 @@ def main():
     cl = s.add_parser("cleanup"); cl.add_argument("--all", action="store_true"); cl.add_argument("--yes", action="store_true"); cl.set_defaults(f=cmd_cleanup)
     s.add_parser("pool").set_defaults(f=cmd_pool)
     s.add_parser("probe").set_defaults(f=cmd_probe)
+    sy = s.add_parser("strays"); sy.add_argument("--remove", action="store_true"); sy.set_defaults(f=cmd_strays)
     s.add_parser("engine").set_defaults(f=cmd_engine)
     s.add_parser("tuneall").set_defaults(f=cmd_tuneall)
     s.add_parser("vmlist").set_defaults(f=cmd_vmlist)

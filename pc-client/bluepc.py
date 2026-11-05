@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # =====================================================================================================
-#  BlueRoblox PC — app máy tính cho KHÁCH: đăng nhập, xem danh sách máy, điều khiển máy mượt (giải mã phần cứng/CPU)
+#  CloudBlue PC — app máy tính cho KHÁCH: đăng nhập, xem danh sách máy, điều khiển máy mượt (giải mã phần cứng/CPU)
 #
 #  Chạy thử:   python bluepc.py                 (cần: pip install av pygame-ce numpy)
-#  Đóng gói:   build.bat  → dist\BlueRobloxPC\BlueRobloxPC.exe (+ BlueRobloxPC.zip để đưa lên web)
-#  Mở thẳng 1 máy:  BlueRobloxPC.exe blueroblox://phone/<mã máy>   (web có nút "Mở bằng app máy tính")
+#  Đóng gói:   build.bat  → dist\CloudBluePC\CloudBluePC.exe (+ CloudBluePC.zip để đưa lên web)
+#  Mở thẳng 1 máy:  CloudBluePC.exe blueroblox://phone/<mã máy>   (web có nút "Mở bằng app máy tính")
 #
 #  Mỗi cửa sổ máy là 1 tiến trình riêng (mở nhiều máy cùng lúc không giật nhau).
 #  Không chứa khoá bí mật nào: chỉ khoá công khai Supabase (giống web/app Android) + phiên đăng nhập của chính khách.
@@ -284,7 +284,7 @@ def register_protocol():
         import winreg
         cmd = f'"{sys.executable}" "%1"' if FROZEN else f'"{sys.executable.replace("python.exe", "pythonw.exe")}" "{os.path.abspath(__file__)}" "%1"'
         with winreg.CreateKey(winreg.HKEY_CURRENT_USER, r"Software\Classes\blueroblox") as k:
-            winreg.SetValueEx(k, "", 0, winreg.REG_SZ, "URL:BlueRoblox"); winreg.SetValueEx(k, "URL Protocol", 0, winreg.REG_SZ, "")
+            winreg.SetValueEx(k, "", 0, winreg.REG_SZ, "URL:CloudBlue"); winreg.SetValueEx(k, "URL Protocol", 0, winreg.REG_SZ, "")
         with winreg.CreateKey(winreg.HKEY_CURRENT_USER, r"Software\Classes\blueroblox\shell\open\command") as k:
             winreg.SetValueEx(k, "", 0, winreg.REG_SZ, cmd)
     except Exception as e:
@@ -364,7 +364,7 @@ class Viewer:
         self.lock = threading.Lock(); self.frame = None; self.vw = self.vh = 0
         self.state = ("connecting", "Đang kết nối…"); self.stats = {}; self.ping = 0; self.path = ""
         self.show_info = bool(prefs().get("info")); self.q = prefs().get("q", "auto")
-        self.name = "BlueRoblox"; self.dec = None; self.need_key = True; self.last_kf_req = 0
+        self.name = "CloudBlue"; self.dec = None; self.need_key = True; self.last_kf_req = 0
         self.dec_errors = 0; self.mouse_down = False; self.kicked = False; self.cli = None; self.hover = None
         self.fps_n = 0; self.fps_t = time.time(); self.fps_show = 0.0
         self._ui_key = None; self._ui_surf = None; self._ui_tex = None
@@ -451,7 +451,7 @@ class Viewer:
         try:
             from pygame._sdl2.video import Window, Renderer, Texture
             self.Texture = Texture
-            self.win = Window("BlueRoblox", size=(vw + BAR, vh), resizable=True)
+            self.win = Window("CloudBlue", size=(vw + BAR, vh), resizable=True)
             self.ren = Renderer(self.win, vsync=False, accelerated=1)
             self.gpu = True
         except Exception as e:
@@ -490,9 +490,9 @@ class Viewer:
             if w + BAR > sw * 0.95: w = int(sw * 0.95) - BAR; h = int(w * self.vh / self.vw)
             if self.gpu:
                 self.win.size = (w + BAR, h); self.win.position = ((sw - w - BAR) // 2, max(0, (sh - h) // 2 - 10))
-                self.win.title = f"{self.name} — BlueRoblox"
+                self.win.title = f"{self.name} — CloudBlue"
             else:
-                self.screen = pygame.display.set_mode((w + BAR, h), pygame.RESIZABLE); pygame.display.set_caption(f"{self.name} — BlueRoblox")
+                self.screen = pygame.display.set_mode((w + BAR, h), pygame.RESIZABLE); pygame.display.set_caption(f"{self.name} — CloudBlue")
         except Exception as e: log("fit:", e)
 
     def _size(self):
@@ -684,12 +684,13 @@ def run_viewer(pid):
         log("viewer:", traceback.format_exc())
         try:
             import tkinter.messagebox as mb
-            mb.showerror("BlueRoblox", "Không mở được cửa sổ máy. Chi tiết trong:\n" + LOGF)
+            mb.showerror("CloudBlue", "Không mở được cửa sổ máy. Chi tiết trong:\n" + LOGF)
         except Exception: pass
 
 
 # ================================================================ CỬA SỔ DANH SÁCH (tkinter)
 BG, CARD, LINE, TXT, DIM, ACC, OK, WARN, BAD = "#0b1220", "#121b2f", "#1f2b45", "#eef2f8", "#8b97ad", "#2f7bff", "#22c38e", "#f0b429", "#ef5b5b"
+BRAND = "#5aa8ff"          # màu chữ "Blue" trong tên CloudBlue
 STATUS = {"active": ("Đang chạy", OK), "pending": ("Đang tạo…", WARN), "expired": ("Hết hạn — chờ gia hạn", BAD), "error": ("Lỗi", BAD)}
 
 
@@ -1098,7 +1099,7 @@ class OrderDlg(Dlg):
                                   + (f" − {int(num(self.prof.get('ctv_discount')))}% CTV" if is_ctv(self.prof) else "") + (f" × {s['qty']} máy" if s["qty"] > 1 else ""))
         self.total.config(text="—" if bad else vnd(price)); self.bal.config(text="Số dư: " + vnd(bal))
         warn = "" if bad else ("Số dư không đủ — cần nạp thêm " + vnd(price - bal) + "." if price > bal
-                               else "⚠ Cấu hình này chưa đủ chơi Roblox (cần tối thiểu 4GB · 4 nhân) — hợp treo app, game nhẹ." if s["ram"] < 4 or s["cpu"] < 4 else "")
+                               else "⚠ Cấu hình này chưa đủ chơi game 3D (cần tối thiểu 4GB · 4 nhân) — hợp treo app, game nhẹ." if s["ram"] < 4 or s["cpu"] < 4 else "")
         self.err.config(text=bad or warn, fg=BAD if bad or price > bal else WARN)
         self.go.config(text="Nhận máy miễn phí" if s["free"] else ("Nạp tiền" if not bad and price > bal else "Thuê ngay" + (f" {s['qty']} máy" if s["qty"] > 1 else "")),
                        state="disabled" if bad else "normal", bg=LINE if bad else ACC)
@@ -1120,7 +1121,7 @@ class OrderDlg(Dlg):
             notify_admin(f"📱 <b>Đơn ĐT đám mây mới{' (MIỄN PHÍ)' if s['free'] else ''}</b> — app PC\n{s['qty']} máy × Android {s['android']} · "
                          f"{s['ram']}GB / {s['cpu']} nhân / {s['days']} ngày / {s['res']} / {s['fps']} FPS\nGiá: {vnd(price)}\n{self.app.auth.email}")
             self.close(); self.app.refresh()
-            mb.showinfo("BlueRoblox", ("Đã tạo đơn " + str(s["qty"]) + " máy!" if s["qty"] > 1 else "Đã tạo đơn!") +
+            mb.showinfo("CloudBlue", ("Đã tạo đơn " + str(s["qty"]) + " máy!" if s["qty"] > 1 else "Đã tạo đơn!") +
                         " Máy đang khởi tạo (khoảng 2–3 phút) — danh sách tự cập nhật khi máy chạy.", parent=self.app.root)
         def fail(m):
             self.err.config(text=m, fg=BAD); self.upd()
@@ -1184,7 +1185,7 @@ class RenewDlg(Dlg):
         self.go.config(state="disabled", text="Đang gia hạn…"); d = self.days
         def done(_r):
             self.close(); self.app.refresh()
-            mb.showinfo("BlueRoblox", f"Đã gia hạn +{d} ngày.", parent=self.app.root)
+            mb.showinfo("CloudBlue", f"Đã gia hạn +{d} ngày.", parent=self.app.root)
         def fail(m):
             self.err.config(text=m); self.go.config(state="normal"); self.upd()
         self.bg(lambda: self.app.auth.rpc("cloudphone_renew", {"p_id": self.p["id"], "p_days": d}), done, fail)
@@ -1379,7 +1380,7 @@ class UpgradeDlg(Dlg):
         self.go.config(state="disabled", text="Đang nâng cấp…"); nr, nc = self.nr, self.nc
         def done(_r):
             self.close(); self.app.refresh()
-            mb.showinfo("BlueRoblox", f"Đã nâng lên {nr}GB · {nc} nhân — máy nhận cấu hình mới trong khoảng 1 phút.", parent=self.app.root)
+            mb.showinfo("CloudBlue", f"Đã nâng lên {nr}GB · {nc} nhân — máy nhận cấu hình mới trong khoảng 1 phút.", parent=self.app.root)
         def fail(m):
             self.err.config(text=m); self.go.config(state="normal"); self._draw()
         self.bg(lambda: self.app.auth.rpc("cloudphone_upgrade", {"p_id": self.p["id"], "p_ram": nr, "p_cpu": nc}), done, fail)
@@ -1495,7 +1496,7 @@ class ToolsDlg(Dlg):
         tk = self.app.tk
         for w in self.clone_box.winfo_children(): w.destroy()
         if not self.apps:
-            self.label(self.clone_box, "Máy chưa có app nào. Cài app trước (VD Roblox từ CH Play trong máy, hoặc file APK ở trên) rồi bấm Làm mới.",
+            self.label(self.clone_box, "Máy chưa có app nào. Cài app trước (VD game từ CH Play trong máy, hoặc file APK ở trên) rồi bấm Làm mới.",
                        self.app.f_t, DIM, wraplength=560).pack(fill="x"); return
         self.label(self.clone_box, "App cần clone", ("Segoe UI", 10, "bold"), DIM).pack(fill="x")
         items = [(k, app_label(k) + (f"  ×{self.counts[k]}" if self.counts.get(k) else "")) for k in self.apps]
@@ -1561,7 +1562,7 @@ class Launcher:
         import tkinter as tk
         self.tk = tk; self.auth = Auth(); self.shop = Shop(self.auth); self.open_id = open_id; self.rows = []; self.busy = False
         self.scrollers = {}; self._fast = None; self._q = queue.Queue()
-        self.root = tk.Tk(); self.root.title("BlueRoblox PC"); self.root.configure(bg=BG); self.root.geometry("600x760"); self.root.minsize(480, 540)
+        self.root = tk.Tk(); self.root.title("CloudBlue PC"); self.root.configure(bg=BG); self.root.geometry("600x760"); self.root.minsize(480, 540)
         self.root.bind_all("<MouseWheel>", self._wheel)
         self.root.after(40, self._pump)
         try:
@@ -1584,7 +1585,7 @@ class Launcher:
                 if not p: raise ApiError(404, "Không tìm thấy máy này trong tài khoản.")
                 self.ui(lambda: ToolsDlg(self, p))
             except Exception as e:
-                m = str(e); self.ui(lambda: (mb.showerror("BlueRoblox", m), self.root.destroy()))
+                m = str(e); self.ui(lambda: (mb.showerror("CloudBlue", m), self.root.destroy()))
         threading.Thread(target=job, daemon=True).start()
 
     def clear(self):
@@ -1630,9 +1631,9 @@ class Launcher:
         def job():
             try:
                 self.auth.rpc("cloudphone_cancel", {"p_id": p["id"]})
-                self.ui(lambda: (self.refresh(), mb.showinfo("BlueRoblox", "Đang huỷ máy — máy sẽ biến mất khỏi danh sách trong ít phút.", parent=self.root)))
+                self.ui(lambda: (self.refresh(), mb.showinfo("CloudBlue", "Đang huỷ máy — máy sẽ biến mất khỏi danh sách trong ít phút.", parent=self.root)))
             except Exception as e:
-                m = str(e); self.ui(lambda m=m: mb.showerror("BlueRoblox", m, parent=self.root))
+                m = str(e); self.ui(lambda m=m: mb.showerror("CloudBlue", m, parent=self.root))
         threading.Thread(target=job, daemon=True).start()
 
     def more(self, p, widget):
@@ -1652,7 +1653,9 @@ class Launcher:
     def show_login(self, msg=""):
         tk = self.tk; self.clear()
         box = tk.Frame(self.body, bg=BG); box.place(relx=0.5, rely=0.45, anchor="center")
-        tk.Label(box, text="BlueRoblox", font=("Segoe UI", 26, "bold"), fg=TXT, bg=BG).pack()
+        hb = tk.Frame(box, bg=BG); hb.pack()                        # chữ "CloudBlue" 2 màu giống logo web
+        for t, c in (("Cloud", TXT), ("Blue", BRAND)):
+            tk.Label(hb, text=t, font=("Segoe UI", 26, "bold"), fg=c, bg=BG, bd=0, padx=0, highlightthickness=0).pack(side="left")
         tk.Label(box, text="Điện thoại đám mây — điều khiển trên máy tính", font=self.f_t, fg=DIM, bg=BG).pack(pady=(2, 22))
         ents = {}
         for k, lab, show in (("email", "Email", ""), ("pw", "Mật khẩu", "•")):
@@ -1786,9 +1789,9 @@ class Launcher:
         def job():
             try:
                 CpClient(self.auth, p["id"]).json("POST", "reboot", {})
-                self.ui(lambda: mb.showinfo("BlueRoblox", "Đang khởi động lại máy — chờ khoảng 1 phút rồi mở lại."))
+                self.ui(lambda: mb.showinfo("CloudBlue", "Đang khởi động lại máy — chờ khoảng 1 phút rồi mở lại."))
             except Exception as e:
-                m = str(e); self.ui(lambda m=m: mb.showerror("BlueRoblox", m))
+                m = str(e); self.ui(lambda m=m: mb.showerror("CloudBlue", m))
         threading.Thread(target=job, daemon=True).start()
 
     def logout(self):

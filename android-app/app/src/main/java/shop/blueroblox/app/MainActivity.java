@@ -33,7 +33,7 @@ import java.util.Locale;
 
 /** Màn chính: Máy của tôi · Thuê máy · Tài khoản. */
 public class MainActivity extends Activity {
-    static final int[] RAM = {2, 4, 6, 8, 12, 16, 24, 32, 48, 64, 96, 128}, CPU = {2, 4, 6, 8, 12, 16, 24, 32, 48, 64, 72}, DAYS = {1, 3, 7, 15, 30, 60}, FPS = {30, 60, 90, 120}, QTY = {1, 2, 3, 5, 10};
+    static final int[] RAM = {2, 4, 6, 8, 12, 16}, CPU = {2, 4, 6, 8, 12, 16}, DAYS = {1, 3, 7, 15, 30, 60}, FPS = {30, 60, 90, 120}, QTY = {1, 2, 3, 5, 10};
     static final String[][] RES = {{"540x960", "Nhẹ máy"}, {"720x1280", "HD"}, {"720x1600", "HD+ dài"}, {"1080x1920", "Full HD"}, {"1080x2400", "FHD+ 20:9"}, {"1280x720", "HD ngang"}};
 
     private FrameLayout content;
@@ -54,7 +54,7 @@ public class MainActivity extends Activity {
     boolean sFree = false;
 
     /** Phiên bản Android admin đang bán — đúng thứ tự admin nhập (VD "9,12,7"); trống → Android 9.
-     *  LDPlayer 9 = Android 9 · MuMu = Android 12 + 7 — đơn tự chạy về đúng máy chủ. */
+     *  LDPlayer 9 = Android 9 · MEmu = Android 12 + 7 — đơn tự chạy về đúng máy chủ. */
     java.util.List<String> andList() {
         java.util.List<String> l = new java.util.ArrayList<>();
         for (String v : price.optString("android_versions", "9").split(",")) { v = v.trim(); if (v.matches("\\d{1,2}") && !l.contains(v)) l.add(v); }
@@ -72,14 +72,14 @@ public class MainActivity extends Activity {
     }
     /** So với cấu hình SAU khi kẹp theo trần của bản v (đổi bản thì RAM/CPU tự kẹp lại). */
     String andWhy(String v) { int[] l = andLim(v); return andWhy(v, Math.min(sRam, l[0]), Math.min(sCpu, l[1])); }
-    /** Trần 1 máy của bản Android v = min(trần chung, trần của bản đó) → {RAM GB, nhân}. Mặc định LDPlayer 9: 8·8 · MuMu 12: 128·72 · MuMu 7: 16·16. */
+    /** Trần 1 máy của bản Android v = min(trần chung, trần của bản đó) → {RAM GB, nhân}. Mặc định Android 9: 8·8 · Android 12 / 7: 16·16 (16 là trần tuyệt đối). */
     int[] andLim(String v) {
-        int r = "9".equals(v) ? 8 : "12".equals(v) ? 128 : 16, c = "9".equals(v) ? 8 : "12".equals(v) ? 72 : 16;
+        int r = "9".equals(v) ? 8 : 16, c = "9".equals(v) ? 8 : 16;
         JSONObject al = price == null ? null : price.optJSONObject("android_limits");
         JSONObject x = al == null ? null : al.optJSONObject(v);
         if (x != null) { r = x.optInt("ram", r); c = x.optInt("cpu", c); }
         int gr = price == null ? r : price.optInt("max_ram", r), gc = price == null ? c : price.optInt("max_cpu", c);
-        return new int[]{Math.max(1, Math.min(Math.min(r, gr <= 0 ? r : gr), 256)), Math.max(1, Math.min(Math.min(c, gc <= 0 ? c : gc), 128))};
+        return new int[]{Math.max(1, Math.min(Math.min(r, gr <= 0 ? r : gr), 16)), Math.max(1, Math.min(Math.min(c, gc <= 0 ? c : gc), 16))};
     }
     /** Mặc định Android 9; bản 9 hết chỗ / bảo trì → bản đầu tiên còn chỗ. */
     String andPick() {
@@ -88,8 +88,8 @@ public class MainActivity extends Activity {
         return ok.contains("9") ? "9" : !ok.isEmpty() ? ok.get(0) : l.contains("9") ? "9" : l.get(0);
     }
     static String andHint(String v) {
-        return "9".equals(v) ? Ui.L("LDPlayer 9 · ổn định", "LDPlayer 9 · stable") : "12".equals(v) ? Ui.L("MuMu · mới nhất", "MuMu · newest")
-                : "7".equals(v) ? Ui.L("MuMu · nhẹ", "MuMu · light") : "";
+        return "9".equals(v) ? Ui.L("Ổn định · phổ biến", "Stable · popular") : "12".equals(v) ? Ui.L("Mới nhất", "Newest")
+                : "7".equals(v) ? Ui.L("Nhẹ", "Light") : "";
     }
     /** Vẽ lại các nút bản Android theo chỗ trống hiện tại (đổi RAM/CPU là cập nhật ngay). */
     void paintAnd(Ui.Wrap aw) {
@@ -109,7 +109,7 @@ public class MainActivity extends Activity {
     static JSONObject clampHard(JSONObject p) {
         try {
             String[] k = {"max_ram", "max_cpu", "max_fps", "free_max_ram", "free_max_cpu"};
-            int[] hv = {256, 128, 60, 256, 128};
+            int[] hv = {16, 16, 60, 16, 16};
             for (int i = 0; i < k.length; i++) {
                 if (p.isNull(k[i])) { if (i < 3) p.put(k[i], hv[i]); continue; }
                 int v = p.optInt(k[i], hv[i]);
@@ -614,7 +614,7 @@ public class MainActivity extends Activity {
             ok.setEnabled(!same);
             ok.setText(!same && bal < cost[0] ? Ui.L("Nạp thêm tiền", "Top up") : Ui.L("Nâng cấp ngay", "Upgrade now"));
         };
-        int[] rams = {2, 3, 4, 6, 8, 10, 12, 16, 24, 32, 48, 64, 96, 128}, cpus = {2, 3, 4, 6, 8, 10, 12, 16, 24, 32, 48, 64, 72};
+        int[] rams = {2, 3, 4, 6, 8, 10, 12, 16}, cpus = {2, 3, 4, 6, 8, 10, 12, 16};
         java.util.TreeSet<Integer> rs = new java.util.TreeSet<>(), cs = new java.util.TreeSet<>();
         rs.add(R0); for (int v : rams) if (v > R0 && v <= maxR) rs.add(v); if (maxR > R0) rs.add(maxR);
         cs.add(C0); for (int v : cpus) if (v > C0 && v <= maxC) cs.add(v); if (maxC > C0) cs.add(maxC);
@@ -832,7 +832,7 @@ public class MainActivity extends Activity {
         int minD = price.optInt("min_days", 1), maxD = price.optInt("max_days", 90), minF = price.optInt("min_fps", 10), maxF = price.optInt("max_fps", 120);
         if (!avs.contains(sAnd) || !andWhy(sAnd).isEmpty()) sAnd = andPick();
         final int[] lim = andLim(sAnd);
-        final int maxR = lim[0], maxC = lim[1];                  // trần theo bản Android đang chọn (LDPlayer 9: 8 · MuMu 12: 128GB / 72 nhân)
+        final int maxR = lim[0], maxC = lim[1];                  // trần theo bản Android đang chọn (Android 9: 8GB · 8 nhân · Android 12 / 7: 16GB · 16 nhân)
         sRam = clamp(sRam, minR, maxR); sCpu = clamp(sCpu, minC, maxC); sDays = clamp(sDays, minD, maxD); sFps = clamp(sFps, minF, maxF);
         final Ui.Wrap aw = new Ui.Wrap(this, 8);
 

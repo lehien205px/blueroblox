@@ -159,6 +159,10 @@ class Deny(Exception):
     def __init__(self, code, msg): super().__init__(msg); self.code, self.msg = code, msg
 
 
+class CaptureBlocked(Exception):
+    """Windows không cho quay cửa sổ giả lập (hoặc quay mà không ra khung nào) → phiên này lấy hình THẲNG từ Android (scrcpy)."""
+
+
 def authorize(hello):
     """Kiểm tra quyền xem máy. Trả về (me, phone row)."""
     pid = str(hello.get("phone") or "")
@@ -175,9 +179,9 @@ def authorize(hello):
     if p.get("status") != "active": raise Deny("OFFLINE", "Máy chưa chạy (đang tạo, tạm dừng hoặc đã hết hạn).")
     if locked(p) and not me["admin"]: raise Deny("LOCKED", "Máy đang bị khoá: " + (p.get("lock_reason") or "liên hệ hỗ trợ."))
     if (maint().get("maint")) and not me["admin"]: raise Deny("MAINT", maint().get("maint_msg") or "Hệ thống đang bảo trì, quay lại sau ít phút.")
-    if not p.get("container") or not p.get("port"):
-        ps = phones_json().get(p.get("container") or "")
-        if ps: p["port"] = p.get("port") or ps.get("port")
+    ps = phones_json().get(p.get("container") or "")
+    if ps and ps.get("port") and str(ps["port"]) != str(p.get("port") or ""):
+        p["port"] = ps["port"]          # cổng adb THẬT trên máy này (phonectl sửa khi giả lập đổi số máy) — web có thể chưa kịp cập nhật
     if not p.get("container") or not p.get("port"): raise Deny("OFFLINE", "Máy chưa sẵn sàng, thử lại sau ít giây.")
     return me, p
 
@@ -197,16 +201,60 @@ if WIN:
         if not n: return ""
         b = ctypes.create_unicode_buffer(n + 1); U32.GetWindowTextW(h, b, n + 1); return b.value
 
-    def find_window(name):
+    GWL_STYLE, GWL_EXSTYLE, WS_EX_TOOLWINDOW, WS_EX_APPWINDOW, GW_OWNER = -16, -20, 0x80, 0x40000, 4
+    _K32 = ctypes.WinDLL("kernel32")
+    _K32.OpenProcess.restype = ctypes.c_void_p; _K32.OpenProcess.argtypes = [wt.DWORD, wt.BOOL, wt.DWORD]
+    _K32.QueryFullProcessImageNameW.argtypes = [ctypes.c_void_p, wt.DWORD, wt.LPWSTR, ctypes.POINTER(wt.DWORD)]
+    _K32.CloseHandle.argtypes = [ctypes.c_void_p]
+    # Cửa sổ có chữ trùng tên máy nhưng KHÔNG phải giả lập (PowerShell đang chạy lệnh, Notepad mở file nhật ký…) → bỏ qua
+    NOT_EMU = {"python.exe", "pythonw.exe", "powershell.exe", "pwsh.exe", "cmd.exe", "conhost.exe", "windowsterminal.exe", "openconsole.exe",
+               "notepad.exe", "notepad++.exe", "explorer.exe", "chrome.exe", "msedge.exe", "firefox.exe", "code.exe", "taskmgr.exe",
+               "mmc.exe", "blueserver.exe", "bluerobloxpc.exe"}
+
+    def proc_of(h):
+        """(tên tiến trình viết thường, pid) của cửa sổ."""
+        pid = wt.DWORD(); U32.GetWindowThreadProcessId(h, ctypes.byref(pid)); name = ""
+        hp = _K32.OpenProcess(0x1000, False, pid.value)                     # PROCESS_QUERY_LIMITED_INFORMATION
+        if hp:
+            try:
+                buf = ctypes.create_unicode_buffer(520); n = wt.DWORD(520)
+                if _K32.QueryFullProcessImageNameW(hp, 0, buf, ctypes.byref(n)): name = re.split(r"[\\/]", buf.value)[-1].lower()
+            finally: _K32.CloseHandle(hp)
+        return name, pid.value
+
+    def _same_name(name):
         exact, prefix = [], []
         def cb(h, _):
             t = win_title(h)
             if t == name: exact.append(h)
-            elif t.startswith(name) or (name in t and len(name) >= 8): prefix.append(h)
+            elif t and (t.startswith(name) or (name in t and len(name) >= 8)): prefix.append(h)
             return True
         U32.EnumWindows(EnumProc(cb), 0)
-        hs = exact or prefix
-        return (hs[0], win_title(hs[0])) if hs else (None, None)
+        return [h for h in exact if proc_of(h)[0] not in NOT_EMU], [h for h in prefix if proc_of(h)[0] not in NOT_EMU]
+
+    def _rank(h):                 # cửa sổ THẬT của máy: đang hiện, có phần vẽ Android, to nhất (giả lập có thể có cửa sổ ẩn phụ trùng tên)
+        l, t, r, b = rect_of(h)
+        return (bool(U32.IsWindowVisible(h)), render_child(h) is not None, max(0, r - l) * max(0, b - t))
+
+    def find_window(name):
+        for hs in _same_name(name):
+            if hs:
+                h = max(hs, key=_rank); return h, win_title(h)
+        return None, None
+
+    def win_info(h):
+        """1 dòng mô tả cửa sổ (ghi nhật ký khi Windows không cho quay)."""
+        try:
+            cls = ctypes.create_unicode_buffer(256); U32.GetClassNameW(h, cls, 256)
+            ex = U32.GetWindowLongW(h, GWL_EXSTYLE) & 0xFFFFFFFF; st = U32.GetWindowLongW(h, GWL_STYLE) & 0xFFFFFFFF
+            cloak = ctypes.c_int(0); ctypes.windll.dwmapi.DwmGetWindowAttribute(h, 14, ctypes.byref(cloak), 4)    # DWMWA_CLOAKED
+            l, t, r, b = rect_of(h); pn, pid = proc_of(h)
+            fl = [k for k, on in (("đang hiện", U32.IsWindowVisible(h)), ("thu nhỏ", U32.IsIconic(h)), ("chạy ngầm/tool", ex & WS_EX_TOOLWINDOW),
+                                   ("app", ex & WS_EX_APPWINDOW), ("cửa sổ con", st & 0x40000000), ("có cửa sổ chủ", U32.GetWindow(h, GW_OWNER)),
+                                   ("bị che (cloaked)", cloak.value)) if on]
+            return f"hwnd={int(h):#x} '{win_title(h)}' lớp={cls.value} {pn or '?'}:{pid} {r - l}x{b - t} tại ({l},{t}) [{', '.join(fl) or '-'}]"
+        except Exception as e:
+            return f"hwnd={h} ({e!r})"
 
     def rect_of(h):
         r = wt.RECT(); U32.GetWindowRect(h, ctypes.byref(r)); return r.left, r.top, r.right, r.bottom
@@ -239,52 +287,76 @@ class WindowSource:
         h, title = find_window(self.name)
         if not h: raise Deny("OFFLINE", "Máy đang tắt hoặc đang khởi động lại — chờ ít giây rồi mở lại.")
         if U32.IsIconic(h): U32.ShowWindow(h, 4); time.sleep(0.6)       # thu nhỏ thì Windows không vẽ → hiện lại (không cướp chuột)
+        elif not U32.IsWindowVisible(h): U32.ShowWindow(h, 4); time.sleep(0.4)   # bị ẩn hẳn → Windows không cho quay → hiện lại (vẫn ngoài màn hình)
         fb = frame_bounds(h); ch = render_child(h) or fb
         self.cx, self.cy = max(0, ch[0] - fb[0]), max(0, ch[1] - fb[1])
         self.cw, self.ch = (ch[2] - ch[0]) & ~1, (ch[3] - ch[1]) & ~1
         self.fw, self.fh = fb[2] - fb[0], fb[3] - fb[1]
         if self.cw < 64 or self.ch < 64: raise Deny("OFFLINE", "Cửa sổ máy đang lỗi kích thước — thử lại sau ít giây.")
-        # Quay theo SỐ CỬA SỔ (hwnd): cửa sổ máy khách bị ẩn kiểu "tool window" → tìm theo tên sẽ KHÔNG thấy (windows-capture bỏ qua loại này)
-        restore = None
-        try:
-            cap = WindowsCapture(cursor_capture=None, draw_border=None, window_hwnd=int(h))
-        except TypeError:                                   # windows-capture bản cũ (chưa có window_hwnd) → tạm bỏ kiểu tool window
-            ex = U32.GetWindowLongW(h, -20)
-            if ex & 0x80: U32.SetWindowLongW(h, -20, ex & ~0x80); restore = ex
-            cap = WindowsCapture(cursor_capture=None, draw_border=None, window_name=title)
         src = self
 
-        @cap.event
-        def on_frame_arrived(frame, ictl):
-            if src.stopping:
-                try: ictl.stop()
-                except Exception: pass
-                return
-            a = frame.frame_buffer                       # (cao, rộng, 4) BGRA
-            if abs(a.shape[1] - src.fw) > 6 or abs(a.shape[0] - src.fh) > 6:
-                src.size_change = (a.shape[1], a.shape[0], time.time()); return
-            src.size_change = None
-            sub = a[src.cy:src.cy + src.ch, src.cx:src.cx + src.cw]
-            if sub.shape[0] != src.ch or sub.shape[1] != src.cw: return
-            buf = sub.copy()                             # thư viện dùng lại bộ nhớ khung → phải chép
-            with src.cond:
-                src.latest = buf; src.n += 1; src.cond.notify_all()
+        def make():
+            # Quay theo SỐ CỬA SỔ (hwnd): tìm theo tên thì windows-capture bỏ qua cửa sổ "chạy ngầm" (tool window)
+            try: cap = WindowsCapture(cursor_capture=None, draw_border=None, window_hwnd=int(h))
+            except TypeError: cap = WindowsCapture(cursor_capture=None, draw_border=None, window_name=title)   # windows-capture bản cũ
 
-        @cap.event
-        def on_closed():
-            src.closed = True
-            with src.cond: src.cond.notify_all()
+            @cap.event
+            def on_frame_arrived(frame, ictl):
+                if src.stopping:
+                    try: ictl.stop()
+                    except Exception: pass
+                    return
+                a = frame.frame_buffer                       # (cao, rộng, 4) BGRA
+                if abs(a.shape[1] - src.fw) > 6 or abs(a.shape[0] - src.fh) > 6:
+                    src.size_change = (a.shape[1], a.shape[0], time.time()); return
+                src.size_change = None
+                sub = a[src.cy:src.cy + src.ch, src.cx:src.cx + src.cw]
+                if sub.shape[0] != src.ch or sub.shape[1] != src.cw: return
+                buf = sub.copy()                             # thư viện dùng lại bộ nhớ khung → phải chép
+                with src.cond:
+                    src.latest = buf; src.n += 1; src.cond.notify_all()
 
+            @cap.event
+            def on_closed():
+                src.closed = True
+                with src.cond: src.cond.notify_all()
+            return cap
+
+        # Windows CHỈ cho quay cửa sổ có trong Alt+Tab (CreateForWindow báo lỗi → "Failed to convert item to GraphicsCaptureItem").
+        # Cửa sổ máy khách "chạy ngầm" (phonectl hide: kiểu tool window, ngoài màn hình) → tạm thành cửa sổ thường lúc bắt đầu quay,
+        # có hình rồi trả lại kiểu cũ (đổi kiểu SAU khi đã bắt đầu quay không làm dừng quay; cửa sổ vẫn nằm ngoài màn hình).
+        ex0 = U32.GetWindowLongW(h, GWL_EXSTYLE)
+        ex_cap = (ex0 | WS_EX_APPWINDOW) & ~WS_EX_TOOLWINDOW
+        changed = False; err = None
         try:
-            self.ctl = cap.start_free_threaded()
+            if ex0 != ex_cap and ((ex0 & WS_EX_TOOLWINDOW) or U32.GetWindow(h, GW_OWNER)):
+                U32.SetWindowLongW(h, GWL_EXSTYLE, ex_cap); changed = True
+            for k in range(2):
+                try:
+                    self.ctl = make().start_free_threaded(); err = None; break
+                except Exception as e:
+                    err = e
+                    if k or "GraphicsCaptureItem" not in str(e): break
+                    # lần 2: ẩn → đổi kiểu → hiện lại không lấy focus (như phonectl hide) để Windows tính lại cửa sổ có trong Alt+Tab
+                    U32.ShowWindow(h, 0); U32.SetWindowLongW(h, GWL_EXSTYLE, ex_cap); U32.ShowWindow(h, 4); changed = True; time.sleep(0.5)
+            if err is None:
+                t0 = time.time()
+                with self.cond:
+                    while self.latest is None and time.time() - t0 < 6 and not self.closed and not self.stopping:
+                        self.cond.wait(0.2)
         finally:
-            if restore is not None: U32.SetWindowLongW(h, -20, restore)
-        t0 = time.time()
-        with self.cond:
-            while self.latest is None and time.time() - t0 < 6 and not self.closed and not self.stopping:
-                self.cond.wait(0.2)
+            if changed: U32.SetWindowLongW(h, GWL_EXSTYLE, ex0)
+        if err is not None:
+            log(f"  {self.name}: Windows không cho quay cửa sổ ({str(err)[:110]})")
+            for x in [y for hs in _same_name(self.name) for y in hs][:4]: log(f"    · {win_info(x)}")
+            raise CaptureBlocked("Windows không cho quay cửa sổ giả lập")
         if self.latest is None:
-            self.stop(); raise Deny("OFFLINE", "Không lấy được hình từ cửa sổ máy — thử mở lại.")
+            gone, stopping = self.closed, self.stopping
+            self.stop()
+            if stopping: raise Deny("OFFLINE", "Không lấy được hình từ cửa sổ máy — thử mở lại.")
+            if gone: raise Deny("OFFLINE", "Máy đang tắt hoặc đang khởi động lại — chờ ít giây rồi mở lại.")
+            log(f"  {self.name}: cửa sổ không ra khung hình nào sau 6 giây — {win_info(h)}")
+            raise CaptureBlocked("cửa sổ giả lập không ra hình")
         return self.cw, self.ch
 
     def resized(self):
@@ -1285,6 +1357,7 @@ class Session:
         self.kbps_cur = None; self.kbps_cap = PRESETS[self.cur_q][2]; self.rate_t = 0.0
         self.inflight = collections.deque(); self.delivered = collections.deque(); self.lat = collections.deque()
         self.key_grace = 0.0
+        self.from_android = False          # True: Windows không quay được cửa sổ máy này → cả phiên lấy hình thẳng từ Android (scrcpy)
 
     # ---------- hình ----------
     def _dims(self):
@@ -1346,14 +1419,27 @@ class Session:
 
     def _start_video(self, cpu=False):
         """(Bật lại) bộ quay + bộ nén. Chạy trong luồng nền; phiên đã đóng giữa chừng → dọn sạch thứ vừa tạo."""
-        if video_mode() == "scrcpy": return self._start_video_scrcpy()
+        if video_mode() == "scrcpy" or self.from_android: return self._start_video_scrcpy()
         if self.closed: raise Closed()
         if self.src is None or self.src.resized() or getattr(self.src, "closed", False):
             old = self.src
             if old: old.stop()
             src = make_source(self.name, int(self.phone.get("fps") or 30))
             self.src = src
-            src.open()
+            try:
+                src.open()
+            except CaptureBlocked as e:
+                src.stop()
+                if self.closed: raise Closed()
+                log(f"  {self.name}: {e} → lấy hình thẳng từ Android (scrcpy, {self.serial})")
+                self.from_android = True
+                try:
+                    return self._start_video_scrcpy()
+                except (Closed, Deny):
+                    raise
+                except Exception as e2:
+                    log(f"  {self.name}: lấy hình thẳng từ Android cũng lỗi: {e2!r}")
+                    raise Deny("OFFLINE", "Máy chủ chưa lấy được hình của máy này — thử mở lại sau ít phút hoặc báo hỗ trợ.")
             if self.closed: src.stop(); raise Closed()
         old_enc = self.enc
         ow, oh, fps, kbps = self._dims()

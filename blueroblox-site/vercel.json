@@ -53,6 +53,18 @@
       "source": "/download/BlueRobloxPC.zip",
       "destination": "https://github.com/lehien205px/blueroblox/releases/download/pc-latest/BlueRobloxPC.zip",
       "permanent": false
+    },
+    {
+      "source": "/:path((?!api/).*)",
+      "has": [{ "type": "host", "value": "blueroblox.shop" }],
+      "destination": "https://cloudblue.vn/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/:path((?!api/).*)",
+      "has": [{ "type": "host", "value": "www.blueroblox.shop" }],
+      "destination": "https://cloudblue.vn/:path*",
+      "permanent": true
     }
   ]
 }

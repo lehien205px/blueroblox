@@ -366,7 +366,7 @@ html[data-theme] .langsw button{padding:5px 9px;font-size:12.5px;gap:5px}
       <button id="z-out" title="Thu nhỏ (Ctrl −)" aria-label="Thu nhỏ">−</button><span id="z-val">100%</span><button id="z-in" title="Phóng to (Ctrl +)" aria-label="Phóng to">+</button><button id="z-fit" title="Vừa khung (Ctrl 0)">Vừa</button>
     </div>
     <a class="getapp" id="getapp" href="/download/blueroblox-cloud.apk" download hidden title="Tải app Android BlueRoblox Cloud"><svg class="ic sm" viewBox="0 0 24 24"><rect x="7" y="2.5" width="10" height="19" rx="2"/><path d="M12 8v6M9.5 11.5L12 14l2.5-2.5"/></svg><span class="gl">Tải app Android</span><span class="gs">Tải app</span></a>
-    <a class="adminlink" id="adminlink" href="https://phone.blueroblox.shop/" target="_blank" rel="noopener" hidden>Tất cả máy (admin)</a>
+    <a class="adminlink" id="adminlink" href="https://phone.cloudblue.vn/" target="_blank" rel="noopener" hidden>Tất cả máy (admin)</a>
     <span class="state" id="state"><i></i><span id="statetxt">Đang kết nối…</span></span>
   </div>
 </header>
@@ -526,17 +526,17 @@ const SRV = [
   [/^Đã đổi sang (.*)\. Dữ liệu vẫn giữ nguyên\./, "Switched to $1. Your data was kept."], [/^Không xác định được máy\./, "Unknown phone."],
   [/^Không khởi động lại được: (.*)/, "Could not restart: $1"], [/^Đang khởi động Android.*/, "Starting Android (1–3 min)…"],
   [/^Máy đã khởi động lại xong\./, "The phone has restarted."], [/^Máy đã khởi động, đang kết nối lại…/, "The phone is up, reconnecting…"],
-  [/^Trình điều khiển tạm thời không phản hồi\./, "The controller is not responding right now."], [/^Hãy mở máy từ trang blueroblox\.shop\./, "Please open the phone from blueroblox.shop."],
+  [/^Trình điều khiển tạm thời không phản hồi\./, "The controller is not responding right now."], [/^Hãy mở máy từ (trang blueroblox\.shop|app hoặc trang web)\./, "Please open the phone from the app or the website."],
   [/^Đang bảo trì\./, "Under maintenance."], [/^Không được phép\./, "Not allowed."], [/^Đây không phải máy của bạn\./, "This is not your phone."],
 ];
 const srv = m => { m = String(m ?? ""); if (LANG !== "en") return m; for (const [re, en] of SRV) if (re.test(m)) return m.replace(re, en); return m; };
 const CFG = { supabaseUrl: "https://nprftgodswlpzomcttal.supabase.co", supabaseAnonKey: "sb_publishable_qfNcnOMv70nq5LIlYXDJzg_UtdWHVze" };
 /* Đường truyền: ưu tiên "đường thẳng" về máy chủ (fast, ít trễ); không tới được thì tự dùng Cloudflare (phone). */
-const CF_PHONE = "https://phone.blueroblox.shop", FAST_PHONE = "https://fast.blueroblox.shop:8443";
+const CF_PHONE = "https://phone.cloudblue.vn", FAST_PHONE = "https://fast.cloudblue.vn:8443";
 let PHONE = CF_PHONE, API = PHONE + "/cpapi", ROUTE = "cf";
 function setRoute(r) { ROUTE = r; PHONE = r === "fast" ? FAST_PHONE : CF_PHONE; API = PHONE + "/cpapi"; }
 /* NHIỀU SERVER: mỗi máy nằm ở 1 server (phone.…, phone2.…) — lấy từ link của máy. Server chính vẫn dùng được đường thẳng ⚡ */
-function hostOf(p) { try { const u = new URL(p && p.stream_url || ""); if (/^https:$/.test(u.protocol) && /(^|\.)blueroblox\.shop$/.test(u.hostname)) return u.origin; } catch (e) {} return CF_PHONE; }
+function hostOf(p) { try { const u = new URL(p && p.stream_url || ""); if (/^https:$/.test(u.protocol) && /(^|\.)(cloudblue\.vn|blueroblox\.shop)$/.test(u.hostname)) return u.origin; } catch (e) {} return CF_PHONE; }
 function baseOf(p) { const h = hostOf(p); return h === CF_PHONE ? PHONE : h; }
 const HOSTS = new Set([CF_PHONE, FAST_PHONE]), SESS = new Set(), JOBB = {};
 async function ensureSession(p) {           // mở phiên (cookie) ở server của máy này trước khi xem hình

@@ -1317,7 +1317,7 @@ html .cpand button.off small{background:rgba(255,107,129,.16);color:var(--bad)}
 })();
 </script>
 <script>
-// Đã điền sẵn cho blueroblox.shop
+// Đã điền sẵn cho cloudblue.vn (trước đây blueroblox.shop)
 // (publishable key là khoá công khai, để ở đây an toàn. KHÔNG dán secret key vào file này.)
 window.BR_CONFIG = {
   supabaseUrl: "https://nprftgodswlpzomcttal.supabase.co",
@@ -2827,6 +2827,8 @@ const EN = {
 };
 const t = (vi, key) => (LANG === "en" && EN[key]) ? EN[key] : vi;
 const L = (vi, en) => LANG === "en" ? en : vi;
+/* Tên miền đang mở (cloudblue.vn…) — chữ hiển thị theo đúng tên miền, đổi tên miền không phải sửa lại */
+const SITE_HOST = /\.vercel\.app$|^localhost$|^[\d.]+$/.test(location.hostname) ? "cloudblue.vn" : location.hostname.replace(/^www\./, "");
 // ---- Bản tiếng Anh của sản phẩm: ưu tiên chữ admin nhập; chưa có thì tự dịch (lưu tạm trên máy khách) ----
 const TRC = (() => { try { return JSON.parse(localStorage.getItem("br_tr") || "{}"); } catch (e) { return {}; } })();
 const TRQ = new Set(); let trT = null;
@@ -4792,8 +4794,8 @@ $("sh-close") && ($("sh-close").onclick = () => show("cpsharedlg", false));
 $("sh-make") && ($("sh-make").onclick = () => busy($("sh-make"), async () => {
   const { data, error } = await sb.rpc("cp_share_create", { p_phone: shPhone.id, p_kind: "share", p_days: shDays || null });
   if (error) return toast(shErr(error), 1);
-  $("sh-new").innerHTML = shCodeBox(data.code, L("Gửi mã này cho người cần dùng. Họ đăng nhập <b>blueroblox.shop</b> → <b>ĐT đám mây</b> → nhập mã (hoặc trong app Android).",
-    "Send this code. They sign in at <b>blueroblox.shop</b> → <b>Cloud phones</b> → enter the code (or in the Android app)."));
+  $("sh-new").innerHTML = shCodeBox(data.code, L("Gửi mã này cho người cần dùng. Họ đăng nhập <b>" + SITE_HOST + "</b> → <b>ĐT đám mây</b> → nhập mã (hoặc trong app Android).",
+    "Send this code. They sign in at <b>" + SITE_HOST + "</b> → <b>Cloud phones</b> → enter the code (or in the Android app)."));
   $("sh-new").hidden = false; cpShareList();
 }));
 $("sh-transfer") && ($("sh-transfer").onclick = () => busy($("sh-transfer"), async () => {
@@ -5386,16 +5388,16 @@ document.addEventListener("click", e => { const b = e.target.closest("[data-cpcu
   const id = b.dataset.cpcust; if (!ADM.users.some(x => x.id === id) && CPA_U.has(id)) ADM.users.push(CPA_U.get(id)); openCust(id); });
 
 // ---- Admin: cài APK vào nhiều máy khách cùng lúc (qua cpapi trên máy chủ) ----
-const CPAPI = "https://phone.blueroblox.shop/cpapi";
+const CPAPI = "https://phone.cloudblue.vn/cpapi";
 let apkSrc = "file", apkTgt = "all", apkBusy = false;
 /* NHIỀU SERVER: mỗi máy nằm ở 1 server (phone.…, phone2.…). Server lấy từ link của máy / bảng cloud_nodes. */
-const CP_MAIN = "https://phone.blueroblox.shop";
-function cpHost(row) { try { const u = new URL(row && row.stream_url || ""); if (u.protocol === "https:" && /(^|\.)blueroblox\.shop$/.test(u.hostname)) return u.origin; } catch (e) {} return CP_MAIN; }
+const CP_MAIN = "https://phone.cloudblue.vn";
+function cpHost(row) { try { const u = new URL(row && row.stream_url || ""); if (u.protocol === "https:" && /(^|\.)(cloudblue\.vn|blueroblox\.shop)$/.test(u.hostname)) return u.origin; } catch (e) {} return CP_MAIN; }
 async function cpNodeHosts() {               // admin: danh sách server đang chạy → { tên server: link }
   const { data } = await sb.from("cloud_nodes").select("id,metrics,updated_at,enabled");
   const out = {};
   for (const n of data || []) { if (n.enabled === false || Date.now() - Date.parse(n.updated_at) > 5 * 60000) continue;
-    const b = n.metrics && n.metrics.base; out[n.id] = /^https:\/\/[\w.-]+\.blueroblox\.shop$/.test(b || "") ? b : CP_MAIN; }
+    const b = n.metrics && n.metrics.base; out[n.id] = /^https:\/\/[\w.-]+\.(cloudblue\.vn|blueroblox\.shop)$/.test(b || "") ? b : CP_MAIN; }
   if (!Object.keys(out).length) out.main = CP_MAIN;
   return out;
 }
@@ -5646,7 +5648,7 @@ $("an-later").onclick = appNewsClose;
 $("an-dl").onclick = () => setTimeout(appNewsClose, 300);
 $("appnews").onclick = e => { if (e.target.id === "appnews") appNewsClose(); };
 
-// ---- Mở từ app Android: blueroblox.shop/?topup=1 → mở luôn bảng nạp tiền (chưa đăng nhập thì mở đăng nhập trước) ----
+// ---- Mở từ app Android: cloudblue.vn/?topup=1 → mở luôn bảng nạp tiền (chưa đăng nhập thì mở đăng nhập trước) ----
 (function topupFromApp() {
   let want = false; try { want = new URLSearchParams(location.search).get("topup") === "1"; } catch (e) {}
   if (!want) return;

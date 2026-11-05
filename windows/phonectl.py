@@ -997,11 +997,20 @@ def _memu_front_pids(name):
             k.CloseHandle(hp)
         return out
     except Exception: return set()
+def _vm_up(idx):
+    """Máy ảo MEmu đã CHẠY (tiến trình máy ảo đã lên — Android có thể vẫn đang khởi động, màn đen vài chục giây là bình thường)."""
+    r = memuc("isvmrunning", "-i", idx, timeout=30)
+    o = ((r.stdout or "") + (r.stderr or "")).strip().lower()
+    if "not running" in o: return False
+    if "running" in o: return True
+    x = vms().get(int(idx)); return bool(x and x["running"])          # bản MEmu không có lệnh isvmrunning
 def _try_start(idx, name):
-    """1 lần bật máy MEmu: (đã chạy thật?, kết quả lệnh, lý do lỗi). Hộp thoại lỗi hiện ra (kể cả SAU khi lệnh bật trả về) là đóng ngay."""
+    """1 lần bật máy MEmu: (đã chạy?, kết quả lệnh, lý do lỗi).
+       Chỉ coi là LỖI khi MEmu hiện hộp thoại lỗi (VD "memory is low") hoặc sau 90 giây máy ảo vẫn KHÔNG chạy.
+       Máy đang khởi động (màn đen) KHÔNG bao giờ bị tắt."""
     import threading
     hit, stop = [], []
-    def watch():
+    def watch():                                                      # suốt lúc bật + chờ: hộp thoại lỗi hiện ra là đóng ngay
         while not stop:
             if _close_memu_errors(): hit.append(1)
             time.sleep(2)
@@ -1011,19 +1020,21 @@ def _try_start(idx, name):
         r = memuc("start", "-i", idx, timeout=150)
         if not _start_failed(r):
             t0 = time.time()
-            while time.time() - t0 < 60 and not hit:             # chờ máy chạy thật (đã giữ xong RAM)
-                x = vms().get(int(idx))
-                if x and x["running"]: up = True; break
+            while time.time() - t0 < 90 and not hit:
+                if _vm_up(idx): up = True; break
                 time.sleep(3)
             if up:
-                time.sleep(START_GAP)                             # MEmu có thể báo lỗi vài giây sau → kiểm lại rồi mới cho máy khác bật
-                x = vms().get(int(idx)); up = bool(x and x["running"]) and not hit
+                time.sleep(START_GAP)                                 # MEmu có thể báo lỗi vài giây sau → chờ rồi mới cho máy khác bật
+                up = not hit
     finally: stop.append(1); th.join(5)
     if up: return True, r, ""
-    why = "MEmu báo thiếu RAM (memory is low)" if hit else ("lệnh bật lỗi" if _start_failed(r) else "máy không lên sau 60 giây")
-    for pid in _memu_front_pids(name):                            # cửa sổ MEmu của máy này (đang giữ hộp thoại lỗi) → đóng
-        subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], capture_output=True, creationflags=NOWIN)
-    memuc("stop", "-i", idx, timeout=60)
+    why = "MEmu báo thiếu RAM (memory is low)" if hit else ("lệnh bật lỗi" if _start_failed(r) else "máy ảo không chạy sau 90 giây")
+    if hit or not _vm_up(idx):                                        # chỉ dọn khi máy THẬT SỰ không chạy / có hộp thoại lỗi
+        for pid in _memu_front_pids(name):                            # cửa sổ MEmu của máy này (đang giữ hộp thoại lỗi) → đóng
+            subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], capture_output=True, creationflags=NOWIN)
+        memuc("stop", "-i", idx, timeout=60)
+    else:
+        return True, r, ""                                            # máy vẫn chạy (khởi động chậm) → coi là bật được
     return False, subprocess.CompletedProcess(getattr(r, "args", []), 1, (getattr(r, "stdout", "") or "") + f" | {why}", getattr(r, "stderr", "") or ""), why
 def memu_start(idx):
     """Bật 1 máy. MEmu: MỖI LẦN CHỈ BẬT 1 MÁY (khoá "vmstart", mọi chương trình dùng chung) — 2 máy bật cùng lúc MEmu hay báo

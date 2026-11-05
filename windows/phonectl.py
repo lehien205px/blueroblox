@@ -345,11 +345,20 @@ def _mumu(a, timeout):
         return _ok("\n".join(f"{i},{x['name']},0,{1 if x['running'] else 0},{x['pid']}" for i, x in sorted(L.items()) if x["running"] or not run_only))
     if c == "create":                                     # create <bản android>: có máy mẫu tpl_a<bản> → nhân bản, không thì tạo mới
         ver = a[1] if len(a) > 1 else DEF_ANDROID
-        before = set(_mumu_list()); tpl = next((i for i, x in _mumu_list().items() if x["name"] == tpl_name(ver)), None)
+        L0 = _mumu_list()
+        if not L0:                                        # không đọc được danh sách → KHÔNG tạo (đọc sau sẽ tưởng mọi máy có sẵn là máy mới → nhận nhầm máy của chủ)
+            return subprocess.CompletedProcess([], 1, "", "không đọc được danh sách máy MuMu — chưa tạo máy")
+        before = set(L0); tpl = next((i for i, x in L0.items() if x["name"] == tpl_name(ver)), None)
         r = _mumurun(["clone", "-v", tpl], timeout) if tpl is not None else _mumurun(["create"], timeout)
-        new = sorted(set(_mumu_list()) - before)
-        if not new: return subprocess.CompletedProcess([], 1, r.stdout, (r.stderr or "") + " MuMu không tạo được máy")
-        return _ok(f"index: {new[-1]}")
+        new = []
+        for _ in range(40):                               # máy mới có thể hiện trễ vài giây
+            L1 = _mumu_list()
+            new = sorted(set(L1) - before) if L1 else []
+            if new: break
+            time.sleep(3)
+        if len(new) != 1:                                 # 0 hoặc nhiều hơn 1 máy "mới" → không chắc máy nào là của mình → không dùng
+            return subprocess.CompletedProcess([], 1, r.stdout, (r.stderr or "") + f" MuMu không tạo được đúng 1 máy (thấy {len(new)} máy mới)")
+        return _ok(f"index: {new[0]}")
     if c == "rename":
         r = _mumurun(["rename", "-v", ix(), "-n", a[-1]], timeout)
         if (_mumu_list().get(int(ix())) or {}).get("name") != a[-1]: r = _mumurun(["rename", "--vmindex", ix(), "--name", a[-1]], timeout)
@@ -368,6 +377,7 @@ def _mumu(a, timeout):
         return _ok("stop ok")
     if c == "stopall": return _mumurun(["control", "-v", "all", "shutdown"], timeout)
     if c == "remove":
+        if int(ix()) not in _mumu_list(): return subprocess.CompletedProcess([], 1, "", f"MuMu không có máy #{ix()} — không xoá")
         r = _mumurun(["delete", "-v", ix()], timeout)
         return _ok("remove ok") if int(ix()) not in _mumu_list() else subprocess.CompletedProcess([], 1, r.stdout, "remove failed")
     if c == "setconfigex":
@@ -1291,6 +1301,10 @@ def cmd_heal(a):
     _hs(h)
     if a.orphans: _cleanup(v, quiet=True)
 
+def _ours(nm):
+    """Máy do CloudBlue tạo? MuMu hay cài chung máy có sẵn máy riêng của chủ máy → chỉ đụng máy cp_… / spare_….
+       LDPlayer / MEmu: máy chủ riêng → như cũ (mọi máy)."""
+    return EMU != "mumu" or str(nm).startswith(("cp_", "spare_"))
 def _cleanup(v=None, quiet=False, all_=False):
     """Xoá máy trong MEmu KHÔNG thuộc danh sách BlueRoblox (giả lập cũ / thừa / tạo dở). Giữ máy mẫu (MEMU_TEMPLATE)."""
     if quiet and _creating_now(): return                 # đang tạo máy khách → để lần sau
@@ -1301,6 +1315,7 @@ def _cleanup(v=None, quiet=False, all_=False):
         if nm == tpl or (nm in mine and not all_) or (nm.startswith("spare_") and not all_): continue
         if nm.startswith("tpl_") or nm in {tpl_name(x) for x in ANDROIDS}: continue      # máy MẪU từng bản Android — không bao giờ xoá
         if EMU in ("ld", "mumu") and i == 0: continue        # LDPlayer / MuMu: giữ máy gốc số 0 (giả lập cần)
+        if not _ours(nm): continue                            # máy riêng của chủ máy (MuMu dùng chung máy) — không bao giờ đụng
         if quiet and not nm.startswith("cp_"): continue     # tự động: chỉ dọn máy do BlueRoblox tạo (cp_…)
         if quiet and (_creating_now() or nm in {p["name"] for p in load()["phones"]}): continue   # kiểm lại ngay trước khi xoá
         print(f"XOA_THUA {nm} (MEmu #{i})", flush=True)
@@ -1399,7 +1414,9 @@ def cmd_pool(a):
         if recent: return
         print(f"DUNG_SAN {nm}: tạo + khởi động + cài sẵn…", flush=True)
         with _Lock("memu", wait=5):                     # không chờ: đang có việc MEmu khác (máy khách) → để lần sau
-            before = set(vms())
+            v0 = vms()
+            if not v0: print("LỖI dựng máy sẵn: không đọc được danh sách máy — để lần sau"); return    # danh sách rỗng → mọi máy sẽ bị coi là "mới" → không làm
+            before = set(v0)
             d = _pl(); d.setdefault("building", []).append(nm); _ps(d)      # ghi trước: chương trình bị ngắt giữa chừng → lần sau tự xoá máy dở
             r, idx = create_vm(DEF_ANDROID, nm)          # bản Android mặc định của máy chủ
             v2 = vms(); new = sorted(set(v2) - before)
@@ -1408,7 +1425,7 @@ def cmd_pool(a):
                 if (vms().get(ix) or {}).get("running"): memuc("stop", "-i", ix, timeout=120); time.sleep(3)
                 memuc("remove", "-i", ix, timeout=180)
             if idx is None:
-                for ix in reversed(new):
+                for ix in reversed(new if (EMU != "mumu" or len(new) == 1) else []):     # MuMu: chủ máy có thể vừa tạo máy riêng → chỉ xoá khi chắc đúng 1 máy dở
                     if re.match(r"^(MEmu(_?\d+)?|new_\d+|MuMu.*)$", v2[ix]["name"]) and ix != 0: _drop(ix)
                 print("LỖI dựng máy sẵn:", ((r.stdout or "") + (r.stderr or "")).strip()[-200:]); return
             for _t in range(4):
@@ -1456,6 +1473,7 @@ def _roles(v):
         elif first.get(nm) == i: out[i] = "máy mẫu"
         elif nm in spares: out[i] = "máy dựng sẵn"
         elif i == 0: out[i] = "máy gốc"
+        elif not _ours(nm): out[i] = "máy riêng (không đụng)"
         else: out[i] = None
     return out
 def cmd_strays(a):

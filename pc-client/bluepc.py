@@ -707,15 +707,15 @@ def fmt_left(iso):
 
 
 # ================================================================ MUA MÁY · GIA HẠN · NẠP TIỀN (giống hệt web: cùng RPC Supabase, cùng giá)
-CP_RAM = [1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 16, 20, 24, 32, 48, 64, 96, 128]
-CP_CPU = [1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 16, 20, 24, 32, 40, 48, 64, 72]
+CP_RAM = [1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 16]
+CP_CPU = [1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 16]
 CP_DAYS, CP_FPS, CP_QTY = [7, 15, 30, 60], [30, 60], [1, 2, 5, 10]
 CP_RES = [("540x960", "Nhẹ máy"), ("720x1280", "HD"), ("720x1600", "HD+ dài"), ("1080x1920", "Full HD")]
-CP_HARD = {"ram": 256, "cpu": 128, "fps": 60}                # trần tuyệt đối; trần THẬT mỗi máy theo bản Android ở AND_LIM / bảng giá
-AND_LIM = {"9": (8, 8), "12": (128, 72), "7": (16, 16)}        # (RAM GB, nhân) tối đa 1 máy: LDPlayer 9 · MuMu 12 · MuMu 7 (bảng giá android_limits ghi đè)
-CP_DEF = {"price_ram_gb_day": 2500, "price_cpu_day": 2000, "min_ram": 1, "max_ram": 16, "min_cpu": 1, "max_cpu": 8,
+CP_HARD = {"ram": 16, "cpu": 16, "fps": 60}                  # trần tuyệt đối 16GB · 16 nhân; trần THẬT mỗi máy theo bản Android ở AND_LIM / bảng giá
+AND_LIM = {"9": (8, 8), "12": (16, 16), "7": (16, 16)}         # (RAM GB, nhân) tối đa 1 máy: Android 9 · 12 · 7 (bảng giá android_limits ghi đè)
+CP_DEF = {"price_ram_gb_day": 2500, "price_cpu_day": 2000, "min_ram": 1, "max_ram": 16, "min_cpu": 1, "max_cpu": 16,
           "min_days": 1, "max_days": 90, "min_fps": 10, "max_fps": 120}
-AND_HINT = {"9": "LDPlayer 9 · ổn định", "12": "MuMu · mới nhất", "7": "MuMu · nhẹ"}
+AND_HINT = {"9": "Ổn định · phổ biến", "12": "Mới nhất", "7": "Nhẹ"}
 RENEW_DAYS = [1, 3, 7, 15, 30, 60, 90]
 TOP_AMTS = [50000, 100000, 200000, 500000, 1000000]
 BANKS = {"970422": "MB Bank", "970436": "Vietcombank", "970407": "Techcombank", "970416": "ACB", "970432": "VPBank", "970418": "BIDV",
@@ -1019,7 +1019,7 @@ class OrderDlg(Dlg):
                                why=lambda v: and_why(self.st, v, *self.fit(v)) if self.prof.get("role") != "admin" else ""))
         self.rows[-1].frame.pack(fill="x")
         self.and_note = self.label(f, "", self.app.f_s, DIM); self.and_note.pack(fill="x")
-        ar, ac = and_lim(p, s["android"])                                   # trần theo bản Android đang chọn (LDPlayer 9: 8 · MuMu 12: 128GB / 72 nhân)
+        ar, ac = and_lim(p, s["android"])                                   # trần theo bản Android đang chọn (Android 9: 8GB · 8 nhân · Android 12 / 7: 16GB · 16 nhân)
         mr = min(ar, lo("free_max_ram") or 999) if s["free"] else ar
         mc = min(ac, lo("free_max_cpu") or 999) if s["free"] else ac
         f = self.section("RAM", f"{lo('min_ram')}–{mr} GB")
@@ -1356,8 +1356,8 @@ class UpgradeDlg(Dlg):
         mr, mc = and_lim(self.pr, p.get("android") or "9")                 # trần theo bản Android của máy
         self.label(self.body, p.get("name") or "Máy", self.app.f_h2).pack(fill="x", padx=18, pady=(16, 0))
         self.label(self.body, f"Hiện tại {self.r0}GB RAM · {self.c0} nhân · {fmt_left(p.get('expires_at'))}", self.app.f_t, DIM, wraplength=500).pack(fill="x", padx=18)
-        rams = sorted({v for v in (2, 3, 4, 6, 8, 10, 12, 16, 24, 32, 48, 64, 96, 128, mr) if self.r0 < v <= mr})
-        cpus = sorted({v for v in (2, 3, 4, 6, 8, 10, 12, 16, 24, 32, 48, 64, 72, mc) if self.c0 < v <= mc})
+        rams = sorted({v for v in (2, 3, 4, 6, 8, 10, 12, 16, mr) if self.r0 < v <= mr})
+        cpus = sorted({v for v in (2, 3, 4, 6, 8, 10, 12, 16, mc) if self.c0 < v <= mc})
         f = self.section("RAM")
         self.cr = Chips(self.app, f, [(self.r0, f"Giữ {self.r0}GB")] + [(v, f"{v}GB") for v in rams], lambda: self.nr, lambda v: setattr(self, "nr", v), self.upd, wrap=7)
         self.cr.frame.pack(fill="x")

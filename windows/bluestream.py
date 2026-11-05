@@ -4,6 +4,8 @@
 #
 #  Đường hình:  cửa sổ giả lập trên Windows (quay bằng Windows Graphics Capture, chạy ngầm vẫn quay được)
 #               → nén bằng card NVIDIA (NVENC; card hết phiên → CPU x264) → mỗi khung 1 gói → app giải mã bằng phần cứng
+#               Windows không quay được cửa sổ (Windows 10 trước 1903, VD 1511) → hình lấy THẲNG từ Android: scrcpy-server 2.4
+#               (video=true) mã hoá H.264 ngay trong máy → không cần quay cửa sổ / ffmpeg (CAPTURE=scrcpy | gdi | wgc để ép)
 #  Đường chạm:  app → máy chủ → scrcpy-server 2.4 (chỉ điều khiển, không phát hình) chạy trong máy Android
 #  Kết nối:     TRỰC TIẾP  TLS cổng STREAM_PORT (8189, modem phải mở cổng TCP về máy này)   ← nhanh nhất
 #               DỰ PHÒNG   WebSocket 127.0.0.1:STREAM_WS_PORT (8020) qua đường hầm Cloudflare (STREAM_WS=wss://…)
@@ -312,7 +314,7 @@ def wgc_ok():
                 _WGC["ok"] = True
             except Exception as e:
                 _WGC.update(ok=False, why=repr(e)[:160])
-        if not _WGC["ok"]: log(f"⚠ quay hình bằng PrintWindow (Windows này không dùng được Windows Graphics Capture: {_WGC['why']})")
+        if not _WGC["ok"]: log(f"⚠ Windows này không dùng được Windows Graphics Capture ({_WGC['why']})")
     return _WGC["ok"]
 
 if WIN:
@@ -426,6 +428,21 @@ class GdiSource:
     def stop(self):
         self.stopping = True
         with self.cond: self.cond.notify_all()
+
+
+_VMODE = {"v": None}
+def video_mode():
+    """Cách lấy hình: wgc (Windows Graphics Capture, Windows 10 1903+) · scrcpy (lấy THẲNG từ Android) · gdi (PrintWindow) · fake (chạy thử).
+       Mặc định: wgc nếu Windows có, không thì scrcpy (PrintWindow chỉ ra màn đen với MEmu). Ép: CAPTURE=scrcpy | gdi | wgc trong cloudphone.conf."""
+    if _VMODE["v"] is None:
+        c = (C.get("CAPTURE") or "").strip().lower()
+        if SELFTEST or not WIN: v = "scrcpy" if c == "scrcpy" else "fake"
+        elif c in ("scrcpy", "gdi"): v = c
+        else: v = "wgc" if wgc_ok() else "scrcpy"
+        _VMODE["v"] = v
+        log("cách lấy hình: " + {"wgc": "quay cửa sổ giả lập (Windows Graphics Capture)", "scrcpy": "lấy thẳng từ Android (scrcpy-server mã hoá H.264 trong máy)",
+                                  "gdi": "quay cửa sổ bằng PrintWindow", "fake": "hình giả (chạy thử)"}[v])
+    return _VMODE["v"]
 
 
 def make_source(name, fps=60):
@@ -665,6 +682,211 @@ def device_size(serial):
     return size
 
 
+def adb_connect(serial):
+    """Nối adb tới máy (giả lập mở adb TCP 127.0.0.1:cổng). Chưa nối thì adb báo "device … not found"."""
+    if ":" not in serial: return
+    try: subprocess.run([ADB, "connect", serial], capture_output=True, timeout=8, creationflags=NOWIN)
+    except Exception: pass
+
+
+def push_jar(serial):
+    """Chép scrcpy-server vào máy (đã có đúng bản thì thôi)."""
+    code, out, _ = adb(serial, "shell", "ls", "-l", JAR_DEV, timeout=10)
+    if str(os.path.getsize(JAR)) not in out:
+        code, out, err = adb(serial, "push", JAR, JAR_DEV, timeout=60)
+        if code != 0: raise RuntimeError("push: " + (err or out)[-200:])
+
+
+def _recv_exact(s, n):
+    b = bytearray()
+    while len(b) < n:
+        x = s.recv(n - len(b))
+        if not x: raise EOFError
+        b += x
+    return bytes(b)
+
+
+class _Bits:
+    def __init__(self, b): self.b, self.i = b, 0
+    def u(self, n):
+        v = 0
+        for _ in range(n):
+            v = (v << 1) | ((self.b[self.i >> 3] >> (7 - (self.i & 7))) & 1); self.i += 1
+        return v
+    def ue(self):
+        z = 0
+        while self.u(1) == 0:
+            z += 1
+            if z > 31: raise ValueError("ue")
+        return (1 << z) - 1 + (self.u(z) if z else 0)
+    def se(self):
+        k = self.ue(); return (k + 1) // 2 if k & 1 else -(k // 2)
+
+
+def _sps_dims(cfg):
+    """(rộng, cao) của hình đọc từ SPS H.264 trong gói cấu hình Annex-B. Không đọc được → None."""
+    try:
+        sps = next((n.rstrip(b"\x00") for n in re.split(b"\x00\x00\x01", cfg) if n and (n[0] & 0x1F) == 7), None)
+        if not sps: return None
+        rb = bytearray(); z = 0
+        for x in sps[1:]:                                    # bỏ byte chống giả mã bắt đầu (00 00 03)
+            if z >= 2 and x == 3: z = 0; continue
+            rb.append(x); z = z + 1 if x == 0 else 0
+        r = _Bits(bytes(rb)); prof = r.u(8); r.u(16); r.ue(); cf = 1
+        if prof in (100, 110, 122, 244, 44, 83, 86, 118, 128, 138, 139, 134, 135):
+            cf = r.ue()
+            if cf == 3: r.u(1)
+            r.ue(); r.ue(); r.u(1)
+            if r.u(1):
+                for k in range(8 if cf != 3 else 12):
+                    if r.u(1):
+                        last = nxt = 8
+                        for _ in range(16 if k < 6 else 64):
+                            if nxt: nxt = (last + r.se() + 256) % 256
+                            last = nxt or last
+        r.ue(); t = r.ue()
+        if t == 0: r.ue()
+        elif t == 1:
+            r.u(1); r.se(); r.se()
+            for _ in range(r.ue()): r.se()
+        r.ue(); r.u(1)
+        wm, hm = r.ue() + 1, r.ue() + 1; fmo = r.u(1)
+        if not fmo: r.u(1)
+        r.u(1)
+        w, h = wm * 16, (2 - fmo) * hm * 16
+        if r.u(1):
+            cl, cr, ct, cb = r.ue(), r.ue(), r.ue(), r.ue()
+            cx = 1 if cf in (0, 3) else 2; cy = (2 if cf == 1 else 1) * (2 - fmo)
+            w -= (cl + cr) * cx; h -= (ct + cb) * cy
+        return (w, h) if w > 0 and h > 0 else None
+    except Exception:
+        return None
+
+
+class ScrcpySource:
+    """Nguồn hình "ảo" khi lấy hình thẳng từ Android: không quay cửa sổ, chỉ giữ kích thước màn hình máy (wm size)."""
+    def __init__(self, serial):
+        self.serial = serial; self.cw = self.ch = 0; self.closed = False; self.stopping = False
+
+    def open(self):
+        adb_connect(self.serial)
+        sz = device_size(self.serial)
+        if not sz:
+            time.sleep(1); adb_connect(self.serial); sz = device_size(self.serial)
+        self.cw, self.ch = sz or (720, 1280)
+        return self.cw, self.ch
+
+    def resized(self): return False
+    def stop(self): self.stopping = True
+
+
+class ScrcpyVideo:
+    """Hình lấy THẲNG từ Android: scrcpy-server 2.4 (video=true, control=false) mã hoá H.264 ngay trong máy → từng khung Annex-B → on_au.
+       Dùng khi Windows không quay được cửa sổ giả lập (Windows 10 trước 1903: PrintWindow chỉ ra màn ĐEN với MEmu).
+       Cùng giao diện với Encoder (start / stop / proc / enc / failed_early). Khung khoá mỗi ~1 giây; máy xoay → on_size(rộng, cao)."""
+    def __init__(self, serial, max_size, fps, kbps, on_au, on_size=None):
+        self.serial, self.max_size, self.fps, self.kbps, self.on_au, self.on_size = serial, int(max_size), int(fps), int(kbps), on_au, on_size
+        self.enc = "scrcpy"; self.proc = None; self.sock = None; self.fport = None; self.stopped = False
+        self.lock = threading.Lock(); self.w = self.h = 0; self.frames_in = 0; self.started = 0.0
+
+    def start(self):
+        """Bật scrcpy-server + nối socket hình → (rộng, cao) THẬT của hình. Lỗi → RuntimeError."""
+        self.started = time.time()
+        adb_connect(self.serial)
+        if not ensure_jar(): raise RuntimeError("thiếu scrcpy-server")
+        push_jar(self.serial)
+        scid = random.randint(1, 0x7FFFFFFF)
+        cmd = (f"CLASSPATH={JAR_DEV} app_process / com.genymobile.scrcpy.Server 2.4 scid={scid:08x} log_level=warn "
+               "video=true audio=false control=false tunnel_forward=true send_device_meta=false send_dummy_byte=true "
+               "send_codec_meta=true send_frame_meta=true cleanup=false power_on=false video_codec=h264 "
+               f"max_size={self.max_size} max_fps={self.fps} video_bit_rate={self.kbps * 1000} video_codec_options=i-frame-interval=1")
+        with self.lock:
+            if self.stopped: raise RuntimeError("đã dừng")
+            self.proc = subprocess.Popen([ADB, "-s", self.serial, "shell", cmd], stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                         stdin=subprocess.DEVNULL, creationflags=NOWIN)
+        threading.Thread(target=self._srvlog, args=(self.proc,), daemon=True).start()
+        code, out, err = adb(self.serial, "forward", "tcp:0", f"localabstract:scrcpy_{scid:08x}", timeout=10)
+        with self.lock: self.fport = int(out.strip()) if out.strip().isdigit() else None
+        if not self.fport: self._kill(); raise RuntimeError("forward: " + (err or out)[-200:])
+        t0 = time.time(); sock = None
+        while time.time() - t0 < 10 and not self.stopped:
+            if self.proc.poll() is not None: break               # máy chủ scrcpy thoát ngay (VD máy không có bộ mã hoá) → xem nhật ký [scrcpy …]
+            try:
+                s = socket.create_connection(("127.0.0.1", self.fport), timeout=2); s.settimeout(3)
+                if s.recv(1) == b"\x00": sock = s; break
+                s.close()
+            except OSError: pass
+            time.sleep(0.15)
+        if not sock: self._kill(); raise RuntimeError("scrcpy (hình) không nối được")
+        return self.attach(sock)
+
+    def attach(self, sock):
+        """Đọc thông tin hình (mã H.264 + rộng × cao) rồi chạy luồng đọc khung → (rộng, cao)."""
+        try:
+            sock.settimeout(10)
+            codec, w, h = struct.unpack(">III", _recv_exact(sock, 12))
+            if codec != 0x68323634: raise RuntimeError(f"scrcpy gửi mã hình lạ {codec:#x}")
+            sock.settimeout(None)
+            try: sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 4 * 1024 * 1024)
+            except OSError: pass
+        except Exception:
+            try: sock.close()
+            except Exception: pass
+            self._kill(); raise
+        with self.lock: self.sock = sock; self.w, self.h = w, h
+        threading.Thread(target=self._reader, args=(sock,), daemon=True).start()
+        return w, h
+
+    def _srvlog(self, p):
+        try:
+            for ln in iter(p.stdout.readline, b""):
+                t = ln.decode("utf-8", "replace").strip()
+                if t and not self.stopped: log(f"  [scrcpy hình {self.serial}] {t[:200]}")
+        except Exception: pass
+
+    def _reader(self, s):
+        cfg = b""
+        try:
+            while not self.stopped:
+                pf, n = struct.unpack(">QI", _recv_exact(s, 12))
+                data = _recv_exact(s, n)
+                if pf & (1 << 63):                                   # gói cấu hình (SPS/PPS) → ghép trước mỗi khung khoá
+                    cfg = data
+                    d = _sps_dims(cfg)
+                    if d and d != (self.w, self.h):                  # máy xoay / đổi cỡ → báo app cỡ mới TRƯỚC khung khoá mới
+                        self.w, self.h = d
+                        if self.on_size: self.on_size(*d)
+                    continue
+                key = bool(pf & (1 << 62)); self.frames_in += 1
+                self.on_au(cfg + data if key and cfg else data, key, key and bool(cfg), int(time.monotonic() * 1e6))
+        except Exception:
+            pass
+        if not self.stopped:
+            log(f"  [hình {self.serial}] scrcpy ngừng gửi hình → bật lại")
+            self._kill()                                             # tiến trình dừng → phiên xem tự bật lại hình
+
+    def _kill(self):
+        with self.lock:
+            s, p, fp = self.sock, self.proc, self.fport
+            self.sock = None; self.fport = None
+        try:
+            if s: s.shutdown(socket.SHUT_RDWR)
+        except Exception: pass
+        try:
+            if s: s.close()
+        except Exception: pass
+        try:
+            if p and p.poll() is None: p.kill()
+        except Exception: pass
+        if fp: threading.Thread(target=adb, args=(self.serial, "forward", "--remove", f"tcp:{fp}"), daemon=True).start()
+
+    def stop(self):
+        with self.lock: self.stopped = True
+        self._kill()
+
+    def failed_early(self): return False
+
+
 class Control:
     """Chạm / phím / chữ → máy Android qua scrcpy-server 2.4 (chỉ điều khiển). Mọi lệnh đi qua 1 hàng đợi + 1 luồng gửi
        (không bao giờ chặn vòng chính), giữ đúng thứ tự; chữ có dấu dán qua bộ nhớ copy và chờ máy dán xong rồi mới gửi tiếp."""
@@ -681,6 +903,7 @@ class Control:
         try:
             if SELFTEST:
                 self.mode = "none"; self.ready.set(); return
+            adb_connect(self.serial)
             self.nat = device_size(self.serial)
             if self.dead: return self._cleanup()
             if not ensure_jar(): raise RuntimeError("thiếu scrcpy-server")
@@ -1084,8 +1307,39 @@ class Session:
         if self.aq.qsize() > 240: self.drop += 1; self.wait_key = True; return     # app không đọc nữa → đừng tích hình vô hạn
         self.aq.put_nowait(it)
 
+    def _start_video_scrcpy(self):
+        """Hình lấy thẳng từ Android (scrcpy). Tắt bộ cũ TRƯỚC (máy ảo chỉ nên chạy 1 bộ mã hoá) rồi bật bộ mới → (rộng, cao) thật."""
+        if self.closed: raise Closed()
+        if not isinstance(self.src, ScrcpySource):
+            if self.src: self.src.stop()
+            src = ScrcpySource(self.serial); src.open(); self.src = src
+            if self.closed: raise Closed()
+        ow, oh, fps, kbps = self._dims()
+        self.gen += 1; g = self.gen
+        old_enc = self.enc
+        enc = ScrcpyVideo(self.serial, max(ow, oh), fps, kbps, lambda d, k, c, p: self._on_au(g, d, k, c, p), lambda w, h: self._on_vsize(g, w, h))
+        self.enc = enc
+        if old_enc: old_enc.stop()
+        if self.closed: enc.stop(); raise Closed()
+        w, h = enc.start()
+        if self.closed: enc.stop(); raise Closed()
+        self.vw, self.vh, self.fps, self.kbps = w, h, fps, kbps
+        if self.ctl: self.ctl.set_view(w, h)
+        return w, h
+
+    def _on_vsize(self, gen, w, h):                            # luồng đọc hình (scrcpy) → vòng chính: máy xoay → cỡ hình mới
+        def apply():
+            if gen != self.gen or self.closed or (w, h) == (self.vw, self.vh): return
+            self.vw, self.vh = w, h
+            if self.ctl: self.ctl.set_view(w, h)
+            self.wait_key = True
+            self.link.send_nowait(S_SIZE, json.dumps({"w": w, "h": h}).encode())
+        try: self.loop.call_soon_threadsafe(apply)
+        except RuntimeError: pass
+
     def _start_video(self, cpu=False):
         """(Bật lại) bộ quay + bộ nén. Chạy trong luồng nền; phiên đã đóng giữa chừng → dọn sạch thứ vừa tạo."""
+        if video_mode() == "scrcpy": return self._start_video_scrcpy()
         if self.closed: raise Closed()
         if self.src is None or self.src.resized() or getattr(self.src, "closed", False):
             old = self.src
@@ -1486,7 +1740,7 @@ async def main():
             subprocess.run([sys.executable, "-m", "pip", "install", "--quiet", "--disable-pip-version-check", "windows-capture", "numpy"], creationflags=NOWIN)
         except ImportError:
             pass                                         # Windows 10 trước bản 1903: không có Windows Graphics Capture → quay bằng PrintWindow
-        wgc_ok()                                         # ghi nhật ký cách quay hình đang dùng
+        video_mode()                                     # ghi nhật ký cách lấy hình đang dùng (wgc / scrcpy / gdi)
         await asyncio.to_thread(ensure_ffmpeg)
         threading.Thread(target=ensure_jar, daemon=True).start()
     fp = ensure_cert()

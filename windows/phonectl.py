@@ -301,6 +301,7 @@ def _mumu_info(fresh=True):
             if ix.isdigit(): out[int(ix)] = v
     _MUMU_INFO.update(t=time.time(), v=out)
     return out
+def _mumu_major(v): return str((v or {}).get("android_version") or "").split(".")[0].strip()     # "15.0" → "15"
 def _mumu_running(v): return bool(v.get("is_process_started") or v.get("is_android_started") or str(v.get("player_state", "")).startswith("start"))
 def _mumu_list(): return {i: {"name": str(v.get("name", "")), "running": _mumu_running(v), "pid": v.get("pid", -1)} for i, v in _mumu_info().items()}
 _MUMU_KEYS = {}
@@ -358,6 +359,10 @@ def _mumu(a, timeout):
             time.sleep(3)
         if len(new) != 1:                                 # 0 hoặc nhiều hơn 1 máy "mới" → không chắc máy nào là của mình → không dùng
             return subprocess.CompletedProcess([], 1, r.stdout, (r.stderr or "") + f" MuMu không tạo được đúng 1 máy (thấy {len(new)} máy mới)")
+        got = _mumu_major(_mumu_info().get(new[0]))      # MuMu 6 tạo mới mặc định Android 15 → khách mua bản khác phải nhân bản máy mẫu đúng bản
+        if got and got != str(ver):
+            _mumurun(["delete", "-v", new[0]], timeout)  # đúng 1 máy vừa tạo (đã kiểm ở trên) → xoá, không giao nhầm bản cho khách
+            return subprocess.CompletedProcess([], 1, r.stdout, f"MuMu tạo ra Android {got}, không phải Android {ver} — cần máy mẫu {tpl_name(ver)} (Android {ver})")
         return _ok(f"index: {new[0]}")
     if c == "rename":
         r = _mumurun(["rename", "-v", ix(), "-n", a[-1]], timeout)
@@ -1566,9 +1571,10 @@ def cmd_engine(a):
     if EMU in ("memu", "mumu") and MEMU:
         try:
             names = {x["name"] for x in vms().values()}
-            ok = [v for v in ANDROIDS if tpl_name(v) in names or (EMU == "memu" and v in MEMU_CODES) or (EMU == "mumu" and v == DEF_ANDROID)]
+            mdef = _mumu_major(_mumu_info().get(0)) if EMU == "mumu" else ""      # MuMu: bản Android của máy gốc #0 = bản MuMu tạo mới mặc định
+            ok = [v for v in ANDROIDS if tpl_name(v) in names or (EMU == "memu" and v in MEMU_CODES) or (EMU == "mumu" and v == mdef)]
             miss = [v for v in ANDROIDS if v not in ok]
-            if ok: av = ok
+            if ok or names: av = ok                       # đọc được danh sách → chỉ báo bản tạo được thật (có thể rỗng = chưa bán gì)
         except Exception: pass
     print(json.dumps({"emu": EMU, "androids": av, "default": DEF_ANDROID, "found": bool(MEMU), "missing_tpl": [tpl_name(v) for v in miss]}))
 

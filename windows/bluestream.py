@@ -259,6 +259,26 @@ if WIN:
     def rect_of(h):
         r = wt.RECT(); U32.GetWindowRect(h, ctypes.byref(r)); return r.left, r.top, r.right, r.bottom
 
+    # Chỗ đỗ cửa sổ máy khách chạy ngầm — GIỐNG HỆT park_xy trong phonectl.py (phonectl đỗ, bluestream quay).
+    # KHÔNG dùng (-32000, -32000) = toạ độ cửa sổ thu nhỏ: Windows Graphics Capture báo "The parameter is incorrect".
+    PARK = (C.get("PARK") or "corner").strip().lower()       # corner: góc phải dưới màn hình chính, lộ PARK_SHOW điểm ảnh · screen: nằm hẳn trong màn hình
+    PARK_SHOW = max(4, int(C.get("PARK_SHOW") or 24))
+    KEEP_PROP = "CloudBlueKeep"                              # cửa sổ phải nằm hẳn trong màn hình mới quay được → phonectl không dời đi
+
+    def park_xy(rc, mode=None):
+        sw, sh = U32.GetSystemMetrics(0), U32.GetSystemMetrics(1)
+        if (mode or PARK) == "screen": return max(0, sw - (rc[2] - rc[0])), max(0, sh - (rc[3] - rc[1]))
+        return sw - PARK_SHOW, sh - PARK_SHOW
+
+    def park(h, mode=None):
+        x, y = park_xy(rect_of(h), mode)
+        U32.SetWindowPos(h, 1, x, y, 0, 0, 0x0001 | 0x0010)                  # HWND_BOTTOM, giữ kích thước, không lấy focus
+        return x, y
+
+    def on_screen(h):
+        l, t, r, b = rect_of(h)
+        return l >= 0 and t >= 0 and r <= U32.GetSystemMetrics(0) and b <= U32.GetSystemMetrics(1)
+
     def frame_bounds(h):          # vùng Windows Graphics Capture quay thật (không gồm bóng đổ)
         r = wt.RECT()
         if ctypes.windll.dwmapi.DwmGetWindowAttribute(h, 9, ctypes.byref(r), ctypes.sizeof(r)) == 0: return r.left, r.top, r.right, r.bottom
@@ -279,21 +299,51 @@ class WindowSource:
     """Giữ KHUNG MỚI NHẤT của phần màn hình Android trong cửa sổ giả lập."""
     def __init__(self, name):
         self.name, self.latest, self.n, self.size_change = name, None, 0, None
-        self.cond = threading.Condition(); self.stopping = False; self.ctl = None; self.closed = False
+        self.cond = threading.Condition(); self.stopping = False; self.ctl = None; self.closed = False; self.gen = 0
 
     def open(self):
+        """Tìm cửa sổ máy → quay. Không quay được ở chỗ đỗ hiện tại → thử lại với cửa sổ nằm HẲN trong màn hình (đánh dấu để
+           phonectl không dời đi). Vẫn không được → CaptureBlocked (phiên chuyển sang lấy hình thẳng từ Android)."""
         import numpy as np  # noqa: F401  (windows_capture trả numpy)
         from windows_capture import WindowsCapture
         h, title = find_window(self.name)
         if not h: raise Deny("OFFLINE", "Máy đang tắt hoặc đang khởi động lại — chờ ít giây rồi mở lại.")
         if U32.IsIconic(h): U32.ShowWindow(h, 4); time.sleep(0.6)       # thu nhỏ thì Windows không vẽ → hiện lại (không cướp chuột)
-        elif not U32.IsWindowVisible(h): U32.ShowWindow(h, 4); time.sleep(0.4)   # bị ẩn hẳn → Windows không cho quay → hiện lại (vẫn ngoài màn hình)
+        elif not U32.IsWindowVisible(h): U32.ShowWindow(h, 4); time.sleep(0.4)   # bị ẩn hẳn → Windows không cho quay → hiện lại
+        l, t, r, b = rect_of(h)
+        if l <= -30000 and t <= -30000:              # chỗ đỗ CŨ = toạ độ cửa sổ thu nhỏ → Windows không quay được → dời về chỗ đỗ mới
+            x, y = park(h); time.sleep(0.3)
+            log(f"  {self.name}: dời cửa sổ từ ({l},{t}) về chỗ đỗ mới ({x},{y}) — ở (-32000,-32000) Windows không quay được")
+        try:
+            return self._open_at(h, title, WindowsCapture)
+        except CaptureBlocked:
+            if self.stopping or on_screen(h): raise
+        x, y = park(h, "screen"); U32.SetPropW(h, KEEP_PROP, 1); time.sleep(0.4)
+        log(f"  {self.name}: thử lại với cửa sổ nằm hẳn trong màn hình ({x},{y})")
+        try:
+            wh = self._open_at(h, title, WindowsCapture)
+        except CaptureBlocked:
+            U32.RemovePropW(h, KEEP_PROP); park(h)   # trong màn hình cũng không quay được → trả về chỗ đỗ cho gọn
+            raise
+        log(f"  {self.name}: ✓ cửa sổ nằm hẳn trong màn hình thì quay được → giữ ở đó (muốn mọi máy đỗ như vậy: PARK=screen trong cloudphone.conf)")
+        return wh
+
+    def _halt(self):
+        """Dừng phiên quay đang chạy (khung đến muộn của phiên cũ bị bỏ qua nhờ số thế hệ gen)."""
+        self.gen += 1
+        ctl, self.ctl = self.ctl, None
+        try:
+            if ctl is not None and hasattr(ctl, "stop"): ctl.stop()
+        except Exception: pass
+
+    def _open_at(self, h, title, WindowsCapture):
+        self.latest = None; self.closed = False; self.size_change = None
         fb = frame_bounds(h); ch = render_child(h) or fb
         self.cx, self.cy = max(0, ch[0] - fb[0]), max(0, ch[1] - fb[1])
         self.cw, self.ch = (ch[2] - ch[0]) & ~1, (ch[3] - ch[1]) & ~1
         self.fw, self.fh = fb[2] - fb[0], fb[3] - fb[1]
         if self.cw < 64 or self.ch < 64: raise Deny("OFFLINE", "Cửa sổ máy đang lỗi kích thước — thử lại sau ít giây.")
-        src = self
+        src = self; my = self.gen
 
         def make():
             # Quay theo SỐ CỬA SỔ (hwnd): tìm theo tên thì windows-capture bỏ qua cửa sổ "chạy ngầm" (tool window)
@@ -302,7 +352,7 @@ class WindowSource:
 
             @cap.event
             def on_frame_arrived(frame, ictl):
-                if src.stopping:
+                if src.stopping or src.gen != my:
                     try: ictl.stop()
                     except Exception: pass
                     return
@@ -318,41 +368,42 @@ class WindowSource:
 
             @cap.event
             def on_closed():
+                if src.gen != my: return
                 src.closed = True
                 with src.cond: src.cond.notify_all()
             return cap
 
         # Windows CHỈ cho quay cửa sổ có trong Alt+Tab (CreateForWindow báo lỗi → "Failed to convert item to GraphicsCaptureItem").
-        # Cửa sổ máy khách "chạy ngầm" (phonectl hide: kiểu tool window, ngoài màn hình) → tạm thành cửa sổ thường lúc bắt đầu quay,
-        # có hình rồi trả lại kiểu cũ (đổi kiểu SAU khi đã bắt đầu quay không làm dừng quay; cửa sổ vẫn nằm ngoài màn hình).
+        # Cửa sổ máy khách "chạy ngầm" (phonectl hide: kiểu tool window) → tạm thành cửa sổ thường lúc bắt đầu quay,
+        # có hình rồi trả lại kiểu cũ (đổi kiểu SAU khi đã bắt đầu quay không làm dừng quay).
         ex0 = U32.GetWindowLongW(h, GWL_EXSTYLE)
         ex_cap = (ex0 | WS_EX_APPWINDOW) & ~WS_EX_TOOLWINDOW
-        changed = False; err = None
+        changed = False; errs = []
         try:
             if ex0 != ex_cap and ((ex0 & WS_EX_TOOLWINDOW) or U32.GetWindow(h, GW_OWNER)):
                 U32.SetWindowLongW(h, GWL_EXSTYLE, ex_cap); changed = True
             for k in range(2):
                 try:
-                    self.ctl = make().start_free_threaded(); err = None; break
+                    self.ctl = make().start_free_threaded(); errs = []; break
                 except Exception as e:
-                    err = e
+                    errs.append(str(e).replace("Capture session threw an exception: ", "")[:110])
                     if k or "GraphicsCaptureItem" not in str(e): break
                     # lần 2: ẩn → đổi kiểu → hiện lại không lấy focus (như phonectl hide) để Windows tính lại cửa sổ có trong Alt+Tab
                     U32.ShowWindow(h, 0); U32.SetWindowLongW(h, GWL_EXSTYLE, ex_cap); U32.ShowWindow(h, 4); changed = True; time.sleep(0.5)
-            if err is None:
+            if not errs:
                 t0 = time.time()
                 with self.cond:
                     while self.latest is None and time.time() - t0 < 6 and not self.closed and not self.stopping:
                         self.cond.wait(0.2)
         finally:
             if changed: U32.SetWindowLongW(h, GWL_EXSTYLE, ex0)
-        if err is not None:
-            log(f"  {self.name}: Windows không cho quay cửa sổ ({str(err)[:110]})")
+        if errs:
+            log(f"  {self.name}: Windows không cho quay cửa sổ ({' | '.join(errs)})")
             for x in [y for hs in _same_name(self.name) for y in hs][:4]: log(f"    · {win_info(x)}")
             raise CaptureBlocked("Windows không cho quay cửa sổ giả lập")
         if self.latest is None:
             gone, stopping = self.closed, self.stopping
-            self.stop()
+            self._halt()
             if stopping: raise Deny("OFFLINE", "Không lấy được hình từ cửa sổ máy — thử mở lại.")
             if gone: raise Deny("OFFLINE", "Máy đang tắt hoặc đang khởi động lại — chờ ít giây rồi mở lại.")
             log(f"  {self.name}: cửa sổ không ra khung hình nào sau 6 giây — {win_info(h)}")
@@ -366,9 +417,7 @@ class WindowSource:
     def stop(self):
         self.stopping = True
         with self.cond: self.cond.notify_all()
-        try:
-            if self.ctl is not None and hasattr(self.ctl, "stop"): self.ctl.stop()
-        except Exception: pass
+        self._halt()
 
 
 # ================================================================ Quay bằng PrintWindow (Windows 10 bản cũ, VD 1511)
@@ -1861,6 +1910,8 @@ def captest(name, port=None):
             dark = fr is not None and int(fr[::16, ::16, :3].max()) < 8
             print(f"  ✓ quay cửa sổ được: phần Android {w}x{h}, {fps:.0f} khung/giây")
             print(f"    ảnh: {_save_png(fr, name)} — " + ("TOÀN ĐEN (giả lập không vẽ hình?)" if dark else "có hình"))
+            hw, _ = find_window(name)
+            if hw: print("    cửa sổ giờ ở:", win_info(hw))
             ok = not dark
         except CaptureBlocked as e: print("  ✗ quay cửa sổ:", e)
         except Deny as d: print("  ✗ quay cửa sổ:", d.msg)

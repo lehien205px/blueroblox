@@ -613,11 +613,26 @@ def mem():
     m = M(); m.l = ctypes.sizeof(M); ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(m))
     return m.total / 2**30, m.avail / 2**30
 
-HIDE = CONF.get("HIDE_WINDOWS", "1") == "1"      # 1 = cửa sổ MEmu của máy khách chạy ngầm (không hiện, không lên thanh taskbar)
+HIDE = CONF.get("HIDE_WINDOWS", "1") == "1"      # 1 = cửa sổ giả lập của máy khách chạy ngầm (không lên thanh taskbar, đỗ gần hết ngoài màn hình)
+PARK = (CONF.get("PARK") or "corner").strip().lower()    # corner: góc phải dưới màn hình chính, chỉ lộ PARK_SHOW điểm ảnh · screen: nằm hẳn trong màn hình
+PARK_SHOW = max(4, int(CONF.get("PARK_SHOW", "24") or 24))
+KEEP_PROP = "CloudBlueKeep"                      # bluestream đánh dấu cửa sổ phải nằm hẳn trong màn hình mới quay được → không dời đi
+def park_xy(rc, mode=None):
+    """Chỗ đỗ cửa sổ máy khách chạy ngầm (điểm ảnh thật) — GIỐNG HỆT park_xy trong bluestream.py.
+       KHÔNG đỗ ở (-32000, -32000): đó là toạ độ Windows dành cho cửa sổ thu nhỏ → Windows Graphics Capture báo
+       "The parameter is incorrect", không quay được (app màn đen)."""
+    u = ctypes.windll.user32
+    sw, sh = u.GetSystemMetrics(0), u.GetSystemMetrics(1)
+    if (mode or PARK) == "screen": return max(0, sw - (rc[2] - rc[0])), max(0, sh - (rc[3] - rc[1]))
+    return sw - PARK_SHOW, sh - PARK_SHOW
 def hide_window(name, show=False):
-    """Đẩy cửa sổ MEmu ra ngoài màn hình + bỏ khỏi taskbar. KHÔNG thu nhỏ (thu nhỏ làm MEmu ngừng vẽ → web màn đen)."""
+    """Cho cửa sổ giả lập của máy khách chạy ngầm: kiểu tool window (không lên taskbar), đỗ ở góc phải dưới màn hình chính chỉ lộ
+       PARK_SHOW điểm ảnh (PARK=screen: nằm hẳn trong màn hình), nằm dưới mọi cửa sổ. KHÔNG thu nhỏ (giả lập ngừng vẽ),
+       KHÔNG đẩy ra (-32000, -32000) (Windows không cho quay → app màn đen). Cửa sổ ở chỗ đỗ cũ -32000 được dời sang chỗ mới."""
     if not HIDE and not show: return 0
     u = ctypes.windll.user32; found = []
+    try: u.SetThreadDpiAwarenessContext(ctypes.c_void_p(-4))      # toạ độ điểm ảnh thật (như bluestream) dù Windows đặt phóng to 125%…
+    except Exception: pass
     PROC = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
     def cb(h, _):
         n = u.GetWindowTextLengthW(h)
@@ -630,15 +645,21 @@ def hide_window(name, show=False):
     for h in found:
         ex = u.GetWindowLongW(h, GWL_EXSTYLE)
         if show:
+            u.RemovePropW(h, KEEP_PROP)
             u.SetWindowLongW(h, GWL_EXSTYLE, (ex | WS_EX_APPWINDOW) & ~WS_EX_TOOLWINDOW); u.ShowWindow(h, 5)
             u.SetWindowPos(h, 0, 100, 100, 0, 0, 0x0001 | 0x0004)
-        else:
-            rc = (ctypes.c_long * 4)(); u.GetWindowRect(ctypes.c_void_p(h), rc)
-            if (ex & WS_EX_TOOLWINDOW) and rc[0] <= -30000: continue            # đã chạy ngầm rồi → không đụng (khỏi nháy, không làm gián đoạn phát hình)
-            u.ShowWindow(h, 0)                                                   # ẩn tạm để đổi kiểu cửa sổ
-            u.SetWindowLongW(h, GWL_EXSTYLE, (ex | WS_EX_TOOLWINDOW) & ~WS_EX_APPWINDOW)
-            u.SetWindowPos(h, 0, -32000, -32000, 0, 0, 0x0001 | 0x0004 | 0x0010)  # ra ngoài màn hình, giữ kích thước
-            u.ShowWindow(h, 4)                                                   # hiện lại (không lấy focus) → MEmu vẫn vẽ hình
+            continue
+        if u.GetPropW(h, KEEP_PROP): continue                                    # bluestream cần cửa sổ nằm trong màn hình → giữ nguyên
+        rc = (ctypes.c_long * 4)(); u.GetWindowRect(ctypes.c_void_p(h), rc)
+        px, py = park_xy(rc)
+        if (ex & WS_EX_TOOLWINDOW) and abs(rc[0] - px) <= 2 and abs(rc[1] - py) <= 2: continue   # đã đỗ đúng chỗ → không đụng (không gián đoạn phát hình)
+        if ex & WS_EX_TOOLWINDOW:                                                # đã chạy ngầm (VD chỗ đỗ cũ -32000) → chỉ dời chỗ, không ẩn/hiện
+            u.SetWindowPos(h, 1, px, py, 0, 0, 0x0001 | 0x0010)                 # HWND_BOTTOM, giữ kích thước, không lấy focus
+            continue
+        u.ShowWindow(h, 0)                                                       # ẩn tạm để đổi kiểu cửa sổ (Windows chỉ đổi taskbar khi hiện lại)
+        u.SetWindowLongW(h, GWL_EXSTYLE, (ex | WS_EX_TOOLWINDOW) & ~WS_EX_APPWINDOW)
+        u.SetWindowPos(h, 1, px, py, 0, 0, 0x0001 | 0x0010)
+        u.ShowWindow(h, 4)                                                       # hiện lại (không lấy focus) → giả lập vẫn vẽ hình
     return len(found)
 
 def serial(p): return f"127.0.0.1:{p['port']}"
@@ -1562,7 +1583,7 @@ def cmd_hide(a):
     n = 0
     for p in load()["phones"]:
         if not a.name or p["name"] == a.name: n += hide_window(p["name"])
-    print(f"Đã cho {n} cửa sổ MEmu chạy ngầm.")
+    print(f"Đã cho {n} cửa sổ {EMU_NAME} chạy ngầm.")
 
 def cmd_engine(a):
     """Cho cloudphoned biết máy chủ này chạy giả lập gì + bán bản Android nào (JSON 1 dòng).

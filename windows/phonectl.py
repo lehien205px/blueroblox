@@ -1585,6 +1585,32 @@ def cmd_hide(a):
         if not a.name or p["name"] == a.name: n += hide_window(p["name"])
     print(f"Đã cho {n} cửa sổ {EMU_NAME} chạy ngầm.")
 
+def cmd_mktpl(a):
+    """mktpl 15 : MuMu — tạo máy mẫu tpl_a15 bằng lệnh (khỏi mở giao diện MuMu). MuMu tạo máy mới = bản Android MẶC ĐỊNH của
+       MuMu; ra đúng bản thì đổi tên thành máy mẫu (để TẮT), sai bản thì xoá ĐÚNG máy vừa tạo và báo tạo bằng tay."""
+    ver = str(a.android or "").split(".")[0].strip()
+    if EMU != "mumu" or not MEMU: print("LỖI: lệnh này chỉ dùng cho máy chủ MuMu (EMU=mumu)."); sys.exit(1)
+    if not ver.isdigit(): print("LỖI: cách dùng: phonectl.py mktpl 15"); sys.exit(1)
+    tn = tpl_name(ver); cur = vms_sure()
+    if not cur: print("LỖI: không đọc được danh sách máy MuMu — thử lại sau."); sys.exit(1)
+    have = [i for i, x in cur.items() if x["name"] == tn]
+    if have:
+        got = _mumu_major(_mumu_info().get(have[0]))
+        print(f"Đã có máy mẫu {tn} (#{have[0]}, Android {got or '?'}) — không tạo thêm."); return
+    print(f"Đang tạo máy Android mới trong MuMu (1–3 phút)…", flush=True)
+    r = memuc("create", ver, timeout=600)                     # _mumu: không có máy mẫu → MuMu tạo mới; sai bản → xoá đúng máy đó
+    m = re.search(r"index\D*(\d+)", r.stdout or "")
+    if r.returncode not in (0, None) or not m:
+        print("LỖI: " + ((r.stdout or "") + " " + (r.stderr or "")).strip()[-400:])
+        print(f"→ Tạo bằng tay: trong trình quản lý nhiều máy của MuMu tạo 1 máy Android {ver}, đổi tên thành {tn}, để TẮT."); sys.exit(1)
+    idx = m.group(1)
+    memuc("rename", "-i", idx, tn, timeout=120)
+    after = vms()
+    if (after.get(int(idx)) or {}).get("name") != tn:
+        print(f"LỖI: đã tạo máy #{idx} (Android {ver}) nhưng chưa đổi được tên thành {tn} — đổi tên bằng tay trong MuMu."); sys.exit(1)
+    if (after.get(int(idx)) or {}).get("running"): memuc("stop", "-i", idx, timeout=120)
+    print(f"✓ Đã tạo máy mẫu {tn} (#{idx}, Android {ver}). Máy mẫu để TẮT — đơn Android {ver} sẽ nhân bản máy này.")
+
 def cmd_engine(a):
     """Cho cloudphoned biết máy chủ này chạy giả lập gì + bán bản Android nào (JSON 1 dòng).
        Chỉ báo bản Android TẠO ĐƯỢC THẬT: MEmu bản có sẵn (5/7/9) hoặc có máy mẫu tpl_aN · MuMu bản mặc định hoặc có máy mẫu.
@@ -1683,6 +1709,7 @@ def main():
     s.add_parser("probe").set_defaults(f=cmd_probe)
     sy = s.add_parser("strays"); sy.add_argument("--remove", action="store_true"); sy.set_defaults(f=cmd_strays)
     s.add_parser("engine").set_defaults(f=cmd_engine)
+    mt = s.add_parser("mktpl"); mt.add_argument("android"); mt.set_defaults(f=cmd_mktpl)
     s.add_parser("tuneall").set_defaults(f=cmd_tuneall)
     s.add_parser("vmlist").set_defaults(f=cmd_vmlist)
     ba = s.add_parser("bootall"); ba.add_argument("--quiet", action="store_true"); ba.set_defaults(f=cmd_bootall)

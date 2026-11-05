@@ -1,4 +1,4 @@
-# Build app PC cho khách (Python → exe) → GitHub Release "pc-latest" → web tải ở /download/BlueRobloxPC.zip
+# Build app PC cho khách (Python → exe) → GitHub Release "pc-latest" → web tải ở /download/CloudBluePC.zip
 name: Build PC client
 
 on:
@@ -35,26 +35,30 @@ jobs:
           python -m py_compile bluepc.py brstream.py
           $icon = @()
           if (Test-Path icon.png) { $icon = @("--icon", "icon.png", "--add-data", "icon.png;.") }
-          python -m PyInstaller --noconfirm --clean --windowed --name BlueRobloxPC --collect-submodules av @icon bluepc.py
+          python -m PyInstaller --noconfirm --clean --windowed --name CloudBluePC --collect-submodules av @icon bluepc.py
           if ($LASTEXITCODE -ne 0) { exit 1 }
           # thử bản exe: đủ thư viện giải mã + cửa sổ chưa (thiếu → báo lỗi, KHÔNG đưa bản hỏng cho khách)
           $st = Join-Path $PWD "selftest.txt"
-          Start-Process -FilePath dist/BlueRobloxPC/BlueRobloxPC.exe -ArgumentList "--selftest", "`"$st`"" -Wait -NoNewWindow
+          Start-Process -FilePath dist/CloudBluePC/CloudBluePC.exe -ArgumentList "--selftest", "`"$st`"" -Wait -NoNewWindow
           if (-not (Test-Path $st)) { Write-Error "exe không chạy được"; exit 1 }
           Get-Content $st
           if ((Get-Content $st -TotalCount 1) -ne "OK") { exit 1 }
-          Compress-Archive -Force -Path dist/BlueRobloxPC -DestinationPath dist/BlueRobloxPC.zip
-          Get-Item dist/BlueRobloxPC.zip | Select-Object Name, Length
+          Compress-Archive -Force -Path dist/CloudBluePC -DestinationPath dist/CloudBluePC.zip
+          Get-Item dist/CloudBluePC.zip | Select-Object Name, Length
 
       - uses: actions/upload-artifact@v4
         with:
-          name: BlueRobloxPC
-          path: pc-client/dist/BlueRobloxPC.zip
+          name: CloudBluePC
+          path: pc-client/dist/CloudBluePC.zip
 
       - name: Publish (GitHub Release pc-latest)
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release view pc-latest >/dev/null 2>&1 || gh release create pc-latest --title "BlueRoblox PC (bản mới nhất)" --notes "App máy tính cho khách. Tải BlueRobloxPC.zip, giải nén, chạy BlueRobloxPC.exe." --latest=false
-          gh release upload pc-latest pc-client/dist/BlueRobloxPC.zip --clobber
+          NOTES="App máy tính cho khách. Tải CloudBluePC.zip, giải nén, chạy CloudBluePC.exe."
+          gh release view pc-latest >/dev/null 2>&1 || gh release create pc-latest --title "CloudBlue PC (bản mới nhất)" --notes "$NOTES" --latest=false
+          gh release upload pc-latest pc-client/dist/CloudBluePC.zip --clobber
+          gh release edit pc-latest --title "CloudBlue PC (bản mới nhất)" --notes "$NOTES" || true
+          # bản tên cũ không còn được cập nhật → xoá cho khỏi tải nhầm (link cũ trên web đã chuyển sang tên mới)
+          gh release delete-asset pc-latest BlueRobloxPC.zip --yes 2>/dev/null || true

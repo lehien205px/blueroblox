@@ -51,7 +51,7 @@ module.exports = async (req, res) => {
         price_currency: "usd",
         pay_currency: payCur,
         order_id: String(order_id),
-        order_description: "BLUEROBLOX top-up",
+        order_description: "CloudBlue top-up",
         ipn_callback_url: SITE + "/api/crypto-webhook",
       }),
     });

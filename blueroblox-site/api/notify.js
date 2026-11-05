@@ -19,7 +19,7 @@ module.exports = async (req, res) => {
         (manual ? "\n\n👉 <b>Trả lời (Reply) tin nhắn này</b> bằng thông tin VPS để giao ngay cho khách. Mỗi dòng 1 VPS, ví dụ:\n<code>103.1.2.3:3389|Administrator|MatKhau</code>\n\nKhông giao được thì Reply <code>/hoantien</code>." : "");
       await tg(text);
       if (manual && process.env.ADMIN_EMAIL) {
-        await mail(process.env.ADMIN_EMAIL, `[BLUEROBLOX] Đơn cần giao: ${r.product_name}`,
+        await mail(process.env.ADMIN_EMAIL, `[CloudBlue] Đơn cần giao: ${r.product_name}`,
           `<p>Khách <b>${esc(u.username)}</b> (${esc(u.email)}) vừa mua <b>${esc(r.product_name)} × ${r.qty}</b> – ${vnd(r.total)}.</p>
            <p>Mã đơn: <code>${r.id}</code></p>
            <p>Giao hàng: trả lời tin nhắn trên Telegram, hoặc vào <a href="${SITE}">trang quản trị</a> › Đơn hàng › Giao hàng.</p>`);
@@ -32,7 +32,7 @@ module.exports = async (req, res) => {
       await mail(u.email, `Đơn ${r.product_name} đã sẵn sàng`,
         `<p>Chào ${esc(u.username)},</p><p>Đơn <b>${esc(r.product_name)} × ${r.qty}</b> của bạn đã được giao:</p>
          <pre style="background:#f4f6fb;padding:12px;border-radius:8px;white-space:pre-wrap">${esc(r.items)}</pre>
-         <p>Bạn xem lại bất cứ lúc nào trong mục <a href="${SITE}">Đơn hàng</a> trên BLUEROBLOX.</p>`);
+         <p>Bạn xem lại bất cứ lúc nào trong mục <a href="${SITE}">Đơn hàng</a> trên CloudBlue.</p>`);
       await tg(`✅ Đã giao đơn <code>${r.id}</code> cho <b>${esc(u.username)}</b>${u.email && process.env.RESEND_API_KEY ? " (đã gửi email cho khách)" : ""}.`);
     }
 

@@ -43,7 +43,7 @@ const tg = (text, extra) => tgTo(process.env.TELEGRAM_CHAT_ID, text, extra);
 
 async function mail(to, subject, html) {
   const K = process.env.RESEND_API_KEY; if (!K || !to) return null;
-  const from = process.env.MAIL_FROM || "BLUEROBLOX <no-reply@cloudblue.vn>";
+  const from = process.env.MAIL_FROM || "CloudBlue <no-reply@cloudblue.vn>";
   const r = await fetch("https://api.resend.com/emails", {
     method: "POST", headers: { Authorization: `Bearer ${K}`, "Content-Type": "application/json" },
     body: JSON.stringify({ from, to: [to], subject, html })

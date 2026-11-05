@@ -668,6 +668,7 @@ def ensure_jar():
 
 
 _devsize = {}
+_devsize_warned = set()
 
 
 def device_size(serial):
@@ -675,10 +676,13 @@ def device_size(serial):
     c = _devsize.get(serial)
     if c and c[1] > time.time(): return c[0]
     code, out, _ = adb(serial, "shell", "wm", "size", timeout=10)
-    phys = re.search(r"Physical size:\s*(\d+)x(\d+)", out); ov = re.search(r"Override size:\s*(\d+)x(\d+)", out)
-    m = ov or phys
-    size = (int(m.group(1)), int(m.group(2))) if m else None
+    size = None
+    for pat in (r"Override size:\s*(\d+)x(\d+)", r"Physical size:\s*(\d+)x(\d+)"):      # cỡ 0x0 (MEmu Android 12 có lúc báo vậy) → bỏ qua
+        m = re.search(pat, out)
+        if m and int(m.group(1)) > 0 and int(m.group(2)) > 0: size = (int(m.group(1)), int(m.group(2))); break
     if size: _devsize[serial] = (size, time.time() + 600)
+    elif serial not in _devsize_warned:
+        _devsize_warned.add(serial); log(f"  [{serial}] wm size không dùng được: {' '.join(out.split())[:120] or '(trống)'}")
     return size
 
 
@@ -764,15 +768,18 @@ def _sps_dims(cfg):
 
 
 class ScrcpySource:
-    """Nguồn hình "ảo" khi lấy hình thẳng từ Android: không quay cửa sổ, chỉ giữ kích thước màn hình máy (wm size)."""
-    def __init__(self, serial):
-        self.serial = serial; self.cw = self.ch = 0; self.closed = False; self.stopping = False
+    """Nguồn hình "ảo" khi lấy hình thẳng từ Android: không quay cửa sổ, chỉ giữ kích thước màn hình máy (wm size → độ phân giải đã mua)."""
+    def __init__(self, serial, res=None):
+        self.serial = serial; self.res = res; self.cw = self.ch = 0; self.closed = False; self.stopping = False
 
     def open(self):
         adb_connect(self.serial)
         sz = device_size(self.serial)
         if not sz:
             time.sleep(1); adb_connect(self.serial); sz = device_size(self.serial)
+        if not sz:
+            m = re.match(r"^\s*(\d{3,4})\s*x\s*(\d{3,4})\s*$", str(self.res or ""))
+            sz = (int(m.group(1)), int(m.group(2))) if m else None
         self.cw, self.ch = sz or (720, 1280)
         return self.cw, self.ch
 
@@ -1047,7 +1054,7 @@ class Control:
     def screen(self):
         """Kích thước màn hình máy theo hướng HIỆN TẠI (đoán hướng theo tỉ lệ hình đang quay) — scrcpy đòi đúng số này."""
         vw, vh = self.vw or 720, self.vh or 1280
-        w, h = self.nat or (vw, vh)
+        w, h = self.nat if self.nat and min(self.nat) > 0 else (vw, vh)
         if (vw > vh) != (w > h): w, h = h, w
         return w & ~7, h & ~7
 
@@ -1293,7 +1300,7 @@ class Session:
         if kbps < 700: fps = min(fps, 20)
         elif kbps < 1400: fps = min(fps, 30)
         sw, sh = self.src.cw, self.src.ch
-        sc = min(1.0, maxh / max(sw, sh))
+        sc = min(1.0, maxh / max(sw, sh, 1))
         ow, oh = (sw, sh) if sc >= 0.999 else (max(16, int(sw * sc) & ~7), max(16, int(sh * sc) & ~7))
         return ow, oh, fps, kbps
 
@@ -1312,7 +1319,7 @@ class Session:
         if self.closed: raise Closed()
         if not isinstance(self.src, ScrcpySource):
             if self.src: self.src.stop()
-            src = ScrcpySource(self.serial); src.open(); self.src = src
+            src = ScrcpySource(self.serial, self.phone.get("res")); src.open(); self.src = src
             if self.closed: raise Closed()
         ow, oh, fps, kbps = self._dims()
         self.gen += 1; g = self.gen

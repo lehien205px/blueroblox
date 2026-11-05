@@ -297,6 +297,143 @@ class WindowSource:
         except Exception: pass
 
 
+# ================================================================ Quay bằng PrintWindow (Windows 10 bản cũ, VD 1511)
+# Windows Graphics Capture (thư viện windows-capture) chỉ có từ Windows 10 bản 1903. Bản cũ hơn → import báo
+# "DLL load failed … specified procedure could not be found" → quay bằng PrintWindow(PW_RENDERFULLCONTENT) thay thế:
+# chạy từ Windows 8.1, lấy được cả phần vẽ DirectX/OpenGL, cửa sổ đã đẩy ra ngoài màn hình vẫn quay được (chỉ không được thu nhỏ).
+_WGC = {"ok": None, "why": ""}
+def wgc_ok():
+    """Dùng được Windows Graphics Capture? (thử import 1 lần rồi nhớ). Ép quay PrintWindow: CAPTURE=gdi trong cloudphone.conf."""
+    if _WGC["ok"] is None:
+        if (C.get("CAPTURE") or "").strip().lower() == "gdi": _WGC.update(ok=False, why="CAPTURE=gdi")
+        else:
+            try:
+                import windows_capture  # noqa: F401
+                _WGC["ok"] = True
+            except Exception as e:
+                _WGC.update(ok=False, why=repr(e)[:160])
+        if not _WGC["ok"]: log(f"⚠ quay hình bằng PrintWindow (Windows này không dùng được Windows Graphics Capture: {_WGC['why']})")
+    return _WGC["ok"]
+
+if WIN:
+    _G32 = ctypes.WinDLL("gdi32"); _U32 = ctypes.WinDLL("user32"); _HP = ctypes.c_void_p
+    for _n, _r, _a in (("CreateCompatibleDC", _HP, [_HP]), ("DeleteDC", wt.BOOL, [_HP]), ("SelectObject", _HP, [_HP, _HP]), ("DeleteObject", wt.BOOL, [_HP])):
+        _f = getattr(_G32, _n); _f.restype = _r; _f.argtypes = _a
+    _G32.CreateDIBSection.restype = _HP
+    _G32.CreateDIBSection.argtypes = [_HP, ctypes.c_void_p, wt.UINT, ctypes.POINTER(ctypes.c_void_p), _HP, wt.DWORD]
+    for _n, _r, _a in (("GetDC", _HP, [_HP]), ("ReleaseDC", ctypes.c_int, [_HP, _HP]), ("PrintWindow", wt.BOOL, [_HP, _HP, wt.UINT]),
+                       ("IsWindow", wt.BOOL, [_HP]), ("IsIconic", wt.BOOL, [_HP])):
+        _f = getattr(_U32, _n); _f.restype = _r; _f.argtypes = _a
+
+    class _BIH(ctypes.Structure):
+        _fields_ = [("biSize", wt.DWORD), ("biWidth", ctypes.c_long), ("biHeight", ctypes.c_long), ("biPlanes", wt.WORD), ("biBitCount", wt.WORD),
+                    ("biCompression", wt.DWORD), ("biSizeImage", wt.DWORD), ("biXPelsPerMeter", ctypes.c_long), ("biYPelsPerMeter", ctypes.c_long),
+                    ("biClrUsed", wt.DWORD), ("biClrImportant", wt.DWORD)]
+
+
+class GdiSource:
+    """Giữ KHUNG MỚI NHẤT của phần màn hình Android trong cửa sổ giả lập — quay bằng PrintWindow (Windows 10 bản cũ)."""
+    def __init__(self, name, fps=60):
+        self.name, self.latest, self.n, self.size_change = name, None, 0, None
+        self.cond = threading.Condition(); self.stopping = False; self.closed = False
+        self.fps = max(10, min(int(fps or 60), 60)); self.h = None
+
+    def open(self):
+        import numpy as np
+        self.np = np
+        h, title = find_window(self.name)
+        if not h: raise Deny("OFFLINE", "Máy đang tắt hoặc đang khởi động lại — chờ ít giây rồi mở lại.")
+        if _U32.IsIconic(h): U32.ShowWindow(h, 4); time.sleep(0.6)       # thu nhỏ thì Windows không vẽ → hiện lại
+        self.h = h
+        wl, wtp, wr, wb = rect_of(h)                                       # PrintWindow vẽ cả cửa sổ, gốc = góc cửa sổ
+        rc = render_child(h) or (wl, wtp, wr, wb)
+        self.fw, self.fh = wr - wl, wb - wtp
+        self.cx, self.cy = max(0, rc[0] - wl), max(0, rc[1] - wtp)
+        self.cw = (min(rc[2], wr) - max(rc[0], wl)) & ~1
+        self.ch = (min(rc[3], wb) - max(rc[1], wtp)) & ~1
+        if self.cw < 64 or self.ch < 64: raise Deny("OFFLINE", "Cửa sổ máy đang lỗi kích thước — thử lại sau ít giây.")
+        threading.Thread(target=self._run, daemon=True).start()
+        t0 = time.time()
+        with self.cond:
+            while self.latest is None and time.time() - t0 < 6 and not self.closed and not self.stopping:
+                self.cond.wait(0.2)
+        if self.latest is None:
+            self.stop(); raise Deny("OFFLINE", "Không lấy được hình từ cửa sổ máy — thử mở lại.")
+        return self.cw, self.ch
+
+    def _alloc(self, w, h):
+        bi = _BIH(); bi.biSize = ctypes.sizeof(_BIH); bi.biWidth = w; bi.biHeight = -h; bi.biPlanes = 1; bi.biBitCount = 32
+        sdc = _U32.GetDC(None)
+        mdc = _G32.CreateCompatibleDC(sdc)
+        _U32.ReleaseDC(None, sdc)
+        bits = ctypes.c_void_p()
+        bmp = _G32.CreateDIBSection(mdc, ctypes.byref(bi), 0, ctypes.byref(bits), None, 0) if mdc else None
+        if not mdc or not bmp or not bits.value:
+            if bmp: _G32.DeleteObject(bmp)
+            if mdc: _G32.DeleteDC(mdc)
+            raise OSError("không tạo được vùng nhớ hình (CreateDIBSection)")
+        old = _G32.SelectObject(mdc, bmp)
+        arr = self.np.ctypeslib.as_array(ctypes.cast(bits, ctypes.POINTER(ctypes.c_ubyte)), shape=(h, w, 4))   # BGRA, hàng trên cùng trước
+        return mdc, bmp, old, arr
+
+    def _free(self, g):
+        if not g: return
+        mdc, bmp, old, _ = g
+        try: _G32.SelectObject(mdc, old)
+        except Exception: pass
+        try: _G32.DeleteObject(bmp); _G32.DeleteDC(mdc)
+        except Exception: pass
+
+    def _run(self):
+        g = None; size = None; step = 1.0 / self.fps; dark_since = None; warned = False
+        try:
+            while not self.stopping:
+                t0 = time.perf_counter()
+                if not _U32.IsWindow(self.h): self.closed = True; break             # cửa sổ máy đã đóng (máy tắt / khởi động lại)
+                l, t, r, b = rect_of(self.h); w, hh = r - l, b - t
+                if w < 64 or hh < 64 or _U32.IsIconic(self.h): time.sleep(0.2); continue
+                if abs(w - self.fw) > 6 or abs(hh - self.fh) > 6:                     # đổi cỡ (xoay máy…) → phiên bật lại bộ quay
+                    self.size_change = (w, hh, time.time()); time.sleep(0.1); continue
+                self.size_change = None
+                if size != (w, hh):
+                    self._free(g); g = None
+                    g = self._alloc(w, hh); size = (w, hh)
+                if _U32.PrintWindow(self.h, g[0], 2):                                 # 2 = PW_RENDERFULLCONTENT
+                    sub = g[3][self.cy:self.cy + self.ch, self.cx:self.cx + self.cw]
+                    if sub.shape[0] == self.ch and sub.shape[1] == self.cw:
+                        buf = sub.copy()
+                        if self.n % 30 == 0:                                          # hình đen mãi → ghi nhật ký 1 lần (để đổi chế độ vẽ)
+                            if int(buf[::24, ::24, :3].max()) < 8:
+                                dark_since = dark_since or time.time()
+                                if not warned and time.time() - dark_since > 8:
+                                    warned = True
+                                    log(f"  ⚠ {self.name}: PrintWindow chỉ lấy được hình ĐEN — đổi chế độ vẽ của máy MEmu (DirectX ↔ OpenGL) rồi thử lại")
+                            else: dark_since = None
+                        with self.cond:
+                            self.latest = buf; self.n += 1; self.cond.notify_all()
+                d = step - (time.perf_counter() - t0)
+                if d > 0: time.sleep(d)
+        except Exception as e:
+            if not self.stopping: log("  lỗi quay hình (PrintWindow):", repr(e)); self.closed = True
+        finally:
+            self._free(g)
+            with self.cond: self.cond.notify_all()
+
+    def resized(self):
+        s = self.size_change
+        return bool(s and time.time() - s[2] < 2 and abs(s[0] - self.fw) + abs(s[1] - self.fh) > 6)
+
+    def stop(self):
+        self.stopping = True
+        with self.cond: self.cond.notify_all()
+
+
+def make_source(name, fps=60):
+    """Bộ quay hình cho 1 máy: Windows Graphics Capture (Windows 10 1903+) · PrintWindow (Windows cũ) · hình giả (chạy thử)."""
+    if SELFTEST or not WIN: return FakeSource(name)
+    return WindowSource(name) if wgc_ok() else GdiSource(name, fps)
+
+
 class FakeSource:
     """Nguồn hình giả (chạy thử trên Linux / không có giả lập)."""
     def __init__(self, name, w=540, h=960):
@@ -953,7 +1090,7 @@ class Session:
         if self.src is None or self.src.resized() or getattr(self.src, "closed", False):
             old = self.src
             if old: old.stop()
-            src = FakeSource(self.name) if SELFTEST or not WIN else WindowSource(self.name)
+            src = make_source(self.name, int(self.phone.get("fps") or 30))
             self.src = src
             src.open()
             if self.closed: src.stop(); raise Closed()
@@ -1343,10 +1480,13 @@ async def main():
     if not SELFTEST and (not SB or not KEY):
         log("THIẾU SUPABASE_URL / SUPABASE_SERVICE_KEY trong cloudphone.conf"); sys.exit(1)
     if WIN:
-        try: import windows_capture, numpy  # noqa: F401
-        except ImportError:
+        try: import numpy, windows_capture  # noqa: F401
+        except ModuleNotFoundError:
             log("cài thư viện quay cửa sổ (windows-capture, numpy)…")
             subprocess.run([sys.executable, "-m", "pip", "install", "--quiet", "--disable-pip-version-check", "windows-capture", "numpy"], creationflags=NOWIN)
+        except ImportError:
+            pass                                         # Windows 10 trước bản 1903: không có Windows Graphics Capture → quay bằng PrintWindow
+        wgc_ok()                                         # ghi nhật ký cách quay hình đang dùng
         await asyncio.to_thread(ensure_ffmpeg)
         threading.Thread(target=ensure_jar, daemon=True).start()
     fp = ensure_cert()

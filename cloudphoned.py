@@ -45,7 +45,8 @@ WIN = os.name == "nt"                       # máy chủ Windows (MEmu)
 def _f(k, d):
     try: return float(CFG.get(k, d))
     except (TypeError, ValueError): return float(d)
-MEMU_MAX_RAM, MEMU_MAX_CPU = _f("MEMU_MAX_RAM", 16), _f("MEMU_MAX_CPU", 8)
+_MUMU = (CFG.get("EMU") or "").strip().lower() == "mumu"   # MuMu (Android 12 / 7) chạy được máy to (tới 128GB · 72 nhân) → tính đủ RAM/CPU đã bán
+MEMU_MAX_RAM, MEMU_MAX_CPU = _f("MEMU_MAX_RAM", 1024 if _MUMU else 16), _f("MEMU_MAX_CPU", 1024 if _MUMU else 8)
 WIN_RESERVE = _f("WIN_RAM_RESERVE", 4)
 MEMU_MAX_VMS = int(_f("MEMU_MAX_VMS", 0))      # Windows: giới hạn SỐ máy (0 = không giới hạn số máy, chỉ tính theo tổng nhân + RAM)
 WIN_VCPU_OVER = _f("WIN_VCPU_OVER", 0.9)        # tổng nhân ảo cấp cho các máy ≤ 90% số luồng thật (72 luồng → 64 nhân) — chừa 10% cho Windows + phát hình

@@ -1256,8 +1256,18 @@ def cmd_hide(a):
     print(f"Đã cho {n} cửa sổ MEmu chạy ngầm.")
 
 def cmd_engine(a):
-    """Cho cloudphoned biết máy chủ này chạy giả lập gì + bán bản Android nào (JSON 1 dòng)."""
-    print(json.dumps({"emu": EMU, "androids": ANDROIDS, "default": DEF_ANDROID, "found": bool(MEMU)}))
+    """Cho cloudphoned biết máy chủ này chạy giả lập gì + bán bản Android nào (JSON 1 dòng).
+       Chỉ báo bản Android TẠO ĐƯỢC THẬT: MEmu bản có sẵn (5/7/9) hoặc có máy mẫu tpl_aN · MuMu bản mặc định hoặc có máy mẫu.
+       (VD khai ANDROIDS=7,12 mà chưa tạo máy mẫu tpl_a12 → chỉ báo 7 → web không bán Android 12 ở máy chủ này, khỏi tạo hỏng rồi hoàn tiền.)"""
+    av, miss = list(ANDROIDS), []
+    if EMU in ("memu", "mumu") and MEMU:
+        try:
+            names = {x["name"] for x in vms().values()}
+            ok = [v for v in ANDROIDS if tpl_name(v) in names or (EMU == "memu" and v in MEMU_CODES) or (EMU == "mumu" and v == DEF_ANDROID)]
+            miss = [v for v in ANDROIDS if v not in ok]
+            if ok: av = ok
+        except Exception: pass
+    print(json.dumps({"emu": EMU, "androids": av, "default": DEF_ANDROID, "found": bool(MEMU), "missing_tpl": [tpl_name(v) for v in miss]}))
 
 def cmd_probe(a):
     """In thông tin giả lập để kiểm tra / gửi hỗ trợ khi cài máy chủ mới."""

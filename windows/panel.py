@@ -81,7 +81,7 @@ def set_conf(key, val):
     if not done: lines.append(f"{key}={val}")
     open(CONF, "w", encoding="utf-8").write("\n".join(lines) + "\n")
 
-EMUS = {"ld": ("LDPlayer 9", "9"), "mumu": ("MuMu", "12,7"), "memu": ("MEmu", "7")}
+EMUS = {"ld": ("LDPlayer 9", "9"), "mumu": ("MuMu", "12,7"), "memu": ("MEmu", "7,12")}
 MUMU_DIRS = [r"C:\Program Files\Netease\MuMuPlayer-12.0", r"D:\Program Files\Netease\MuMuPlayer-12.0", r"C:\Program Files\Netease\MuMu Player 12",
              r"D:\Program Files\Netease\MuMu Player 12", r"C:\Program Files\Netease\MuMuPlayer", r"D:\Program Files\Netease\MuMuPlayer",
              r"C:\Program Files\MuMuPlayerGlobal-12.0", r"D:\Program Files\MuMuPlayerGlobal-12.0", r"C:\Program Files\Netease\MuMuPlayerGlobal-12.0",
@@ -342,9 +342,10 @@ class App:
             self.lights[k] = (dot, sub)
         # nút
         bar1 = tk.Frame(r, bg=BG); bar1.pack(fill="x", padx=14, pady=(8, 2))
-        bar2 = tk.Frame(r, bg=BG); bar2.pack(fill="x", padx=14, pady=(2, 8))
-        def btn(text, cmd, color=CARD, fg=FG):
-            bar = bar1 if len(bar1.winfo_children()) < 7 else bar2
+        bar2 = tk.Frame(r, bg=BG); bar2.pack(fill="x", padx=14, pady=2)
+        bar3 = tk.Frame(r, bg=BG); bar3.pack(fill="x", padx=14, pady=(2, 8))
+        def btn(text, cmd, color=CARD, fg=FG):                 # 3 hàng nút (7 · 6 · còn lại) — cửa sổ nhỏ vẫn thấy đủ nút
+            bar = bar1 if len(bar1.winfo_children()) < 7 else (bar2 if len(bar2.winfo_children()) < 6 else bar3)
             b = tk.Button(bar, text=text, command=cmd, bg=color, fg=fg, activebackground=BLUE, activeforeground="white", relief="flat",
                           font=("Segoe UI", 10, "bold"), padx=12, pady=7, cursor="hand2", bd=0)
             b.pack(side="left", padx=3); return b
@@ -355,16 +356,16 @@ class App:
         btn("▶ Bật tất cả", self.start_all, BLUE, "white")
         btn("■ Tắt tất cả", self.stop_all, "#3a2030", "#ffb3bb")
         btn("🧪 Tạo máy thử", self.test_phone)
+        btn("🎛 Chọn giả lập", self.choose_emu, "#14304a", "#bfe0ff")
         btn("📋 Danh sách máy", lambda: self.job("Danh sách máy", [PY, "phonectl.py", "list"]))
         btn("♻ Làm mới máy khách", self.remake)
+        btn("🖼 Ảnh nền cho máy", lambda: self.job("Đặt ảnh nền CloudBlue cho các máy đang chạy (máy chưa có)", [PY, "phonectl.py", "wallpaper", "--all"]))
+        btn("🙈 Ẩn cửa sổ giả lập", lambda: self.job("Cho cửa sổ giả lập chạy ngầm", [PY, "phonectl.py", "hide"]))
+        btn("🧹 Dọn giả lập thừa", self.cleanup, "#3a2a10", "#ffd9a0")
         btn("⚡ Tối ưu Windows", self.optimize)
         btn("🛣 Đường thẳng (ít trễ)", self.fast_setup)
-        btn("🖼 Ảnh nền cho máy", lambda: self.job("Đặt ảnh nền CloudBlue cho các máy đang chạy (máy chưa có)", [PY, "phonectl.py", "wallpaper", "--all"]))
-        btn("⏻ Thoát hẳn", self.quit_all, "#3a2030", "#ffb3bb")
         btn("🔑 Tự đăng nhập + tự chạy", self.autologon, "#2a2350", "#d9ccff")
-        btn("🧹 Dọn giả lập thừa", self.cleanup, "#3a2a10", "#ffd9a0")
-        btn("🙈 Ẩn cửa sổ giả lập", lambda: self.job("Cho cửa sổ giả lập chạy ngầm", [PY, "phonectl.py", "hide"]))
-        btn("🎛 Chọn giả lập", self.choose_emu, "#14304a", "#bfe0ff")
+        btn("⏻ Thoát hẳn", self.quit_all, "#3a2030", "#ffb3bb")
         # nhật ký
         self.nb = ttk.Notebook(r); self.nb.pack(fill="both", expand=True, padx=14, pady=(0, 6))
         self.texts = {}
@@ -726,7 +727,7 @@ Write-Host '[OK] Khong ngu, khong tat man hinh'
                 threading.Thread(target=lambda: find_mumu(conf()) or self.root.after(0, self.pick_mumu_dir), daemon=True).start()
             if self.svcs["cloudphoned"].alive(): threading.Thread(target=lambda: self._restart_svc("cloudphoned"), daemon=True).start()
         for e, (nm, av), desc in (("ld", EMUS["ld"], "Android 9 · ổn định, nhẹ"), ("mumu", EMUS["mumu"], "Android 12 + Android 7 (cần máy mẫu tpl_a7 nếu MuMu mặc định là 12)"),
-                                  ("memu", EMUS["memu"], "Android 7 (MEmu) · thêm 12 bằng máy mẫu tpl_a12")):
+                                  ("memu", EMUS["memu"], "Android 7 + Android 12 (Android 12 cần máy mẫu tpl_a12)")):
             b = tk.Button(w, text=f"{nm}  —  {desc}" + ("   ✓ đang dùng" if cur == e else ""), command=lambda e=e, av=av: pick(e, av),
                           bg=BLUE if cur == e else CARD, fg="white" if cur == e else FG, relief="flat", font=("Segoe UI", 11, "bold"),
                           padx=14, pady=10, anchor="w", cursor="hand2", bd=0)

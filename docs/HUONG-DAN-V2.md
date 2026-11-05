@@ -84,13 +84,25 @@ Cho khách ở mạng chặn cổng lạ:
 ## Thêm máy chủ MuMu (Android 12 + Android 7)
 
 1. Cài **MuMu Player** bản chính thức từ trang MuMu (mumuplayer.com). Không dùng bản sửa / bản tải lại.
-2. Cài BlueRoblox như máy chủ 2 cũ (`setup.ps1 -Node win3 -PubHost phone3.cloudblue.vn`), dán khoá, nối Cloudflare.
-3. Bảng hỏi giả lập → chọn **MuMu** (bán Android 12 và 7).
-4. **Máy mẫu Android 7**: trong MuMu Multi-instance tạo 1 máy **Android 7**, đặt tên đúng `tpl_a7`.
-   Nếu MuMu mặc định tạo Android 12 thì làm thêm 1 máy Android 12 tên `tpl_a12` (để chắc chắn). Máy mẫu không bao giờ bị xoá.
-5. Modem mở cổng **TCP `8188 + số máy`** (win3 → 8191) về máy này. `setup.ps1` đã ghi sẵn `STREAM_PORT` đúng số đó.
-6. Chạy `python C:\blue\phonectl.py probe` → **chụp kết quả gửi hỗ trợ** (để chỉnh khoá cài đặt RAM/CPU của MuMu nếu bản MuMu khác).
-7. Bấm 🧪 **Tạo máy thử** → mở bằng app PC thử.
+   Cài ở ổ / thư mục nào cũng được: bảng + `phonectl.py` tự dò (thư mục mặc định → khoá gỡ cài đặt trong registry →
+   MuMu đang mở → thư mục Netease/MuMu ở mọi ổ cứng). Vẫn không thấy → bảng: 🎛 **Chọn giả lập** → 📂 **Chọn thư mục MuMu**.
+2. Cài CloudBlue: `setup.ps1 -Node win3 -PubHost phone3.cloudblue.vn` (máy chỉ có MuMu cũng cài được; tự ghi `EMU=mumu`,
+   `ANDROIDS=12,7`, `MEMU_MAX_RAM=128`, `MEMU_MAX_CPU=72`), dán khoá, nối Cloudflare.
+   Máy chủ cũ đổi sang MuMu: `python C:\blue\phonectl.py setconf EMU=mumu ANDROIDS=12,7 MEMU_MAX_RAM=128 MEMU_MAX_CPU=72`.
+3. **Máy mẫu**: trong MuMu Multi-instance tạo 1 máy **Android 12** đặt tên `tpl_a12` và 1 máy **Android 7** tên `tpl_a7`.
+   Máy khách được nhân bản từ máy mẫu. Máy mẫu không bao giờ bị xoá.
+4. Modem mở cổng **TCP `8188 + số máy`** (win2 → 8190, win3 → 8191) về máy này. `setup.ps1` đã ghi sẵn `STREAM_PORT` đúng số đó.
+5. `python C:\blue\phonectl.py probe` → kiểm tra: dòng đầu **Giả lập: MuMu**, "1 máy tối đa 128GB · 72 nhân", máy mẫu **CÓ ✓**.
+6. Bấm 🧪 **Tạo máy thử** → mở bằng app PC thử.
+
+**Giới hạn 1 máy theo bản Android** (SQL v21, bảng `cloudphone_pricing.android_limits`):
+Android 9 (LDPlayer) 8GB · 8 nhân — Android 12 (MuMu) 128GB · 72 nhân — Android 7 (MuMu) 16GB · 16 nhân.
+Web / app PC / app Android chỉ hiện các mức trong giới hạn của bản đang chọn. Khách vẫn chỉ thuê được trong phần **còn trống**
+của máy chủ (RAM trống − phần chừa cho Windows; tổng nhân ≤ số luồng × `WIN_VCPU_OVER`).
+Đổi giới hạn 1 bản: `update cloudphone_pricing set android_limits = android_limits || '{"7": {"ram": 64, "cpu": 32}}' where id = 1;`
+
+**Ảnh nền máy khách**: `windows/wallpaper.png`. Đổi ảnh → máy mới nhận ảnh mới; máy cũ còn ảnh nền cũ của mình được chép
+sẵn ảnh mới (không khởi động lại, hiện từ lần bật máy sau); máy khách đã tự đổi ảnh nền thì giữ nguyên. Tắt tự đổi: `WALLPAPER_UPDATE=0`.
 
 MEmu cũng được (chọn **MEmu** trong bảng): Android 7 tạo sẵn; Android 12 cần máy mẫu `tpl_a12`.
 

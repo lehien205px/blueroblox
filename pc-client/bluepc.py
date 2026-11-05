@@ -707,9 +707,12 @@ def fmt_left(iso):
 
 
 # ================================================================ MUA MÁY · GIA HẠN · NẠP TIỀN (giống hệt web: cùng RPC Supabase, cùng giá)
-CP_RAM, CP_CPU, CP_DAYS, CP_FPS, CP_QTY = list(range(1, 9)), list(range(1, 9)), [7, 15, 30, 60], [30, 60], [1, 2, 5, 10]
+CP_RAM = [1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 16, 20, 24, 32, 48, 64, 96, 128]
+CP_CPU = [1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 16, 20, 24, 32, 40, 48, 64, 72]
+CP_DAYS, CP_FPS, CP_QTY = [7, 15, 30, 60], [30, 60], [1, 2, 5, 10]
 CP_RES = [("540x960", "Nhẹ máy"), ("720x1280", "HD"), ("720x1600", "HD+ dài"), ("1080x1920", "Full HD")]
-CP_HARD = {"ram": 8, "cpu": 8, "fps": 60}                    # máy ảo tối đa 8GB · 8 nhân · 60 FPS (giống web)
+CP_HARD = {"ram": 256, "cpu": 128, "fps": 60}                # trần tuyệt đối; trần THẬT mỗi máy theo bản Android ở AND_LIM / bảng giá
+AND_LIM = {"9": (8, 8), "12": (128, 72), "7": (16, 16)}        # (RAM GB, nhân) tối đa 1 máy: LDPlayer 9 · MuMu 12 · MuMu 7 (bảng giá android_limits ghi đè)
 CP_DEF = {"price_ram_gb_day": 2500, "price_cpu_day": 2000, "min_ram": 1, "max_ram": 16, "min_cpu": 1, "max_cpu": 8,
           "min_days": 1, "max_days": 90, "min_fps": 10, "max_fps": 120}
 AND_HINT = {"9": "LDPlayer 9 · ổn định", "12": "MuMu · mới nhất", "7": "MuMu · nhẹ"}
@@ -844,6 +847,20 @@ def and_list(pr):
     return out or ["9"]
 
 
+def and_lim(pr, v):
+    """Trần 1 máy của bản Android v = min(trần chung trong bảng giá, trần của bản đó) → (RAM GB, nhân)."""
+    al = pr.get("android_limits") if isinstance(pr.get("android_limits"), dict) else {}
+    x = al.get(str(v)) if isinstance(al.get(str(v)), dict) else {}
+    r0, c0 = AND_LIM.get(str(v), AND_LIM["9"])
+    r, c = int(num(x.get("ram"))) or r0, int(num(x.get("cpu"))) or c0
+    return (max(1, min(int(num(pr.get("max_ram"))) or r, r, CP_HARD["ram"])), max(1, min(int(num(pr.get("max_cpu"))) or c, c, CP_HARD["cpu"])))
+
+
+def cp_opts(arr, lo, hi):
+    """Các mức để bấm chọn trong [lo, hi] (luôn có đúng mức tối đa)."""
+    return sorted({v for v in arr if lo <= v <= hi} | ({hi} if hi >= lo else set()))
+
+
 def and_room(st, v):
     """Chỗ trống của máy chủ bản Android v → (online?, RAM trống, nhân trống) · None = máy chủ chưa báo theo từng bản."""
     m = st.get("android") if isinstance(st.get("android"), dict) else None
@@ -975,7 +992,7 @@ class OrderDlg(Dlg):
             self.loading("Hệ thống đang bảo trì" + (": " + str(self.st.get("maint_msg")) if self.st.get("maint_msg") else "") + ". Vui lòng quay lại sau."); return
         self.s = {"ram": cl(2, p["min_ram"], p["max_ram"]), "cpu": cl(2, p["min_cpu"], p["max_cpu"]), "days": cl(7, p["min_days"], p["max_days"]),
                   "res": "720x1280", "fps": cl(30, p["min_fps"], p["max_fps"]), "qty": 1, "android": "9", "free": False}
-        avs = and_list(p); ok = [v for v in avs if not and_why(self.st, v, self.s["ram"], self.s["cpu"])]
+        avs = and_list(p); ok = [v for v in avs if not and_why(self.st, v, *self.fit(v))]
         self.s["android"] = "9" if "9" in ok else (ok[0] if ok else ("9" if "9" in avs else avs[0]))
         self.build()
 
@@ -998,16 +1015,17 @@ class OrderDlg(Dlg):
         get = lambda key: (lambda: self.s[key])
         avs = and_list(p)
         f = self.section("Hệ điều hành")
-        self.rows.append(Chips(self.app, f, [(v, f"Android {v}\n{AND_HINT.get(v, '')}".strip()) for v in avs], get("android"), ch("android"), self.upd,
-                               why=lambda v: and_why(self.st, v, self.s["ram"], self.s["cpu"]) if self.prof.get("role") != "admin" else ""))
+        self.rows.append(Chips(self.app, f, [(v, f"Android {v}\n{AND_HINT.get(v, '')}".strip()) for v in avs], get("android"), self.set_android, self.upd,
+                               why=lambda v: and_why(self.st, v, *self.fit(v)) if self.prof.get("role") != "admin" else ""))
         self.rows[-1].frame.pack(fill="x")
         self.and_note = self.label(f, "", self.app.f_s, DIM); self.and_note.pack(fill="x")
-        mr = min(lo("max_ram"), lo("free_max_ram") or 99) if s["free"] else lo("max_ram")
-        mc = min(lo("max_cpu"), lo("free_max_cpu") or 99) if s["free"] else lo("max_cpu")
+        ar, ac = and_lim(p, s["android"])                                   # trần theo bản Android đang chọn (LDPlayer 9: 8 · MuMu 12: 128GB / 72 nhân)
+        mr = min(ar, lo("free_max_ram") or 999) if s["free"] else ar
+        mc = min(ac, lo("free_max_cpu") or 999) if s["free"] else ac
         f = self.section("RAM", f"{lo('min_ram')}–{mr} GB")
-        self.rows.append(Chips(self.app, f, [(v, f"{v}GB") for v in CP_RAM if lo("min_ram") <= v <= mr], get("ram"), ch("ram"), self.upd)); self.rows[-1].frame.pack(fill="x")
+        self.rows.append(Chips(self.app, f, [(v, f"{v}GB") for v in cp_opts(CP_RAM, lo("min_ram"), mr)], get("ram"), ch("ram"), self.upd, wrap=8)); self.rows[-1].frame.pack(fill="x")
         f = self.section("CPU (nhân)", f"{lo('min_cpu')}–{mc} nhân")
-        self.rows.append(Chips(self.app, f, [(v, str(v)) for v in CP_CPU if lo("min_cpu") <= v <= mc], get("cpu"), ch("cpu"), self.upd)); self.rows[-1].frame.pack(fill="x")
+        self.rows.append(Chips(self.app, f, [(v, str(v)) for v in cp_opts(CP_CPU, lo("min_cpu"), mc)], get("cpu"), ch("cpu"), self.upd, wrap=9)); self.rows[-1].frame.pack(fill="x")
         if not s["free"]:
             f = self.section("Số ngày", f"{lo('min_days')}–{lo('max_days')} ngày")
             line = tk.Frame(f, bg=BG); line.pack(fill="x")
@@ -1043,6 +1061,17 @@ class OrderDlg(Dlg):
         self.go = self.app.btn(bb, "Thuê ngay", self.buy); self.go.pack(side="right")
         self.upd()
 
+    def fit(self, v):
+        """RAM / CPU đang chọn sau khi kẹp theo trần của bản Android v (đổi bản thì cấu hình tự kẹp lại)."""
+        ar, ac = and_lim(self.pr, v)
+        return min(self.s["ram"], ar), min(self.s["cpu"], ac)
+
+    def set_android(self, v):
+        """Đổi bản Android → danh sách RAM / CPU đổi theo trần của bản đó → vẽ lại bảng."""
+        if v == self.s["android"]: return
+        self.s["android"] = v; self.s["ram"], self.s["cpu"] = self.fit(v)
+        self.app.root.after_idle(lambda: self.alive and self.build())
+
     def set_free(self, on):
         p, s = self.pr, self.s; s["free"] = bool(on)
         if on and self.prof.get("role") != "admin":
@@ -1062,8 +1091,9 @@ class OrderDlg(Dlg):
         if s["free"] and not adm:
             if s["ram"] > lo("free_max_ram"): return f"Máy miễn phí tối đa {int(lo('free_max_ram'))}GB RAM."
             if s["cpu"] > lo("free_max_cpu"): return f"Máy miễn phí tối đa {int(lo('free_max_cpu'))} nhân."
-        if not lo("min_ram") <= s["ram"] <= lo("max_ram"): return f"RAM phải từ {int(lo('min_ram'))} đến {int(lo('max_ram'))} GB."
-        if not lo("min_cpu") <= s["cpu"] <= lo("max_cpu"): return f"CPU phải từ {int(lo('min_cpu'))} đến {int(lo('max_cpu'))} nhân."
+        ar, ac = and_lim(p, s["android"])
+        if not lo("min_ram") <= s["ram"] <= ar: return f"Android {s['android']}: RAM từ {int(lo('min_ram'))} đến {ar} GB."
+        if not lo("min_cpu") <= s["cpu"] <= ac: return f"Android {s['android']}: CPU từ {int(lo('min_cpu'))} đến {ac} nhân."
         if not s["free"] and not lo("min_days") <= s["days"] <= lo("max_days"): return f"Số ngày phải từ {int(lo('min_days'))} đến {int(lo('max_days'))}."
         if not lo("min_fps") <= s["fps"] <= lo("max_fps"): return f"FPS phải từ {int(lo('min_fps'))} đến {int(lo('max_fps'))}."
         if s["cpu"] < 4 and s["fps"] > 60: return "Máy dưới 4 nhân chỉ chọn tối đa 60 FPS."
@@ -1085,11 +1115,14 @@ class OrderDlg(Dlg):
         if not self.alive: return
         p, s = self.pr, self.s
         if s["android"] not in and_list(p) or (self.prof.get("role") != "admin" and and_why(self.st, s["android"], s["ram"], s["cpu"])):  # hết chỗ → tự đổi bản còn chỗ
-            ok = [v for v in and_list(p) if not and_why(self.st, v, s["ram"], s["cpu"])]
-            if ok: s["android"] = "9" if "9" in ok else ok[0]
+            ok = [v for v in and_list(p) if not and_why(self.st, v, s["ram"], s["cpu"])                # chỉ đổi sang bản chứa VỪA cấu hình đang chọn
+                  and s["ram"] <= and_lim(p, v)[0] and s["cpu"] <= and_lim(p, v)[1]]
+            if ok:
+                nv = "9" if "9" in ok else ok[0]
+                if nv != s["android"]: s["android"] = nv; self.app.root.after_idle(lambda: self.alive and self.build())
         for r in self.rows: r.paint()
         bad, price, bal = self.check(), self.price(), num(self.prof.get("balance"))
-        why = {v: and_why(self.st, v, s["ram"], s["cpu"]) for v in and_list(p)}           # giải thích vì sao bản Android bị mờ
+        why = {v: and_why(self.st, v, *self.fit(v)) for v in and_list(p)}                  # giải thích vì sao bản Android bị mờ
         self.and_note.config(text="   ".join(f"Android {v}: " + ("máy chủ đang bảo trì" if w == "off" else "hết chỗ cho cấu hình này")
                                              for v, w in why.items() if w and self.prof.get("role") != "admin"))
         if s["free"]:
@@ -1320,17 +1353,17 @@ class UpgradeDlg(Dlg):
 
     def _loaded(self, r):
         tk = self.app.tk; self.pr, self.prof = r; p = self.p; self.clear()
-        mr, mc = int(num(self.pr.get("max_ram"))) or 8, int(num(self.pr.get("max_cpu"))) or 8
+        mr, mc = and_lim(self.pr, p.get("android") or "9")                 # trần theo bản Android của máy
         self.label(self.body, p.get("name") or "Máy", self.app.f_h2).pack(fill="x", padx=18, pady=(16, 0))
         self.label(self.body, f"Hiện tại {self.r0}GB RAM · {self.c0} nhân · {fmt_left(p.get('expires_at'))}", self.app.f_t, DIM, wraplength=500).pack(fill="x", padx=18)
-        rams = sorted({v for v in (2, 3, 4, 6, 8, 10, 12, 16, mr) if self.r0 < v <= mr})
-        cpus = sorted({v for v in (2, 3, 4, 6, 8, 10, 12, 16, mc) if self.c0 < v <= mc})
+        rams = sorted({v for v in (2, 3, 4, 6, 8, 10, 12, 16, 24, 32, 48, 64, 96, 128, mr) if self.r0 < v <= mr})
+        cpus = sorted({v for v in (2, 3, 4, 6, 8, 10, 12, 16, 24, 32, 48, 64, 72, mc) if self.c0 < v <= mc})
         f = self.section("RAM")
-        self.cr = Chips(self.app, f, [(self.r0, f"Giữ {self.r0}GB")] + [(v, f"{v}GB") for v in rams], lambda: self.nr, lambda v: setattr(self, "nr", v), self.upd)
+        self.cr = Chips(self.app, f, [(self.r0, f"Giữ {self.r0}GB")] + [(v, f"{v}GB") for v in rams], lambda: self.nr, lambda v: setattr(self, "nr", v), self.upd, wrap=7)
         self.cr.frame.pack(fill="x")
         if not rams: self.label(f, "RAM đã tối đa.", self.app.f_s, DIM).pack(fill="x")
         f = self.section("CPU")
-        self.cc = Chips(self.app, f, [(self.c0, f"Giữ {self.c0} nhân")] + [(v, f"{v} nhân") for v in cpus], lambda: self.nc, lambda v: setattr(self, "nc", v), self.upd)
+        self.cc = Chips(self.app, f, [(self.c0, f"Giữ {self.c0} nhân")] + [(v, f"{v} nhân") for v in cpus], lambda: self.nc, lambda v: setattr(self, "nc", v), self.upd, wrap=7)
         self.cc.frame.pack(fill="x")
         if not cpus: self.label(f, "CPU đã tối đa.", self.app.f_s, DIM).pack(fill="x")
         self.label(self.body, "Máy tự khởi động lại khoảng 1 phút để nhận cấu hình mới — app và dữ liệu giữ nguyên. "

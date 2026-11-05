@@ -39,6 +39,7 @@ public final class StreamView extends ViewGroup implements SurfaceHolder.Callbac
     private static final String MIME = "video/avc";
 
     private final SurfaceView sv;
+    private final boolean preview;                // ô xem trước: không nhận chạm (bấm ô = mở màn điều khiển), giải mã ưu tiên thường, ít bộ nhớ
     private final Handler main = new Handler(Looper.getMainLooper());
     private final HandlerThread thread;
     private final Handler dec;
@@ -55,27 +56,34 @@ public final class StreamView extends ViewGroup implements SurfaceHolder.Callbac
     // ---- luồng giải mã (chỉ BRS-decode đụng vào) ----
     private Surface surface;
     private MediaCodec codec;
-    private int gen = 0;                          // đời bộ giải mã: callback của bộ cũ bị bỏ qua
+    private volatile int gen = 0;                 // đời bộ giải mã: callback của bộ cũ bị bỏ qua (luồng giao diện đọc để bỏ báo "khung đầu" cũ)
+    private boolean parked = false;               // dropSurface(): tạm không dựng bộ giải mã (ô sắp bị gỡ / chuyển chỗ)
     private int fmtW = 0, fmtH = 0;
     private byte[] sps, pps;
     private boolean wantKey = true, shown = false;
-    private int maxIn = 1 << 20;
+    private int maxIn;
     private int fails = 0, okFrames = 0;
     private long lastPts = 0;
     private final ArrayDeque<Integer> inputs = new ArrayDeque<>();
     private final ArrayDeque<Frame> pend = new ArrayDeque<>();
 
-    public StreamView(Context c) {
+    public StreamView(Context c) { this(c, false); }
+
+    /** preview = ô xem trước nhỏ (chạm đi thẳng xuống ô cha để mở màn điều khiển). */
+    public StreamView(Context c, boolean preview) {
         super(c);
+        this.preview = preview;
+        maxIn = preview ? 256 << 10 : 1 << 20;        // hình xem trước ≤ 480: ô nhập nhỏ (nhiều ô cùng lúc đỡ tốn bộ nhớ); khung to hơn tự nới
         setBackgroundColor(Color.BLACK);
         sv = new SurfaceView(c);
         sv.getHolder().addCallback(this);
         addView(sv);
-        thread = new HandlerThread("BRS-decode");
+        thread = new HandlerThread(preview ? "BRS-preview" : "BRS-decode");
         thread.start();
         dec = new Handler(thread.getLooper());
+        final int prio = preview ? android.os.Process.THREAD_PRIORITY_DEFAULT : android.os.Process.THREAD_PRIORITY_URGENT_DISPLAY;
         dec.post(() -> {
-            try { android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_DISPLAY); } catch (Throwable ignored) { }
+            try { android.os.Process.setThreadPriority(prio); } catch (Throwable ignored) { }
         });
     }
 
@@ -98,6 +106,14 @@ public final class StreamView extends ViewGroup implements SurfaceHolder.Callbac
         vidW = w;
         vidH = h;
         requestLayout();
+    }
+
+    /** Ô sắp bị gỡ khỏi chỗ (chuyển hàng loạt ô xem trước): dừng bộ giải mã NGAY ở luồng giải mã của ô này, không chờ — các ô dừng
+     *  song song, lúc Surface bị huỷ khỏi phải đợi từng ô một (giao diện đứng). Không bị gỡ thật thì 1,5 giây sau tự vẽ tiếp. */
+    public void dropSurface() {
+        if (released) return;
+        dec.post(() -> { releaseCodec(); wantKey = true; parked = true; });
+        dec.postDelayed(() -> parked = false, 1500);
     }
 
     /** Gọi ở onDestroy: dừng bộ giải mã + luồng giải mã. */
@@ -136,9 +152,10 @@ public final class StreamView extends ViewGroup implements SurfaceHolder.Callbac
 
     // ================================================================ chạm (nhiều ngón) → toạ độ 0..1 trên khung hình
 
-    @Override public boolean onInterceptTouchEvent(MotionEvent e) { return true; }
+    @Override public boolean onInterceptTouchEvent(MotionEvent e) { return !preview; }
 
     @Override public boolean onTouchEvent(MotionEvent e) {
+        if (preview) return false;                                       // ô xem trước: để ô cha nhận bấm
         StreamClient c = client;
         int act = e.getActionMasked();
         switch (act) {
@@ -198,7 +215,7 @@ public final class StreamView extends ViewGroup implements SurfaceHolder.Callbac
 
     /** Lăn chuột (máy tính bảng / DeX / Chromebook). */
     @Override public boolean onGenericMotionEvent(MotionEvent e) {
-        if ((e.getSource() & InputDevice.SOURCE_CLASS_POINTER) != 0 && e.getActionMasked() == MotionEvent.ACTION_SCROLL) {
+        if (!preview && (e.getSource() & InputDevice.SOURCE_CLASS_POINTER) != 0 && e.getActionMasked() == MotionEvent.ACTION_SCROLL) {
             StreamClient c = client;
             float x = e.getX() - picX, y = e.getY() - picY;
             if (c != null && picW > 0 && picH > 0 && x >= 0 && y >= 0 && x <= picW && y <= picH) {
@@ -219,6 +236,7 @@ public final class StreamView extends ViewGroup implements SurfaceHolder.Callbac
             surface = s;
             releaseCodec();
             wantKey = true;
+            parked = false;
             askKey();                                                    // đang xem dở → xin khung khoá để vẽ lại ngay
         });
     }
@@ -266,7 +284,7 @@ public final class StreamView extends ViewGroup implements SurfaceHolder.Callbac
     }
 
     private void frame(byte[] b, int off, int len, boolean key) {
-        if (released) return;
+        if (released || client == null) return;                          // đã tách client (khung đến muộn sau khi tắt) → bỏ, không dựng lại bộ giải mã
         if (key) {
             byte[][] ps = paramSets(b, off, len);
             if (ps[0] != null && ps[1] != null) {
@@ -275,7 +293,7 @@ public final class StreamView extends ViewGroup implements SurfaceHolder.Callbac
                 pps = ps[1];
             }
             if (codec == null) {
-                if (surface == null || !surface.isValid()) { wantKey = true; return; }   // chưa có chỗ vẽ: có Surface sẽ tự xin khung khoá
+                if (parked || surface == null || !surface.isValid()) { wantKey = true; return; }   // chưa có chỗ vẽ: có Surface sẽ tự xin khung khoá
                 if (sps == null || pps == null) { wantKey = true; askKey(); return; }
                 if (!configure()) { wantKey = true; askKey(); return; }
             }
@@ -394,7 +412,11 @@ public final class StreamView extends ViewGroup implements SurfaceHolder.Callbac
             try { mc.releaseOutputBuffer(index, true); }                 // hiện ngay
             catch (Exception e) { fail(); return; }
             if (++okFrames > 300) fails = 0;
-            if (!shown) { shown = true; main.post(StreamView.this::firstFrame); }
+            if (!shown) {
+                shown = true;
+                final int g0 = g;
+                main.post(() -> { if (g0 == gen) firstFrame(); });       // bộ giải mã này đã bị bỏ (ô vừa chuyển chỗ…) → báo cũ, bỏ qua
+            }
         }
 
         @Override public void onError(MediaCodec mc, MediaCodec.CodecException e) {

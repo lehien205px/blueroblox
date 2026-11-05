@@ -6,14 +6,19 @@ import android.app.Dialog;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
+import android.graphics.Rect;
+import android.graphics.Typeface;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
+import android.view.ViewGroup;
+import android.view.ViewParent;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.FrameLayout;
@@ -44,6 +49,18 @@ public class MainActivity extends Activity {
     private final Handler h = new Handler(Looper.getMainLooper());
     private final Runnable poll = this::refresh;
     private Dialog gridDlg = null;                  // màn hình "Xem tất cả máy"
+    private LinearLayout gridRoot = null;           // nội dung "Xem tất cả" (vẽ lại tại chỗ khi dữ liệu đổi)
+    private ScrollView gridSv = null, phonesSv = null;
+    private boolean resumed = false, destroyed = false;
+
+    // Ô xem trước trực tiếp: mỗi máy đang chạy 1 ô, dùng lại giữa thẻ máy và "Xem tất cả". Chỉ ô đang hiện trên màn hình mới phát hình.
+    static final int MAX_LIVE = 16;                 // tối đa số ô phát hình cùng lúc
+    private final java.util.LinkedHashMap<String, LivePreview> previews = new java.util.LinkedHashMap<>();
+    private final Runnable vis = this::checkPreviews;
+    private final Rect vr = new Rect();
+    // Chữ "Còn … ngày" tự cập nhật mỗi lần tải lại, không vẽ lại cả trang (vẽ lại = ô xem trước nháy + mất vị trí cuộn)
+    private final java.util.ArrayList<Runnable> ticks = new java.util.ArrayList<>(), gridTicks = new java.util.ArrayList<>();
+    private String phonesSig = null;
 
     JSONArray phones = new JSONArray();
     JSONObject prof = new JSONObject(), price = new JSONObject(), status = new JSONObject();
@@ -200,8 +217,34 @@ public class MainActivity extends Activity {
         refresh();
     }
 
-    @Override protected void onResume() { super.onResume(); if (Api.loggedIn()) refresh(); Updater.check(this, false); }
-    @Override protected void onPause() { super.onPause(); h.removeCallbacks(poll); }
+    @Override protected void onResume() {
+        super.onResume();
+        resumed = true;
+        if (Api.loggedIn()) refresh();
+        Updater.check(this, false);
+        h.removeCallbacks(vis);
+        h.postDelayed(vis, 400);                    // quay lại màn này → bật lại hình các ô đang hiện
+    }
+
+    @Override protected void onPause() {
+        super.onPause();
+        resumed = false;
+        h.removeCallbacks(poll);
+        h.removeCallbacks(vis);
+        for (LivePreview lp : previews.values()) lp.pause();   // rời màn (vào điều khiển, ra ngoài…) → tắt hết hình xem trước
+    }
+
+    @Override protected void onDestroy() {
+        destroyed = true;                           // kết quả tải dữ liệu về muộn (xoay máy, đổi Sáng/Tối…) không vẽ / tạo ô xem trước nữa
+        h.removeCallbacksAndMessages(null);
+        Dialog d = gridDlg;
+        gridDlg = null;
+        gridRoot = null;
+        for (LivePreview lp : previews.values()) lp.pause();     // tắt hết trước (song song) rồi mới đóng cửa sổ lưới
+        if (d != null) { d.setOnDismissListener(null); try { d.dismiss(); } catch (Exception ignored) { } }
+        releasePreviews();
+        super.onDestroy();
+    }
 
     private void toLogin() {
         startActivity(new Intent(this, LoginActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK));
@@ -216,25 +259,32 @@ public class MainActivity extends Activity {
     // ---------------- Tải dữ liệu ----------------
     void refresh() {
         h.removeCallbacks(poll);
+        if (destroyed) return;
         Api.<Object[]>bg(() -> {
             Api.siteOnce();                                  // lần đầu: tên miền web hiện tại (settings.data.web)
             JSONObject[] o = {Api.profile(), Api.pricing(), Api.status()};
             JSONArray ps = Api.phones();
             return new Object[]{o, ps};
         }, r -> {
+            if (destroyed) return;                   // màn này đã đóng (xoay máy…) → bỏ kết quả, không hẹn tải lại
             JSONObject[] o = (JSONObject[]) r[0];
             prof = o[0]; price = clampHard(o[1]); status = o[2]; phones = (JSONArray) r[1];
             balTop.setText("💰 " + Ui.vnd(prof.optDouble("balance", 0)));
             ExpiryAlarm.schedule(this, phones);
-            if (tab == 0) renderPhones();
+            if (tab == 0) {
+                if (phonesSig().equals(phonesSig)) tick();      // không có gì đổi → chỉ cập nhật chữ thời hạn (ô xem trước chạy liền, không nháy)
+                else renderPhones();
+            }
             else if (tab == 2) renderAccount();
             else if (!loaded) renderRent();          // lần đầu: vẽ lại bảng thuê với giá và giới hạn thật
             loaded = true;
             boolean pending = false;
             for (int i = 0; i < phones.length(); i++) if ("pending".equals(phones.optJSONObject(i).optString("status"))) pending = true;
-            h.postDelayed(poll, pending ? 8000 : 30000);
+            if (resumed) h.postDelayed(poll, pending ? 8000 : 30000);    // đang ở màn khác → thôi tự tải lại (quay về onResume tải ngay)
         }, m -> {
+            if (destroyed) return;
             if (!Api.loggedIn()) { toLogin(); return; }
+            if (!resumed) return;
             Ui.toast(this, m);
             h.postDelayed(poll, 30000);
         });
@@ -246,6 +296,7 @@ public class MainActivity extends Activity {
             nav[i].setTextColor(i == t ? Ui.SKY : Ui.MUTED);
             nav[i].setBackground(i == t ? Ui.round(Ui.LIGHT ? Color.argb(28, 43, 110, 240) : Color.argb(40, 90, 175, 255), 14, 0) : null);
         }
+        if (t != 0) { releasePreviews(); phonesSig = null; ticks.clear(); }     // sang tab khác → tắt hẳn hình xem trước (đỡ pin + mạng)
         if (t == 0) renderPhones(); else if (t == 1) renderRent(); else renderAccount();
     }
 
@@ -292,6 +343,10 @@ public class MainActivity extends Activity {
 
     // ---------------- TAB 1: Máy của tôi ----------------
     void renderPhones() {
+        if (destroyed) return;
+        final int keepY = phonesSv != null && phonesSv.getParent() != null ? phonesSv.getScrollY() : 0;   // vẽ lại giữ nguyên chỗ đang cuộn
+        ticks.clear();
+        parkPreviews();                             // sắp chuyển mọi ô xem trước sang thẻ mới → dừng bộ giải mã trước, song song
         LinearLayout body = Ui.col(this, 14);
         if (status.optBoolean("maint", false)) {
             LinearLayout m = Ui.card(this);
@@ -311,7 +366,12 @@ public class MainActivity extends Activity {
             head.addView(all, Ui.wrap());
         }
         TextView rf = Ui.pill(this, "⟳ " + Ui.L("Làm mới", "Refresh"), Ui.SKY);
-        rf.setOnClickListener(v -> { Ui.toast(this, Ui.L("Đang làm mới…", "Refreshing…")); refresh(); });
+        rf.setOnClickListener(v -> {
+            Ui.toast(this, Ui.L("Đang làm mới…", "Refreshing…"));
+            for (LivePreview lp : previews.values()) lp.retry();    // ô xem trước đã dừng (máy chủ vừa cập nhật…) → thử lại
+            phonesSig = null;
+            refresh();
+        });
         head.addView(rf, Ui.wrap());
         body.addView(head, Ui.fill());
 
@@ -341,11 +401,147 @@ public class MainActivity extends Activity {
             e.addView(go, Ui.fill());
             body.addView(e, Ui.fill());
         }
-        for (int i = 0; i < phones.length(); i++) body.addView(phoneCard(phones.optJSONObject(i)), Ui.fill());
-        page(body);
+        java.util.HashSet<String> live = new java.util.HashSet<>();
+        for (int i = 0; i < phones.length(); i++) {
+            JSONObject p = phones.optJSONObject(i);
+            if (p == null) continue;
+            if (canCtl(p)) live.add(p.optString("id"));
+            body.addView(phoneCard(p), Ui.fill());
+        }
+        final ScrollView sv = page(body);
+        phonesSv = sv;
+        if (keepY > 0) sv.post(() -> sv.scrollTo(0, keepY));
+        prunePreviews(live);                        // máy không còn chạy (hết hạn, khoá, bảo trì, đã xoá) → bỏ ô xem trước
+        if (gridOpen()) fillGrid();                 // đang mở "Xem tất cả" → vẽ lại lưới luôn (ô xem trước nằm bên đó)
+        phonesSig = phonesSig();
+        h.removeCallbacks(vis);
+        if (resumed) h.postDelayed(vis, 300);
     }
 
-    /** Ô tĩnh thay cho ảnh màn hình trực tiếp (không chụp màn hình định kỳ nữa cho nhẹ máy chủ): biểu tượng điện thoại + trạng thái. */
+    /** Máy điều khiển được (đang chạy, không bị khoá — admin bỏ qua khoá — và không bảo trì). */
+    boolean canCtl(JSONObject p) {
+        return "active".equals(p.optString("status")) && (!locked(p) || isAdmin()) && !maintBlocks();
+    }
+
+    /** Dấu vân tay những gì danh sách đang hiện: giống lần trước → khỏi vẽ lại (thời hạn tự cập nhật bằng tick()). */
+    String phonesSig() {
+        StringBuilder b = new StringBuilder(256);
+        b.append(status.optBoolean("maint", false)).append('|').append(status.optString("maint_msg", "")).append('|')
+                .append(isAdmin()).append('|').append(maintBlocks());
+        String[] keys = {"id", "name", "status", "ram", "cpu", "res", "fps", "expires_at", "lock_reason", "shared", "share_expires", "owner_name", "share_id"};
+        for (int i = 0; i < phones.length(); i++) {
+            JSONObject p = phones.optJSONObject(i);
+            if (p == null) continue;
+            b.append('\n').append(locked(p));
+            for (String k : keys) b.append('|').append(p.opt(k));
+        }
+        return b.toString();
+    }
+
+    /** Cập nhật chữ thời hạn của danh sách + lưới (không vẽ lại). */
+    void tick() {
+        for (Runnable r : ticks) r.run();
+        for (Runnable r : gridTicks) r.run();
+    }
+
+    /** Độ phân giải máy đã mua → {rộng, cao} (mặc định 720×1280). */
+    static int[] resWH(JSONObject p) {
+        try {
+            String[] wh = p.optString("res", "720x1280").toLowerCase(Locale.ROOT).split("x");
+            int w = Integer.parseInt(wh[0].trim()), hh = Integer.parseInt(wh[1].trim());
+            if (w >= 100 && hh >= 100 && w <= 8000 && hh <= 8000) return new int[]{w, hh};
+        } catch (Exception ignored) { }
+        return new int[]{720, 1280};
+    }
+
+    // ---------------- Ô xem trước trực tiếp ----------------
+    /** Ô xem trước của máy p: lấy lại ô cũ (gỡ khỏi chỗ cũ, hình chạy tiếp) hoặc tạo mới; ô tĩnh vẽ theo trạng thái hiện tại. */
+    private LivePreview livePreview(JSONObject p, float iconSp) {
+        String id = p.optString("id");
+        LivePreview lp = previews.get(id);
+        if (lp == null) {
+            int[] wh = resWH(p);
+            lp = new LivePreview(this, id, wh[0], wh[1], "c".equals(StreamClient.netTag(this)) ? 320 : 480);   // 4G/5G → ô nhỏ hơn, đỡ tốn dữ liệu
+            previews.put(id, lp);
+        }
+        lp.setCover(phoneTile(p, iconSp));
+        ViewParent vp = lp.getParent();
+        if (vp instanceof ViewGroup) ((ViewGroup) vp).removeView(lp);
+        lp.hiddenAt = 0;
+        return lp;
+    }
+
+    private void prunePreviews(java.util.Set<String> keep) {
+        java.util.ArrayList<LivePreview> gone = new java.util.ArrayList<>();
+        java.util.Iterator<java.util.Map.Entry<String, LivePreview>> it = previews.entrySet().iterator();
+        while (it.hasNext()) {
+            java.util.Map.Entry<String, LivePreview> e = it.next();
+            if (keep.contains(e.getKey())) continue;
+            gone.add(e.getValue());
+            it.remove();
+        }
+        dropAll(gone);
+    }
+
+    private void releasePreviews() {
+        h.removeCallbacks(vis);
+        java.util.ArrayList<LivePreview> all = new java.util.ArrayList<>(previews.values());
+        previews.clear();
+        dropAll(all);
+    }
+
+    /** Bỏ hẳn các ô: tắt hết (bộ giải mã các ô dừng song song) → gỡ khỏi màn hình (Surface huỷ khi đã thôi vẽ) → giải phóng luồng giải mã. */
+    private static void dropAll(java.util.List<LivePreview> l) {
+        for (LivePreview lp : l) lp.pause();
+        for (LivePreview lp : l) {
+            ViewParent vp = lp.getParent();
+            if (vp instanceof ViewGroup) ((ViewGroup) vp).removeView(lp);
+        }
+        for (LivePreview lp : l) lp.release();
+    }
+
+    /** Trước khi chuyển hàng loạt ô (vẽ lại danh sách, mở / đóng "Xem tất cả"): dừng bộ giải mã mọi ô cùng lúc. */
+    private void parkPreviews() {
+        for (LivePreview lp : previews.values()) lp.park();
+    }
+
+    /** Mỗi giây (khi đang mở màn này): bật ô đang hiện trên màn hình, tạm dừng ô khuất quá 5 giây; tối đa MAX_LIVE ô phát cùng lúc. */
+    private void checkPreviews() {
+        h.removeCallbacks(vis);
+        if (destroyed || !resumed || previews.isEmpty() || isFinishing()) return;
+        long now = SystemClock.uptimeMillis();
+        int min = Ui.dp(24), n = 0, need = 0;
+        java.util.ArrayList<LivePreview> want = new java.util.ArrayList<>();
+        for (LivePreview lp : previews.values()) {
+            boolean seen = lp.isAttachedToWindow() && lp.isShown() && lp.getGlobalVisibleRect(vr) && vr.width() >= min && vr.height() >= min;
+            if (seen) {
+                lp.hiddenAt = 0;
+                want.add(lp);
+                if (!lp.playing() && !lp.ended()) need++;
+            } else {
+                if (lp.hiddenAt == 0) lp.hiddenAt = now;
+                if (lp.playing() && now - lp.hiddenAt > 5000) lp.pause();
+            }
+            if (lp.playing()) n++;
+        }
+        if (need > 0 && n + need > MAX_LIVE) {              // hết chỗ → nhường từ các ô đang khuất trước
+            for (LivePreview lp : previews.values()) {
+                if (n + need <= MAX_LIVE) break;
+                if (lp.playing() && lp.hiddenAt != 0) { lp.pause(); n--; }
+            }
+        }
+        for (LivePreview lp : want) {
+            if (lp.playing() || lp.ended()) continue;
+            if (n >= MAX_LIVE) break;
+            lp.play();
+            n++;
+        }
+        h.postDelayed(vis, 1000);
+    }
+
+    boolean gridOpen() { return gridDlg != null && gridRoot != null; }
+
+    /** Ô tĩnh: biểu tượng điện thoại + trạng thái — máy không chạy, hoặc phủ trên ô xem trước lúc chưa có hình / máy chủ chưa hỗ trợ xem trước. */
     private View phoneTile(JSONObject p, float iconSp) {
         String st = p.optString("status");
         boolean lk = locked(p) && !isAdmin(), live = "active".equals(st) && !lk && !maintBlocks();
@@ -371,17 +567,49 @@ public class MainActivity extends Activity {
         return t;
     }
 
-    // ---------------- XEM TẤT CẢ MÁY: lưới mọi máy + trạng thái (khách có nhiều máy theo dõi 1 lần) ----------------
+    // ---------------- XEM TẤT CẢ MÁY: lưới mọi máy phát hình trực tiếp + trạng thái (khách có nhiều máy theo dõi 1 lần) ----------------
     void openGrid() {
-        if (gridDlg != null) { gridDlg.dismiss(); }
-        android.util.DisplayMetrics dm = getResources().getDisplayMetrics();
-        float wdp = dm.widthPixels / dm.density;
-        final int cols = wdp >= 900 ? 5 : wdp >= 600 ? 4 : wdp >= 400 ? 3 : 2;
-        int gap = Ui.dp(8), pad = Ui.dp(12);
-        int cellW = (dm.widthPixels - pad * 2 - gap * (cols - 1)) / cols, cellH = cellW * 4 / 3;
-
+        if (destroyed) return;
+        Dialog old = gridDlg;
+        gridDlg = null;
+        parkPreviews();                             // ô xem trước sắp chuyển sang lưới → dừng bộ giải mã trước, song song
+        if (old != null) { old.setOnDismissListener(null); old.dismiss(); }
         LinearLayout root = Ui.col(this, 10);
         root.setBackgroundColor(Ui.BG);
+        Dialog d = new Dialog(this, android.R.style.Theme_Black_NoTitleBar_Fullscreen) {
+            @Override public void onBackPressed() { closeGrid(); }      // nút Back = nút Đóng
+        };
+        d.setContentView(root);
+        d.setOnDismissListener(x -> {
+            if (gridDlg != d) return;
+            gridDlg = null;
+            gridRoot = null;
+            gridSv = null;
+            gridTicks.clear();
+            if (!isFinishing() && tab == 0) renderPhones();     // ô xem trước về lại thẻ máy trong danh sách
+        });
+        gridDlg = d;
+        gridRoot = root;
+        fillGrid();
+        d.show();
+        h.removeCallbacks(vis);
+        if (resumed) h.postDelayed(vis, 300);
+    }
+
+    /** Vẽ (lại) nội dung "Xem tất cả" tại chỗ — giữ chỗ đang cuộn, ô xem trước chuyển sang đây và phát tiếp. */
+    private void fillGrid() {
+        final LinearLayout root = gridRoot;
+        if (root == null || destroyed) return;
+        final int keepY = gridSv != null ? gridSv.getScrollY() : 0;
+        gridTicks.clear();
+        parkPreviews();
+        root.removeAllViews();
+        android.util.DisplayMetrics dm = getResources().getDisplayMetrics();
+        float wdp = dm.widthPixels / dm.density;
+        final int cols = wdp >= 900 ? 6 : wdp >= 600 ? 4 : wdp >= 330 ? 3 : 2;
+        int gap = Ui.dp(8), pad = Ui.dp(12);
+        int cellW = (dm.widthPixels - pad * 2 - gap * (cols - 1)) / cols, cellH = cellW * 16 / 9;   // ô dọc như màn điện thoại
+
         root.setPadding(pad, Ui.dp(14), pad, Ui.dp(10));
         LinearLayout top = Ui.row(this, 10);
         int run = 0, pause = 0, other = 0;
@@ -403,13 +631,16 @@ public class MainActivity extends Activity {
         for (int i = 0; i < phones.length(); i++) {
             final JSONObject p = phones.optJSONObject(i);
             if (i % cols == 0) { row = Ui.row(this, gap); grid.addView(row, Ui.fill()); }
-            final String pid = p.optString("id"), st = p.optString("status");
-            boolean live = "active".equals(st) && (!locked(p) || isAdmin()) && !maintBlocks();
+            final String pid = p.optString("id");
+            boolean live = canCtl(p);
             LinearLayout cell = Ui.col(this, 4);
             FrameLayout box = new FrameLayout(this);
-            box.setBackground(Ui.round(Color.rgb(2, 4, 12), 10, live ? Color.argb(90, 61, 220, 132) : Color.argb(70, 255, 93, 108)));
-            box.addView(phoneTile(p, 28), new FrameLayout.LayoutParams(-1, -1));
+            box.setBackground(Ui.round(Color.rgb(2, 4, 12), 8, live ? Color.argb(90, 61, 220, 132) : Color.argb(70, 255, 93, 108)));
+            int bz = Ui.dp(3.5f);
+            box.setPadding(bz, bz, bz, bz);                              // viền bo góc bao quanh hình (góc hình vuông nằm gọn trong viền)
+            box.addView(live ? livePreview(p, 24) : phoneTile(p, 24), new FrameLayout.LayoutParams(-1, -1));   // máy đang chạy: phát hình trực tiếp
             TextView dot = Ui.text(this, live ? "●" : "○", 12, live ? Ui.OK : Ui.BAD, true);
+            dot.setShadowLayer(3, 0, 0, Color.BLACK);                     // nổi trên nền hình
             FrameLayout.LayoutParams dlp = new FrameLayout.LayoutParams(-2, -2, Gravity.TOP | Gravity.END);
             dlp.setMargins(0, Ui.dp(4), Ui.dp(6), 0);
             box.addView(dot, dlp);
@@ -418,26 +649,52 @@ public class MainActivity extends Activity {
             TextView nm = Ui.text(this, p.optString("name", "Máy"), 12, Ui.FG, true);
             nm.setSingleLine(true); nm.setEllipsize(android.text.TextUtils.TruncateAt.END);
             cell.addView(nm, Ui.fill());
-            long exp = parseTime(p.optString("expires_at"));
-            if (exp > 0) {
-                long remain = exp - System.currentTimeMillis();
-                TextView ex = Ui.text(this, "⏱ " + left(exp), 11, remain < 86400000L ? Ui.WAIT : Ui.MUTED, false);
-                ex.setSingleLine(true);
-                cell.addView(ex, Ui.fill());
-            }
+            if (parseTime(p.optString("expires_at")) > 0) cell.addView(expiryText(p, false, gridTicks), Ui.fill());
             row.addView(cell, new LinearLayout.LayoutParams(0, -2, 1f));
         }
         if (row != null) for (int k = phones.length() % cols; k > 0 && k < cols; k++) row.addView(new View(this), new LinearLayout.LayoutParams(0, 1, 1f));   // ô trống cho hàng cuối thẳng cột
-        ScrollView sv = new ScrollView(this);
+        final ScrollView sv = new ScrollView(this);
         sv.addView(grid);
         root.addView(sv, new LinearLayout.LayoutParams(-1, 0, 1f));
+        gridSv = sv;
+        if (keepY > 0) sv.post(() -> sv.scrollTo(0, keepY));
+        close.setOnClickListener(v -> closeGrid());
+    }
 
-        Dialog d = new Dialog(this, android.R.style.Theme_Black_NoTitleBar_Fullscreen);
-        d.setContentView(root);
-        close.setOnClickListener(v -> d.dismiss());
-        d.setOnDismissListener(x -> { if (gridDlg == d) gridDlg = null; });
-        gridDlg = d;
-        d.show();
+    /** Đóng "Xem tất cả": dừng bộ giải mã mọi ô trước (song song) rồi mới đóng — đóng cửa sổ huỷ Surface của mọi ô cùng lúc. */
+    private void closeGrid() {
+        Dialog d = gridDlg;
+        if (d == null) return;
+        parkPreviews();
+        d.dismiss();
+    }
+
+    /** Dòng thời hạn của máy (thẻ: đầy đủ · lưới: ngắn); tự cập nhật qua tick() mà không vẽ lại trang. */
+    private TextView expiryText(JSONObject p, boolean full, java.util.List<Runnable> into) {
+        final long exp = parseTime(p.optString("expires_at"));
+        final boolean expired = "expired".equals(p.optString("status"));
+        final TextView t = Ui.text(this, "", full ? 13.5f : 11, Ui.MUTED, false);
+        if (!full) t.setSingleLine(true);
+        final Typeface bold = Typeface.create("sans-serif-medium", Typeface.BOLD);
+        Runnable r = () -> {
+            long remain = exp - System.currentTimeMillis();
+            if (!full) {
+                t.setText("⏱ " + left(exp));
+                t.setTextColor(remain < 86400000L ? Ui.WAIT : Ui.MUTED);
+                return;
+            }
+            String s = "⏱ " + left(exp) + " · " + Ui.L("hết hạn ", "expires ") + fdate(exp);
+            if (expired) {
+                long del = exp + 30 * 60000L - System.currentTimeMillis();
+                s = "⚠️ " + Ui.L("Đã hết hạn — gia hạn trong " + Math.max(0, del / 60000) + " phút nữa kẻo bị xoá", "Expired — renew within " + Math.max(0, del / 60000) + " min or it will be deleted");
+            }
+            t.setText(s);
+            t.setTextColor(remain <= 0 ? Ui.BAD : remain < 86400000L ? Ui.WAIT : Ui.MUTED);
+            t.setTypeface(remain < 86400000L ? bold : Typeface.DEFAULT);
+        };
+        r.run();
+        into.add(r);
+        return t;
     }
 
     private View phoneCard(JSONObject p) {
@@ -460,15 +717,7 @@ public class MainActivity extends Activity {
 
         c.addView(Ui.muted(this, p.optInt("ram") + "GB RAM · " + p.optInt("cpu") + Ui.L(" nhân", " cores") + " · " + p.optString("res", "") + " · " + p.optInt("fps", 30) + " FPS"), Ui.fill());
 
-        if (exp > 0) {
-            int ec = remain <= 0 ? Ui.BAD : remain < 86400000L ? Ui.WAIT : Ui.MUTED;
-            String t = "⏱ " + left(exp) + " · " + Ui.L("hết hạn ", "expires ") + fdate(exp);
-            if ("expired".equals(st)) {
-                long del = exp + 30 * 60000L - System.currentTimeMillis();
-                t = "⚠️ " + Ui.L("Đã hết hạn — gia hạn trong " + Math.max(0, del / 60000) + " phút nữa kẻo bị xoá", "Expired — renew within " + Math.max(0, del / 60000) + " min or it will be deleted");
-            }
-            c.addView(Ui.text(this, t, 13.5f, ec, remain < 86400000L), Ui.fill());
-        }
+        if (exp > 0) c.addView(expiryText(p, true, ticks), Ui.fill());
         if (lk) {
             String why = p.optString("lock_reason", "");
             c.addView(Ui.text(this, Ui.L("Máy đang bị khoá", "This phone is locked") + (why.isEmpty() || why.equals("null") ? "" : ": " + why), 13, Ui.BAD, false), Ui.fill());
@@ -481,14 +730,20 @@ public class MainActivity extends Activity {
                     + (se > 0 ? Ui.L(" · đến ", " · until ") + fdate(se) : Ui.L(" · theo hạn máy", " · until expiry")), 13, Ui.SKY, false), Ui.fill());
         }
 
-        boolean canCtl = "active".equals(st) && (!lk || isAdmin()) && !maintBlocks();
-        if (canCtl) {                                    // ô tĩnh (biểu tượng + trạng thái, không chụp màn hình) — bấm vào để điều khiển
+        boolean canCtl = canCtl(p);
+        if (canCtl) {                                    // màn hình máy phát TRỰC TIẾP (hình nhỏ, chỉ xem) — bấm vào để điều khiển
             final String pid = p.optString("id");
             FrameLayout box = new FrameLayout(this);
-            box.setBackground(Ui.round(Color.rgb(2, 4, 12), 12, Color.argb(60, 120, 160, 255)));
-            box.addView(phoneTile(p, 34), new FrameLayout.LayoutParams(-1, -1));
+            box.setBackground(Ui.round(Color.rgb(2, 4, 12), 10, Color.argb(60, 120, 160, 255)));
+            int bz = Ui.dp(4);
+            box.setPadding(bz, bz, bz, bz);              // viền bo góc bao quanh hình (góc hình vuông nằm gọn trong viền)
+            box.addView(gridOpen() ? phoneTile(p, 30) : livePreview(p, 30), new FrameLayout.LayoutParams(-1, -1));   // đang mở "Xem tất cả" → hình nằm bên đó
             box.setOnClickListener(v -> startActivity(new Intent(this, ControlActivity.class).putExtra("id", pid)));
-            LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(Ui.dp(150), Ui.dp(130));
+            int[] wh = resWH(p);
+            int bw, bh, maxW = getResources().getDisplayMetrics().widthPixels - Ui.dp(80);
+            if (wh[1] >= wh[0]) { bh = Ui.dp(190); bw = Math.max(Ui.dp(96), bh * wh[0] / wh[1]); }        // máy dọc: cao 190dp, rộng theo tỉ lệ
+            else { bw = Math.min(Ui.dp(280), maxW); bh = Math.max(Ui.dp(110), bw * wh[1] / wh[0]); }        // máy ngang
+            LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(bw + 2 * bz, bh + 2 * bz);
             blp.gravity = Gravity.CENTER_HORIZONTAL;
             c.addView(box, blp);
         }

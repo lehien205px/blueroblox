@@ -67,6 +67,7 @@ public final class StreamClient {
     private static final int MAX_MSG = 8 * 1024 * 1024;
     private static final int DEAD_MS = 6000;                       // 6 giây không nhận được gì = đứt
     private static final long[] BACKOFF = {500, 1000, 2000, 4000, 5000};
+    private static final long[] BACKOFF_PREVIEW = {1000, 3000, 8000, 15000, 30000};   // ô xem trước: lỗi thì nối lại thưa dần (đỡ tốn máy chủ)
     private static final SecureRandom RND = new SecureRandom();
 
     /** Báo cho giao diện (luôn chạy trên luồng giao diện, không gọi nữa sau close()). */
@@ -83,7 +84,8 @@ public final class StreamClient {
         void onStats(int fps, int kbps, int pingMs, boolean direct, JSONObject server);
         /** Lỗi tạm (máy chủ báo / mạng) — client tự thử lại. */
         void onProblem(String code, String msg);
-        /** Dừng hẳn, không tự nối lại: KICKED, LOGIN (phải đăng nhập lại), AUTH, NOT_YOURS, LOCKED, BAD, NOT_FOUND, NOT_ALLOWED, NOT_ACTIVE, NO_RPC. */
+        /** Dừng hẳn, không tự nối lại: KICKED, LOGIN (phải đăng nhập lại), AUTH, NOT_YOURS, LOCKED, BAD, NOT_FOUND, NOT_ALLOWED, NOT_ACTIVE, NO_RPC;
+         *  ô xem trước thêm: NO_PREVIEW (máy chủ chưa hỗ trợ), PREVIEW_LIMIT (máy đang được xem trước ở quá nhiều nơi). */
         void onStopped(String code, String msg);
     }
 
@@ -106,6 +108,8 @@ public final class StreamClient {
     private volatile Session cur;
     private volatile Socket dialing;               // socket đang nối dở (close() đóng luôn cho nhanh)
     private volatile long lastKeyReq = 0;
+    private volatile boolean preview = false;      // ô xem trước: hình nhỏ, chỉ xem (xem preview())
+    private volatile int previewMax = 480;
     private Thread net;
     // chỉ luồng mạng dùng
     private String node = "";
@@ -120,6 +124,14 @@ public final class StreamClient {
     }
 
     public void setVideoSink(VideoSink s) { sink = s; }
+
+    /** Chế độ ô xem trước (danh sách máy / "Xem tất cả"): hình nhỏ (cạnh dài ≤ maxh, 160–480), ~8 khung/giây, chỉ xem — không đá
+     *  phiên điều khiển đang mở, không bị phiên điều khiển đá. Gọi trước start(). Máy chủ chưa hỗ trợ → onStopped("NO_PREVIEW"). */
+    public StreamClient preview(int maxh) {
+        preview = true;
+        previewMax = Math.max(160, Math.min(480, maxh));
+        return this;
+    }
 
     public void start() {
         if (net != null || closed) return;
@@ -235,7 +247,8 @@ public final class StreamClient {
     // ================================================================ vòng nối / nối lại (luồng BRS-net)
 
     private void run() {
-        try { android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_DISPLAY); } catch (Throwable ignored) { }
+        try { android.os.Process.setThreadPriority(prio()); } catch (Throwable ignored) { }
+        final long[] bo = preview ? BACKOFF_PREVIEW : BACKOFF;
         JSONObject ep = null;
         boolean refetch = true, authRetried = false;
         int attempt = 0;
@@ -244,7 +257,7 @@ public final class StreamClient {
             final int a = attempt;
             final String w = why;
             post(() -> ui.onConnecting(a, w));
-            long delay = BACKOFF[Math.min(attempt, BACKOFF.length - 1)];
+            long delay = bo[Math.min(attempt, bo.length - 1)];
             boolean opened = false;
             hadVideo = false;
             try {
@@ -274,7 +287,7 @@ public final class StreamClient {
                 if (fresh) { why = ""; continue; }
             } catch (Retry e) {
                 if (e.refetch) refetch = true;
-                if (e.delay > 0) delay = e.delay;
+                if (e.delay > 0) delay = preview ? Math.max(delay, e.delay) : e.delay;
                 why = e.msg;
                 final String c = e.code, m = e.msg;
                 post(() -> ui.onProblem(c, m));
@@ -285,7 +298,7 @@ public final class StreamClient {
                         : Ui.L("Không nối được máy chủ phát hình — kiểm tra mạng.", "Can't reach the stream server — check your network.");
             }
             if (closed) break;
-            if (hadVideo) { attempt = 0; authRetried = false; delay = BACKOFF[0]; }
+            if (hadVideo) { attempt = 0; authRetried = false; delay = bo[0]; }
             try { Thread.sleep(delay); } catch (InterruptedException ie) { if (closed) break; }
             attempt++;
         }
@@ -293,6 +306,11 @@ public final class StreamClient {
 
     private void stop(String code, String msg) {
         post(() -> ui.onStopped(code, msg));
+    }
+
+    /** Ô xem trước chạy nền (nhường giao diện + phiên điều khiển); phiên điều khiển ưu tiên như luồng vẽ. */
+    private int prio() {
+        return preview ? android.os.Process.THREAD_PRIORITY_BACKGROUND : android.os.Process.THREAD_PRIORITY_DISPLAY;
     }
 
     private String token() throws Exception {
@@ -334,6 +352,8 @@ public final class StreamClient {
         List<Path> paths = paths(stream, cert);
         if (!ep.optBoolean("online", false) || paths.isEmpty())
             throw new Retry("OFFLINE", Ui.L("Máy chủ đang bảo trì / offline", "Server under maintenance / offline"), true, 10000);
+        if (preview && !truthy(stream.opt("preview")))                // máy chủ cũ: phiên xem trước sẽ đá phiên điều khiển → không mở
+            throw new Stop("NO_PREVIEW", Ui.L("Máy chủ chưa hỗ trợ xem trước.", "This server has no live preview yet."));
         Exception last = null;
         for (Path p : paths) {
             if (closed) throw new IOException("closed");
@@ -374,7 +394,10 @@ public final class StreamClient {
     /** Nhớ đường nối được theo máy chủ + loại mạng (wifi / di động): ở nhà dùng LAN, ra ngoài dùng đường đã chạy được. */
     private String pathKey() { return "path_" + node + "_" + netTag(); }
 
-    private String netTag() {
+    private String netTag() { return netTag(app); }
+
+    /** Loại mạng đang dùng: w = wifi / dây · c = 4G/5G · x = không rõ. */
+    static String netTag(Context app) {
         try {
             ConnectivityManager cm = (ConnectivityManager) app.getSystemService(Context.CONNECTIVITY_SERVICE);
             if (cm == null) return "x";
@@ -529,6 +552,7 @@ public final class StreamClient {
             JSONObject hello = new JSONObject().put("v", 2).put("token", token).put("phone", phone)
                     .put("client", "android").put("ver", Api.version).put("q", q)
                     .put("net", netTag());                       // w = wifi · c = 4G/5G → chế độ Tự động bắt đầu nhẹ hơn khi dùng 4G
+            if (preview) hello.put("mode", "preview").put("maxh", previewMax);
             writeMsg(s, C_HELLO, hello.toString().getBytes(StandardCharsets.UTF_8));
             s.lastRx = SystemClock.uptimeMillis();
             Thread tx = new Thread(() -> writer(s), "BRS-tx");
@@ -622,6 +646,7 @@ public final class StreamClient {
                 JSONObject j = json(m);
                 String code = j.isNull("code") ? "INTERNAL" : j.optString("code", "INTERNAL");
                 String msg = j.isNull("msg") ? "" : j.optString("msg", "");
+                if (preview && ("PREVIEW_LIMIT".equals(code) || "KICKED".equals(code))) throw new Stop(code, msg);   // nhường chỗ → thôi, không giành lại
                 throw serverError(code, msg);
             }
             default:
@@ -706,7 +731,7 @@ public final class StreamClient {
     // ================================================================ luồng ghi (BRS-tx): hàng đợi + PING + ACK + gộp lệnh kéo
 
     private void writer(Session s) {
-        try { android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_DISPLAY); } catch (Throwable ignored) { }
+        try { android.os.Process.setThreadPriority(prio()); } catch (Throwable ignored) { }
         long nextPing = SystemClock.uptimeMillis() + 100;
         try {
             while (true) {
@@ -856,6 +881,13 @@ public final class StreamClient {
     private static JSONObject json(byte[] m) {
         try { return new JSONObject(new String(m, 1, m.length - 1, StandardCharsets.UTF_8)); }
         catch (Exception e) { return new JSONObject(); }
+    }
+
+    /** 1 / true / "1" / "true" → đúng. */
+    private static boolean truthy(Object o) {
+        if (o instanceof Boolean) return (Boolean) o;
+        if (o instanceof Number) return ((Number) o).intValue() != 0;
+        return o != null && ("1".equals(String.valueOf(o).trim()) || "true".equalsIgnoreCase(String.valueOf(o).trim()));
     }
 
     /** Chuỗi trong JSON; thiếu / null → "". */

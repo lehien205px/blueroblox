@@ -4397,15 +4397,31 @@ $("tg-test") && ($("tg-test").onclick = async () => {
 
 
 /* ===================== ĐIỆN THOẠI ĐÁM MÂY (khách) ===================== */
-// Máy chủ chạy LDPlayer 9: mỗi máy tối đa 8GB RAM · 8 nhân → chỉ bán 1–8 (gọn, khách khỏi chọn gói máy chủ không chạy được)
-const CP_HARD = { ram: 8, cpu: 8, fps: 60 };
-const CP_RAM = [1, 2, 3, 4, 5, 6, 7, 8], CP_CPU = [1, 2, 3, 4, 5, 6, 7, 8], CP_DAYS = [7, 15, 30, 60], CP_FPS = [30, 60], CP_QTY = [1, 2, 5, 10];
+// Trần RAM / CPU mỗi máy THEO BẢN ANDROID (bảng giá android_limits — SQL v21): LDPlayer 9 (Android 9) = 8GB · 8 nhân, MuMu (Android 12) = 128GB · 72 nhân
+const CP_HARD = { ram: 256, cpu: 128, fps: 60 };
+const CP_AND_LIM = { "9": { ram: 8, cpu: 8 }, "12": { ram: 128, cpu: 72 }, "7": { ram: 16, cpu: 16 } };
+const CP_RAM = [1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 16, 20, 24, 32, 48, 64, 96, 128], CP_CPU = [1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 16, 20, 24, 32, 40, 48, 64, 72], CP_DAYS = [7, 15, 30, 60], CP_FPS = [30, 60], CP_QTY = [1, 2, 5, 10];
 const CP_RES = [["540x960", "Nhẹ máy"], ["720x1280", "HD"], ["720x1600", "HD+ dài"], ["1080x1920", "Full HD"]];
 const CP_GRACE_MIN = 30;
 const CP_DEF = { price_ram_gb_day: 2500, price_cpu_day: 2000, min_ram: 1, max_ram: 16, min_cpu: 1, max_cpu: 8, min_days: 1, max_days: 90, min_fps: 10, max_fps: 120 };
 const CP_CARD_DEF = { name: "Điện thoại đám mây (Cloud Phone)", feats: "Android 24/7, Chạy game, App PC + Android mượt",
   desc: "Thuê điện thoại Android chạy trên cloud — tự chọn RAM, CPU, số ngày. Cài game, treo acc, điều khiển mượt bằng app máy tính (Windows) hoặc app Android." };
 let CPpricing = null, cpSel = { ram: 2, cpu: 2, days: 7, res: "720x1280", fps: 30, qty: 1, android: "9" }, myCloud = [], cpPollT = null;
+function cpAndLim(v) {         // trần 1 máy của bản Android v = min(trần chung trong bảng giá, trần của bản Android đó)
+  const b = CPpricing || CP_DEF, al = b.android_limits && typeof b.android_limits === "object" ? b.android_limits : {};
+  const d = { ...(CP_AND_LIM[v] || CP_AND_LIM["9"]), ...(al[v] || {}) };
+  return { ram: Math.max(1, Math.min(+b.max_ram || +d.ram, +d.ram || 8, CP_HARD.ram)), cpu: Math.max(1, Math.min(+b.max_cpu || +d.cpu, +d.cpu || 8, CP_HARD.cpu)) };
+}
+function cpP(v) { const l = cpAndLim(v || cpSel.android || "9"); return { ...(CPpricing || CP_DEF), max_ram: l.ram, max_cpu: l.cpu }; }
+const cpOpts = (arr, lo, hi) => [...new Set(arr.filter(v => v >= lo && v <= hi).concat(hi >= lo ? [hi] : []))].sort((a, b) => a - b);
+function cpRamCpu() {          // danh sách RAM / CPU theo trần của bản Android đang chọn — đổi bản thì danh sách đổi theo, số đang chọn tự kẹp lại
+  const p = cpP(), r0 = cpSel.ram, c0 = cpSel.cpu;
+  cpSel.ram = Math.min(Math.max(cpSel.ram, p.min_ram), p.max_ram); cpSel.cpu = Math.min(Math.max(cpSel.cpu, p.min_cpu), p.max_cpu);
+  cpChips("cp-ram", cpOpts(CP_RAM, p.min_ram, p.max_ram), "ram", "GB");
+  cpChips("cp-cpu", cpOpts(CP_CPU, p.min_cpu, p.max_cpu), "cpu", "");
+  $("cp-ram-x").max = p.max_ram; $("cp-cpu-x").max = p.max_cpu;
+  if (cpSel.ram !== r0) $("cp-ram-x").value = ""; if (cpSel.cpu !== c0) $("cp-cpu-x").value = "";
+}
 Object.assign(ERR, { BAD_RAM: "RAM nằm ngoài giới hạn cho phép.", BAD_CPU: "Số nhân CPU nằm ngoài giới hạn cho phép.", BAD_DAYS: "Số ngày nằm ngoài giới hạn cho phép.",
   BAD_RES: "Độ phân giải không hợp lệ (dạng 720x1280).", BAD_FPS: "FPS nằm ngoài giới hạn cho phép.", BAD_QTY: "Số lượng không hợp lệ.", PHONE_LOCKED: "Máy đang bị khoá, không gia hạn được. Liên hệ hỗ trợ.", BAD_DISCOUNT: "Chiết khấu phải từ 0 đến 90%.", NOT_ADMIN: "Chỉ admin mới làm được việc này.", MAINTENANCE: "Hệ thống đang bảo trì, vui lòng quay lại sau.",
   MAX_PER_USER: "Mỗi tài khoản chỉ được thuê tối đa số máy cho phép — bạn đã đủ máy. Gia hạn máy đang có hoặc xoá máy cũ để thuê máy khác.",
@@ -4455,7 +4471,7 @@ function cpCard() {
 }
 function cpNormRes(v) { return String(v || "").toLowerCase().replace(/\s+/g, "").replace(/[*×:]/g, "x"); }
 function cpCheck() {
-  const p = CPpricing || CP_DEF;
+  const p = cpP();
   if (cpSel.free && !isAdmin()) {                       // admin: không giới hạn khi nhận máy miễn phí (để thử máy)
     if (cpSel.ram > +p.free_max_ram) return L(`Máy miễn phí tối đa ${p.free_max_ram}GB RAM.`, `Free phones: max ${p.free_max_ram}GB RAM.`);
     if (cpSel.cpu > +p.free_max_cpu) return L(`Máy miễn phí tối đa ${p.free_max_cpu} nhân.`, `Free phones: max ${p.free_max_cpu} cores.`);
@@ -4586,7 +4602,8 @@ const cpAndMap = () => CPstatus && CPstatus.android && typeof CPstatus.android =
 function cpAndWhy(v) {        // "" = còn chỗ · "off" = máy chủ bản này bảo trì / chưa có · "full" = không đủ RAM/CPU cho cấu hình đang chọn
   const m = cpAndMap(); if (!m) return "";            // máy chủ chưa báo theo từng bản → không chặn (SQL vẫn kiểm tra)
   const a = m[v]; if (!a || a.online === false) return "off";
-  return +a.free_ram < cpSel.ram || +a.free_cpu < cpSel.cpu ? "full" : "";
+  const l = cpAndLim(v), q = cpSel.qty || 1;          // chuyển sang bản v thì RAM/CPU tự kẹp theo trần của bản v → so với cấu hình SAU khi kẹp
+  return +a.free_ram < Math.min(cpSel.ram, l.ram) * q || +a.free_cpu < Math.min(cpSel.cpu, l.cpu) * q ? "full" : "";
 }
 function cpAndPick() {        // mặc định Android 9; bản 9 hết chỗ / bảo trì → bản đầu tiên còn chỗ
   const l = cpAndList(), ok = l.filter(v => !cpAndWhy(v));
@@ -4606,7 +4623,7 @@ function cpGuide() {
 }
 document.addEventListener("click", e => {
   const b = e.target.closest("[data-guide]"); if (!b) return;
-  const x = CP_GUIDE.find(v => v.k === b.dataset.guide), p = CPpricing || CP_DEF; if (!x) return;
+  const x = CP_GUIDE.find(v => v.k === b.dataset.guide), p = cpP(); if (!x) return;
   const cl = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
   Object.assign(cpSel, { ram: cl(x.ram, p.min_ram, p.max_ram), cpu: cl(x.cpu, p.min_cpu, p.max_cpu), fps: cl(x.fps, p.min_fps, p.max_fps) });
   [["cp-ram", "ram"], ["cp-cpu", "cpu"], ["cp-fps", "fps"]].forEach(([id, k]) => { $(id).querySelectorAll("button").forEach(z => z.classList.toggle("on", +z.dataset.v === cpSel[k])); $(id + "-x").value = ""; });
@@ -4624,7 +4641,7 @@ function cpAndChips() {       // vẽ lại mỗi lần đổi cấu hình (cpOr
     return `<button type="button" data-and="${v}" class="${on ? "on" : ""}${why ? " off" : ""}" aria-pressed="${on}"${why && !isAdmin() ? " disabled" : ""}${tip ? ` title="${esc(tip)}"` : ""}>Android ${v}${why ? ` <small>${L("Hết chỗ", "Unavailable")}</small>` : h ? ` <small>${L(h[0], h[1])}</small>` : ""}</button>`;
   }).join("");
 }
-document.addEventListener("click", e => { const b = e.target.closest("[data-and]"); if (!b || b.disabled) return; cpSel.android = b.dataset.and; cpOrderUpd(); });
+document.addEventListener("click", e => { const b = e.target.closest("[data-and]"); if (!b || b.disabled) return; cpSel.android = b.dataset.and; cpRamCpu(); cpOrderUpd(); });
 async function openCpOrder(wantFree) {
   if (!profile) { openAuth("login"); return; }
   CPpricing = null; await Promise.all([cpLoadPricing(), cpLoadStatus()]);
@@ -4649,8 +4666,7 @@ async function openCpOrder(wantFree) {
   const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
   cpSel = { ram: clamp(2, p.min_ram, p.max_ram), cpu: clamp(2, p.min_cpu, p.max_cpu), days: clamp(7, p.min_days, p.max_days), res: "720x1280", fps: clamp(30, p.min_fps, p.max_fps), qty: 1, android: "9" };
   cpSel.android = cpAndPick();                       // hệ điều hành mặc định Android 9 (hết chỗ / bảo trì → bản đầu tiên còn chỗ)
-  cpChips("cp-ram", CP_RAM.filter(v => v >= p.min_ram && v <= p.max_ram), "ram", "GB");
-  cpChips("cp-cpu", CP_CPU.filter(v => v >= p.min_cpu && v <= p.max_cpu), "cpu", "");
+  cpRamCpu();
   cpChips("cp-days", CP_DAYS.filter(v => v >= p.min_days && v <= p.max_days), "days", " ngày");
   cpChips("cp-fps", CP_FPS.filter(v => v >= p.min_fps && v <= p.max_fps), "fps", " FPS");
   cpChips("cp-qty", CP_QTY, "qty", " máy");
@@ -4660,7 +4676,7 @@ async function openCpOrder(wantFree) {
   cpSel.free = false; cpFreeBox(freeLive(p) && wantFree !== false);
   ["cp-ram-x", "cp-cpu-x", "cp-days-x", "cp-fps-x", "cp-qty-x"].forEach(id => { $(id).value = ""; });
   $("cp-fps-x").min = p.min_fps; $("cp-fps-x").max = p.max_fps;
-  $("cp-ram-x").max = p.max_ram; $("cp-cpu-x").max = p.max_cpu; $("cp-days-x").max = p.max_days;
+  $("cp-ram-x").max = cpP().max_ram; $("cp-cpu-x").max = cpP().max_cpu; $("cp-days-x").max = p.max_days;
   $("cp-res").value = "";
   $("cp-rate").innerHTML = `Đơn giá: <b>${vnd(p.price_ram_gb_day)}</b> / 1GB RAM / ngày · <b>${vnd(p.price_cpu_day)}</b> / 1 nhân CPU / ngày`;
   $("cp-lim").textContent = `Cho phép: RAM ${p.min_ram}–${p.max_ram} GB · CPU ${p.min_cpu}–${p.max_cpu} nhân · ${p.min_days}–${p.max_days} ngày · ${p.min_fps}–${p.max_fps} FPS`;
@@ -4668,7 +4684,7 @@ async function openCpOrder(wantFree) {
 }
 function cpOrderUpd() {
   cpAndChips();                                      // chỗ trống từng bản Android phụ thuộc RAM/CPU đang chọn
-  const price = cpPrice(), p = CPpricing || CP_DEF, bad = cpCheck();
+  const price = cpPrice(), p = cpP(), bad = cpCheck();
   if (cpSel.free) {
     $("cp-calc").textContent = L(`🎁 Miễn phí ${p.free_days} ngày`, `🎁 Free for ${p.free_days} day(s)`) + (cpSel.qty > 1 ? ` × ${cpSel.qty} máy` : "");
     $("cp-total").textContent = bad ? "—" : "0đ"; $("cp-bal").textContent = profile ? fmt(profile.balance) : "—";
@@ -5869,9 +5885,9 @@ async function cpUpgrade(id) {
   let m = $("cpupdlg");
   if (!m) { m = document.createElement("div"); m.className = "modal"; m.id = "cpupdlg"; m.hidden = true; document.body.appendChild(m);
     m.addEventListener("click", e => { if (e.target === m || e.target.closest("[data-upclose]")) m.hidden = true; }); }
-  const maxR = +pr.max_ram || 16, maxC = +pr.max_cpu || 8, R0 = +p.ram, C0 = +p.cpu;
-  const RAMS = [...new Set([2, 3, 4, 6, 8, 10, 12, 16, 24, 32, 48, 64, maxR])].filter(v => v > R0 && v <= maxR).sort((a, b) => a - b);
-  const CPUS = [...new Set([2, 3, 4, 6, 8, 10, 12, 16, 24, 32, maxC])].filter(v => v > C0 && v <= maxC).sort((a, b) => a - b);
+  const lim = cpAndLim(p.android || "9"), maxR = lim.ram, maxC = lim.cpu, R0 = +p.ram, C0 = +p.cpu;      // trần theo bản Android của máy
+  const RAMS = [...new Set([2, 3, 4, 6, 8, 10, 12, 16, 24, 32, 48, 64, 96, 128, maxR])].filter(v => v > R0 && v <= maxR).sort((a, b) => a - b);
+  const CPUS = [...new Set([2, 3, 4, 6, 8, 10, 12, 16, 24, 32, 48, 64, 72, maxC])].filter(v => v > C0 && v <= maxC).sort((a, b) => a - b);
   let nr = R0, nc = C0;
   const left = Math.max(0, (new Date(p.expires_at).getTime() - Date.now()) / 864e5);
   const chips = (arr, cur, base, k, suf) => `<button type="button" class="${cur === base ? "on" : ""}" data-up${k}="${base}">${L("Giữ", "Keep")} ${base}${suf}</button>` + arr.map(v => `<button type="button" class="${cur === v ? "on" : ""}" data-up${k}="${v}">${v}${suf}</button>`).join("");

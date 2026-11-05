@@ -1756,6 +1756,105 @@ class Session:
         log(f"■ {self.name} đóng (gửi {self.sent} khung, bỏ {self.drop})")
 
 
+# ================================================================ XEM TRƯỚC TRỰC TIẾP (ô máy trong danh sách / "Xem tất cả" của app)
+PREVIEW_MAX = int(C.get("PREVIEW_MAX") or 40)            # tối đa số ô xem trước cùng lúc trên máy chủ này
+PREVIEW_PER_PHONE = 3                                    # mỗi máy tối đa 3 ô (chủ máy + người được chia sẻ trên vài thiết bị)
+PREVIEW_FPS = 8
+PREVIEWS = {}                                            # mã máy → [Preview…]
+
+
+class Preview(Session):
+    """Hình NHỎ (cạnh dài ≤ 480), 8 khung/giây, ít dữ liệu; KHÔNG điều khiển; KHÔNG đá phiên điều khiển đang mở và không bị
+       phiên điều khiển đá (nhiều thiết bị xem cùng lúc). Hình lấy THẲNG từ Android (scrcpy-server nén ngay trong máy): không đụng
+       tới cửa sổ giả lập (phiên điều khiển đang quay cửa sổ không bị xê dịch / mất hình) và không tốn ffmpeg của máy chủ."""
+    def __init__(self, link, me, phone, hello, t_hello):
+        super().__init__(link, me, phone, hello, t_hello)
+        try: self.pmax = max(160, min(480, int(hello.get("maxh") or 480)))
+        except (TypeError, ValueError): self.pmax = 480
+        self.q = self.cur_q = "eco"
+
+    def _dims(self):
+        try: fps = max(2, min(PREVIEW_FPS, int(self.phone.get("fps") or 30)))
+        except (TypeError, ValueError): fps = PREVIEW_FPS
+        sw, sh = self.src.cw, self.src.ch
+        sc = min(1.0, self.pmax / max(sw, sh, 1))
+        ow, oh = (sw, sh) if sc >= 0.999 else (max(16, int(sw * sc) & ~7), max(16, int(sh * sc) & ~7))
+        kbps = max(120, int(320 * (max(ow, oh) / 480) ** 2))
+        self.kbps_cap = self.kbps_cur = kbps
+        return ow, oh, fps, kbps
+
+    def _start_video(self, cpu=False):
+        if video_mode() == "fake": return super()._start_video(cpu=True)     # chạy thử (không có Android) → hình giả
+        return self._start_video_scrcpy()
+
+    def _congested(self):                                # mạng chậm → chỉ bỏ khung (không bật lại bộ nén cho ô nhỏ)
+        self.calm_since = time.time()
+
+    async def _receiver(self):
+        while not self.closed:
+            t, p = await asyncio.wait_for(self.link.recv(), 15)
+            self.last_rx = time.time()
+            try:
+                if t == C_ACK and len(p) >= 8: self._on_ack(struct.unpack(">Q", p[:8])[0])
+                elif t == C_PING: self.link.send_nowait(S_PONG, p[:8])
+                elif t == C_KEYFRAME:
+                    if time.time() - self.last_key_sent > 1.5 and time.time() - self.last_restart > 1.5: self.restart_req = "key"
+                elif t == C_BYE: return
+            except (ValueError, TypeError, struct.error):
+                pass
+
+    async def run(self):
+        if sum(len(v) for v in PREVIEWS.values()) >= PREVIEW_MAX:
+            self.link.send_nowait(S_ERROR, json.dumps({"code": "BUSY", "msg": "Máy chủ đang bận — tạm tắt hình xem trước."}, ensure_ascii=False).encode())
+            await self.link.close(); return
+        lst = PREVIEWS.setdefault(self.pid, [])
+        while len(lst) >= PREVIEW_PER_PHONE:                                # ô cũ nhất nhường chỗ — báo để app đó thôi nối lại (không giành qua lại)
+            old = lst[0]
+            try: old.link.send_nowait(S_ERROR, json.dumps({"code": "PREVIEW_LIMIT", "msg": "Máy đang được xem trước ở nhiều nơi."}, ensure_ascii=False).encode())
+            except Exception: pass
+            await old.finish()
+            if old in lst: lst.remove(old)
+        lst = PREVIEWS.setdefault(self.pid, []); lst.append(self)
+        log(f"▷ xem trước {self.name} ← {self.me['uid'][:8]} ({self.link.kind})")
+        try:
+            async with self.vlock:
+                w, h = await asyncio.to_thread(self._start_video)
+            self.last_restart = time.time()
+        except Closed:
+            await self.finish(); return
+        except Deny as d:
+            self.link.send_nowait(S_ERROR, json.dumps({"code": d.code, "msg": d.msg}, ensure_ascii=False).encode()); await self.finish(); return
+        except Exception as e:
+            log("  lỗi bật hình xem trước:", repr(e))
+            self.link.send_nowait(S_ERROR, json.dumps({"code": "INTERNAL", "msg": "Chưa bật được hình xem trước."}, ensure_ascii=False).encode())
+            await self.finish(); return
+        if self.closed: return
+        self.wait_key = True
+        self.link.send_nowait(S_WELCOME, json.dumps({"ok": True, "w": w, "h": h, "fps": self.fps, "kbps": self.kbps, "codec": "h264",
+                                                      "enc": self.enc.enc, "name": self.phone.get("name") or self.name,
+                                                      "android": str(self.phone.get("android") or ""), "q": "preview", "preview": True},
+                                                     ensure_ascii=False).encode())
+        tasks = [asyncio.create_task(x) for x in (self._sender(), self._receiver(), self._monitor())]
+        done, pend = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+        for t in pend: t.cancel()
+        await self.finish()
+
+    async def finish(self):
+        if self.closed: return
+        self.closed = True
+        lst = PREVIEWS.get(self.pid) or []
+        if self in lst: lst.remove(self)
+        if not lst: PREVIEWS.pop(self.pid, None)
+        objs = [x for x in (self.enc, self.src) if x]
+        def stop_all():
+            for x in objs:
+                try: x.stop()
+                except Exception: pass
+        threading.Thread(target=stop_all, daemon=True).start()
+        await self.link.close()
+        log(f"▫ xem trước {self.name} đóng ({self.sent} khung)")
+
+
 async def serve_link(link):
     try:
         t, p = await asyncio.wait_for(link.recv(), 10)
@@ -1766,7 +1865,8 @@ async def serve_link(link):
             me, phone = await asyncio.to_thread(authorize, hello)
         except Deny as d:
             link.send_nowait(S_ERROR, json.dumps({"code": d.code, "msg": d.msg}, ensure_ascii=False).encode()); await link.close(); return
-        await Session(link, me, phone, hello, t_hello).run()
+        if str(hello.get("mode") or "") == "preview": await Preview(link, me, phone, hello, t_hello).run()
+        else: await Session(link, me, phone, hello, t_hello).run()
     except (asyncio.IncompleteReadError, asyncio.TimeoutError, ConnectionError, EOFError, ssl.SSLError, ValueError, OSError):
         await link.close()
     except Exception as e:
@@ -1890,7 +1990,8 @@ def publish_loop(fp):
             lip, pip_ = lan_ip(), public_ip()
             if lip: direct.append({"host": lip, "port": PORT, "lan": True})
             if pip_ and pip_ != lip: direct.append({"host": pip_, "port": PORT})
-            stream = {"direct": direct, "cert": fp, "ws": WS_URL or None, "api": API_BASE, "v": 2}
+            stream = {"direct": direct, "cert": fp, "ws": WS_URL or None, "api": API_BASE, "v": 2,
+                      "preview": 1}          # có hình xem trước trực tiếp (app chỉ bật ô xem trước khi máy chủ báo có — máy chủ cũ sẽ đá phiên điều khiển)
             if stream != last:
                 log(f"đường nối: trực tiếp {', '.join(d['host'] + ':' + str(d['port']) for d in direct) or '—'}"
                     + (f" · dự phòng {WS_URL}" if WS_URL else " · (chưa có dự phòng Cloudflare STREAM_WS)"))

@@ -139,8 +139,8 @@ foreach ($f in "cloudphoned.py", "cpapi.py") { Get "$RAW/$f" "$B\$f" }
 foreach ($f in "phonectl.py", "run.py", "remake.py", "keep.bat", "start-blue.bat", "panel.py", "wallpaper.png", "donweb.py", "kiemtra.py", "suachua.ps1", "bluestream.py", "doi-ten-mien.py") { Get "$RAW/windows/$f" "$B\$f" }
 if (-not (Test-Path "$B\cloudphone.conf")) {
 $PRI = if ($Node -eq "win1") { "1" } else { "0" }
-$MAXR = if ($LDP) { "8" } elseif ($MUMU -and -not $MEMU) { "128" } else { "16" }     # 1 máy tối đa: LDPlayer 9 = 8GB · MuMu Android 12 = 128GB · MEmu = 16GB
-$MAXC = if ($MUMU -and -not $LDP -and -not $MEMU) { "72" } else { "8" }
+$MAXR = if ($LDP) { "8" } else { "16" }     # 1 máy tối đa: Android 9 (LDPlayer 9) = 8GB · 8 nhân · Android 12 / 7 (MEmu / MuMu) = 16GB · 16 nhân
+$MAXC = if ($LDP) { "8" } else { "16" }
 $EMUL = if ($LDP) { "EMU=ld`nANDROIDS=9" } elseif ($MUMU -and -not $MEMU) { "EMU=mumu`nANDROIDS=12,7" } else { "EMU=memu`nANDROIDS=7" }
 $NUM = [int]("0" + ($Node -replace '[^0-9]', ''))
 $SPORT = if ($NUM -ge 2) { 8188 + $NUM } else { 8189 }

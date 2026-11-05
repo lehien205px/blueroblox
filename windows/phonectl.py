@@ -754,13 +754,12 @@ def _host_ram():
     try: return mem()[0]
     except Exception: return 0.0
 if EMU == "mumu":
-    # MuMu (Android 12 / 7) chạy được máy to → mặc định trần 1 máy = RAM / số luồng THẬT của máy chủ.
-    # Giới hạn bán theo từng bản Android (12: 128GB · 72 nhân, 7: 16GB · 16 nhân) đặt trên web (bảng giá → android_limits).
-    MAX_RAM = float(CONF.get("MEMU_MAX_RAM") or max(8, int(_host_ram())))
-    MAX_CPU = int(float(CONF.get("MEMU_MAX_CPU") or (os.cpu_count() or 8)))
+    # MuMu (Android 12 / 7): trần 1 máy 16GB · 16 nhân (giống giới hạn bán trên web: bảng giá → android_limits, SQL v22).
+    MAX_RAM = float(CONF.get("MEMU_MAX_RAM") or 16)
+    MAX_CPU = int(float(CONF.get("MEMU_MAX_CPU") or 16))
 else:
-    MAX_RAM = float(CONF.get("MEMU_MAX_RAM", "8" if EMU == "ld" else "16") or 16)     # MEmu tối đa 16GB/máy · LDPlayer 9 tối đa 8GB
-    MAX_CPU = int(float(CONF.get("MEMU_MAX_CPU", "8") or 8))                           # MEmu / LDPlayer 9: tối đa 8 nhân
+    MAX_RAM = float(CONF.get("MEMU_MAX_RAM", "8" if EMU == "ld" else "16") or 16)     # MEmu (Android 7 / 12) tối đa 16GB/máy · LDPlayer 9 (Android 9) tối đa 8GB
+    MAX_CPU = int(float(CONF.get("MEMU_MAX_CPU", "8" if EMU == "ld" else "16") or 8))  # MEmu tối đa 16 nhân · LDPlayer 9 tối đa 8 nhân
 LD_MEM = (256, 512, 768, 1024, 1536, 2048, 3072, 4096, 6144, 8192, 12288, 16384)
 def configure(idx, ram, cpu, res, dpi):
     w, h = res.lower().split("x")
@@ -1435,7 +1434,7 @@ def cmd_setconf(a):
         if k in SECRET_KEYS: print(f"LỖI: {k} là khoá bí mật — dán bằng nút trong bảng điều khiển, không gõ ở đây"); sys.exit(1)
         if re.search(r"[\r\n]", v): print(f"LỖI: giá trị của {k} không được xuống dòng"); sys.exit(1)
         want[k] = v
-    if not want: print("Cách dùng: python phonectl.py setconf EMU=mumu ANDROIDS=12,7 MEMU_MAX_RAM=128 MEMU_MAX_CPU=72"); sys.exit(1)
+    if not want: print("Cách dùng: python phonectl.py setconf EMU=memu ANDROIDS=7,12 MEMU_MAX_RAM=16 MEMU_MAX_CPU=16"); sys.exit(1)
     data = open(CONF_F, "rb").read() if os.path.isfile(CONF_F) else b""
     bom = data[:3] == b"\xef\xbb\xbf"; raw = data[3 if bom else 0:].decode("utf-8", errors="replace")
     nl = "\r\n" if "\r\n" in raw else "\n"

@@ -87,16 +87,17 @@ Cho khách ở mạng chặn cổng lạ:
    Cài ở ổ / thư mục nào cũng được: bảng + `phonectl.py` tự dò (thư mục mặc định → khoá gỡ cài đặt trong registry →
    MuMu đang mở → thư mục Netease/MuMu ở mọi ổ cứng). Vẫn không thấy → bảng: 🎛 **Chọn giả lập** → 📂 **Chọn thư mục MuMu**.
 2. Cài CloudBlue: `setup.ps1 -Node win3 -PubHost phone3.cloudblue.vn` (máy chỉ có MuMu cũng cài được; tự ghi `EMU=mumu`,
-   `ANDROIDS=12,7`, `MEMU_MAX_RAM=128`, `MEMU_MAX_CPU=72`), dán khoá, nối Cloudflare.
-   Máy chủ cũ đổi sang MuMu: `python C:\blue\phonectl.py setconf EMU=mumu ANDROIDS=12,7 MEMU_MAX_RAM=128 MEMU_MAX_CPU=72`.
+   `ANDROIDS=12,7`, `MEMU_MAX_RAM=16`, `MEMU_MAX_CPU=16`), dán khoá, nối Cloudflare.
+   Máy chủ cũ đổi sang MuMu: `python C:\blue\phonectl.py setconf EMU=mumu ANDROIDS=12,7 MEMU_MAX_RAM=16 MEMU_MAX_CPU=16`.
 3. **Máy mẫu**: trong MuMu Multi-instance tạo 1 máy **Android 12** đặt tên `tpl_a12` và 1 máy **Android 7** tên `tpl_a7`.
    Máy khách được nhân bản từ máy mẫu. Máy mẫu không bao giờ bị xoá.
 4. Modem mở cổng **TCP `8188 + số máy`** (win2 → 8190, win3 → 8191) về máy này. `setup.ps1` đã ghi sẵn `STREAM_PORT` đúng số đó.
-5. `python C:\blue\phonectl.py probe` → kiểm tra: dòng đầu **Giả lập: MuMu**, "1 máy tối đa 128GB · 72 nhân", máy mẫu **CÓ ✓**.
+5. `python C:\blue\phonectl.py probe` → kiểm tra: dòng đầu **Giả lập: MuMu**, "1 máy tối đa 16GB · 16 nhân", máy mẫu **CÓ ✓**.
 6. Bấm 🧪 **Tạo máy thử** → mở bằng app PC thử.
 
-**Giới hạn 1 máy theo bản Android** (SQL v21, bảng `cloudphone_pricing.android_limits`):
-Android 9 (LDPlayer) 8GB · 8 nhân — Android 12 (MuMu) 128GB · 72 nhân — Android 7 (MuMu) 16GB · 16 nhân.
+**Giới hạn 1 máy theo bản Android** (SQL v22, bảng `cloudphone_pricing.android_limits`):
+Android 9 (LDPlayer) 8GB · 8 nhân — Android 12 và Android 7 (MEmu / MuMu) 16GB · 16 nhân. 16GB · 16 nhân là trần tuyệt đối
+(web, app PC, app Android đều chặn ở 16; admin đổi trần từng bản ở ô "Trần 1 máy theo bản Android" trong trang quản trị, không vượt 16).
 Web / app PC / app Android chỉ hiện các mức trong giới hạn của bản đang chọn. Khách vẫn chỉ thuê được trong phần **còn trống**
 của máy chủ (RAM trống − phần chừa cho Windows; tổng nhân ≤ số luồng × `WIN_VCPU_OVER`).
 Đổi giới hạn 1 bản: `update cloudphone_pricing set android_limits = android_limits || '{"7": {"ram": 64, "cpu": 32}}' where id = 1;`
@@ -156,7 +157,7 @@ Khách không có app (iPhone, iPad, Mac, máy tính chưa cài) mở máy ngay 
 
 ## Máy chủ MEmu bán Android 7 + 12
 
-`python C:\blue\phonectl.py setconf EMU=memu ANDROIDS=7,12 MEMU_MAX_RAM=128 MEMU_MAX_CPU=72` + trong Multi-MEmu tạo 1 máy **Android 12** tên `tpl_a12` (để tắt).
+`python C:\blue\phonectl.py setconf EMU=memu ANDROIDS=7,12 MEMU_MAX_RAM=16 MEMU_MAX_CPU=16` + trong Multi-MEmu tạo 1 máy **Android 12** tên `tpl_a12` (để tắt).
 Android 7 MEmu tạo sẵn được; Android 12 nhân bản từ `tpl_a12`. Máy chủ chỉ báo lên web bản Android **tạo được thật**
 (`phonectl.py engine`: chưa có `tpl_a12` → không bán Android 12 ở máy chủ này). Tạo máy mẫu xong: bảng ■ Tắt tất cả → ▶ Bật tất cả.
 Mỗi máy chủ chỉ nhận đơn đúng `ANDROIDS` của nó (máy 1 LDPlayer = 9; máy 2 MEmu = 7, 12).

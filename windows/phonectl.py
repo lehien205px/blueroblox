@@ -967,9 +967,68 @@ def _close_memu_errors():
         for h in hits: u.PostMessageW(ctypes.c_void_p(h), 0x0010, 0, 0)        # WM_CLOSE = bấm OK / X
         return len(hits)
     except Exception: return 0
+FAIL_F = os.path.join(HOME, "redroid", "startfail.json")
+def _fails():
+    try: return json.load(open(FAIL_F, encoding="utf-8"))
+    except Exception: return {}
+def _fails_put(d):
+    try: json.dump(d, open(FAIL_F, "w", encoding="utf-8"))
+    except Exception: pass
+def _memu_front_pids(name):
+    """PID cửa sổ MEmu (MEmu.exe) đang mở cho máy tên name — cửa sổ đó giữ hộp thoại lỗi khi máy không bật được."""
+    if os.name != "nt" or not name: return set()
+    try:
+        u = ctypes.windll.user32; k = ctypes.windll.kernel32; pids = set()
+        PROC = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
+        def cb(h, _):
+            n = u.GetWindowTextLengthW(h)
+            if n:
+                b = ctypes.create_unicode_buffer(n + 1); u.GetWindowTextW(h, b, n + 1); t = b.value
+                if t == name or t.endswith(f"({name})") or t.endswith(f" {name}"):
+                    pid = ctypes.c_ulong(); u.GetWindowThreadProcessId(ctypes.c_void_p(h), ctypes.byref(pid)); pids.add(pid.value)
+            return True
+        u.EnumWindows(PROC(cb), 0)
+        out = set()
+        for pid in pids:                                      # chỉ nhận đúng tiến trình MEmu.exe (không đụng chương trình khác trùng tên cửa sổ)
+            hp = k.OpenProcess(0x1000, False, pid)
+            if not hp: continue
+            buf = ctypes.create_unicode_buffer(520); sz = ctypes.c_ulong(520)
+            if k.QueryFullProcessImageNameW(hp, 0, buf, ctypes.byref(sz)) and buf.value.lower().endswith("\\memu.exe"): out.add(pid)
+            k.CloseHandle(hp)
+        return out
+    except Exception: return set()
+def _try_start(idx, name):
+    """1 lần bật máy MEmu: (đã chạy thật?, kết quả lệnh, lý do lỗi). Hộp thoại lỗi hiện ra (kể cả SAU khi lệnh bật trả về) là đóng ngay."""
+    import threading
+    hit, stop = [], []
+    def watch():
+        while not stop:
+            if _close_memu_errors(): hit.append(1)
+            time.sleep(2)
+    th = threading.Thread(target=watch, daemon=True); th.start()
+    up = False; r = None
+    try:
+        r = memuc("start", "-i", idx, timeout=150)
+        if not _start_failed(r):
+            t0 = time.time()
+            while time.time() - t0 < 60 and not hit:             # chờ máy chạy thật (đã giữ xong RAM)
+                x = vms().get(int(idx))
+                if x and x["running"]: up = True; break
+                time.sleep(3)
+            if up:
+                time.sleep(START_GAP)                             # MEmu có thể báo lỗi vài giây sau → kiểm lại rồi mới cho máy khác bật
+                x = vms().get(int(idx)); up = bool(x and x["running"]) and not hit
+    finally: stop.append(1); th.join(5)
+    if up: return True, r, ""
+    why = "MEmu báo thiếu RAM (memory is low)" if hit else ("lệnh bật lỗi" if _start_failed(r) else "máy không lên sau 60 giây")
+    for pid in _memu_front_pids(name):                            # cửa sổ MEmu của máy này (đang giữ hộp thoại lỗi) → đóng
+        subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], capture_output=True, creationflags=NOWIN)
+    memuc("stop", "-i", idx, timeout=60)
+    return False, subprocess.CompletedProcess(getattr(r, "args", []), 1, (getattr(r, "stdout", "") or "") + f" | {why}", getattr(r, "stderr", "") or ""), why
 def memu_start(idx):
     """Bật 1 máy. MEmu: MỖI LẦN CHỈ BẬT 1 MÁY (khoá "vmstart", mọi chương trình dùng chung) — 2 máy bật cùng lúc MEmu hay báo
-       "The computer memory is low" dù RAM còn nhiều → máy không lên. Hộp thoại lỗi đó được tự đóng rồi thử lại."""
+       "The computer memory is low" dù RAM còn nhiều. Máy không lên → đóng cửa sổ MEmu của máy đó + tắt hẳn → thử lại 1 lần;
+       vẫn lỗi → tạm không bật máy đó 10 phút (không giữ lượt bật của máy khác)."""
     if EMU != "memu":
         r = memuc("start", "-i", idx, timeout=150)
         if _start_failed(r):
@@ -977,37 +1036,31 @@ def memu_start(idx):
         if _start_failed(r) and memu_unstick():
             r = memuc("start", "-i", idx, timeout=150)
         return r
-    import threading
     lk = _Lock("vmstart", wait=900)
     try: lk.__enter__(); got = True
     except RuntimeError: got = False                          # chờ quá 15 phút → vẫn bật (không để khách chờ mãi)
     try:
         x = vms().get(int(idx))
         if x and x["running"]: return _ok("SUCCESS: vm is already running")
+        name = (x or {}).get("name") or ""
+        fl = _fails(); f = fl.get(name) or {}
+        if name and f.get("n", 0) >= 2 and time.time() - f.get("t", 0) < 600:
+            return subprocess.CompletedProcess([], 1, "", f"{name}: MEmu bật lỗi {f['n']} lần liền — tạm không thử, {int((600 - time.time() + f['t']) // 60) + 1} phút nữa thử lại")
         r = None
-        for k in range(3):
-            hit, stop = [], []
-            def watch():                                      # trong lúc bật: hộp thoại lỗi hiện ra là đóng ngay
-                while not stop:
-                    if _close_memu_errors(): hit.append(1)
-                    time.sleep(2)
-            th = threading.Thread(target=watch, daemon=True); th.start()
-            try: r = memuc("start", "-i", idx, timeout=150)
-            finally: stop.append(1); th.join(5)
-            if _close_memu_errors(): hit.append(1)
-            if not _start_failed(r) and not hit: break
-            if hit: r = subprocess.CompletedProcess(r.args, 1, (r.stdout or "") + " | MEmu báo thiếu RAM (memory is low)", r.stderr)
-            if k < 2:
-                print(f"   (MEmu chưa bật được máy #{idx}{' — báo thiếu RAM, đã tự đóng hộp thoại' if hit else ''} → thử lại sau {20 + 20 * k} giây)", flush=True)
-                time.sleep(20 + 20 * k)
-        if _start_failed(r) and memu_unstick(): r = memuc("start", "-i", idx, timeout=150)
-        if not _start_failed(r):
-            t0 = time.time()
-            while time.time() - t0 < 60:                         # chờ máy này lên hẳn (đã giữ xong RAM) rồi mới cho máy khác bật
-                x = vms().get(int(idx))
-                if x and x["running"]: break
-                time.sleep(3)
-            time.sleep(START_GAP)
+        for k in range(2):
+            up, r, why = _try_start(idx, name)
+            if up:
+                if name in fl: fl.pop(name, None); _fails_put(fl)
+                return r
+            print(f"   (MEmu chưa bật được {name or '#' + str(idx)}: {why} → " + ("thử lại sau 20 giây)" if k == 0 else "tạm dừng máy này 10 phút)"), flush=True)
+            if k == 0: time.sleep(20)
+        if memu_unstick():                                    # không máy nào chạy mà vẫn lỗi → MEmu chạy ngầm bị kẹt → khởi động lại MEmu, thử lần cuối
+            up, r, why = _try_start(idx, name)
+            if up:
+                if name in fl: fl.pop(name, None); _fails_put(fl)
+                return r
+        if name:
+            f = fl.get(name) or {"n": 0}; f["n"] = f.get("n", 0) + 1; f["t"] = time.time(); fl[name] = f; _fails_put(fl)
         return r
     finally:
         if got: lk.__exit__()
@@ -1045,6 +1098,8 @@ def cmd_resize(a):
     if ram > float(p["ram"]) and av - (ram - float(p["ram"])) < RESERVE: print("LỖI: RAM Windows không đủ để nâng."); sys.exit(4)
     adb("disconnect", serial(p), timeout=15); memuc("stop", "-i", IDX(p), timeout=120); time.sleep(3)
     configure(IDX(p), ram, cpu, p.get("res", "720x1280"), p.get("dpi"))
+    fl = _fails()
+    if fl.pop(a.name, None) is not None: _fails_put(fl)          # cấu hình mới → bỏ lịch "tạm không bật" do lỗi bật với cấu hình cũ
     start_phone(p); wait_boot(a.name, p["port"], apps=False)
     st = load(); q = rec(a.name, st); q["ram"], q["cpu"] = ram, cpu; save(st)
     print(f"⬆️ '{a.name}' → {ram:g}GB RAM · {cpu:g} nhân")

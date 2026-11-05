@@ -4,14 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,interactive-widget=resizes-content">
 <meta name="theme-color" content="#060a1c">
-<title>Điều khiển máy – BLUEROBLOX</title>
+<title>Điều khiển máy – CloudBlue</title>
 <link rel="icon" href="logo.webp">
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
-<meta name="apple-mobile-web-app-title" content="BlueRoblox">
+<meta name="apple-mobile-web-app-title" content="CloudBlue">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap">
 <style>
@@ -350,7 +350,7 @@ html[data-theme] .langsw button{padding:5px 9px;font-size:12.5px;gap:5px}
       <div class="dm-h"><b id="dm-title">Máy của bạn</b><button class="btn sm" type="button" id="dm-all">⊞ Mở tất cả</button></div>
       <div class="dm-l" id="dm-list"></div>
       <div class="dm-f"><span id="dm-hint">Tích chọn để mở nhiều máy cùng lúc</span><button class="btn sm gh" type="button" id="dm-sel" disabled>Mở máy đã chọn</button></div>
-      <a class="dm-app" id="dm-app" href="/download/blueroblox-cloud.apk" download hidden>📱 Tải app Android — điều khiển máy ngay trên điện thoại</a>
+      <a class="dm-app" id="dm-app" href="/download/blueroblox-cloud.apk" download="CloudBlue.apk" hidden>📱 Tải app Android — điều khiển máy ngay trên điện thoại</a>
     </div>
   </div>
   <div class="seg" id="viewseg" role="group" aria-label="Kiểu xem">
@@ -365,7 +365,7 @@ html[data-theme] .langsw button{padding:5px 9px;font-size:12.5px;gap:5px}
     <div class="seg" id="zoomseg" role="group" aria-label="Phóng to">
       <button id="z-out" title="Thu nhỏ (Ctrl −)" aria-label="Thu nhỏ">−</button><span id="z-val">100%</span><button id="z-in" title="Phóng to (Ctrl +)" aria-label="Phóng to">+</button><button id="z-fit" title="Vừa khung (Ctrl 0)">Vừa</button>
     </div>
-    <a class="getapp" id="getapp" href="/download/blueroblox-cloud.apk" download hidden title="Tải app Android BlueRoblox Cloud"><svg class="ic sm" viewBox="0 0 24 24"><rect x="7" y="2.5" width="10" height="19" rx="2"/><path d="M12 8v6M9.5 11.5L12 14l2.5-2.5"/></svg><span class="gl">Tải app Android</span><span class="gs">Tải app</span></a>
+    <a class="getapp" id="getapp" href="/download/blueroblox-cloud.apk" download="CloudBlue.apk" hidden title="Tải app Android CloudBlue"><svg class="ic sm" viewBox="0 0 24 24"><rect x="7" y="2.5" width="10" height="19" rx="2"/><path d="M12 8v6M9.5 11.5L12 14l2.5-2.5"/></svg><span class="gl">Tải app Android</span><span class="gs">Tải app</span></a>
     <a class="adminlink" id="adminlink" href="https://phone.cloudblue.vn/" target="_blank" rel="noopener" hidden>Tất cả máy (admin)</a>
     <span class="state" id="state"><i></i><span id="statetxt">Đang kết nối…</span></span>
   </div>
@@ -381,7 +381,7 @@ html[data-theme] .langsw button{padding:5px 9px;font-size:12.5px;gap:5px}
     </div>
   </div>
   <div class="side" id="side">
-    <a class="appcta" id="appcta" href="/download/blueroblox-cloud.apk" download hidden>
+    <a class="appcta" id="appcta" href="/download/blueroblox-cloud.apk" download="CloudBlue.apk" hidden>
       <b>📱 App Android</b><span>Điều khiển máy ngay trên điện thoại, báo trước khi hết hạn</span><i>Tải app miễn phí</i>
     </a>
     <aside class="tools" id="tools" aria-label="Công cụ">
@@ -462,7 +462,7 @@ const EN = {
   "Kiểu xem": "View mode", "Xem 1 máy": "View one phone", "1 máy": "1 phone", "Xem nhiều máy cùng lúc": "View several phones at once", "Nhiều máy": "Multi view",
   "Độ phân giải máy · độ nét hình đang gửi · kích thước hiển thị · tốc độ mạng": "Phone resolution · stream resolution · display size · network speed",
   "Phóng to": "Zoom in", "Thu nhỏ": "Zoom out", "Thu nhỏ (Ctrl −)": "Zoom out (Ctrl −)", "Phóng to (Ctrl +)": "Zoom in (Ctrl +)", "Vừa khung (Ctrl 0)": "Fit to window (Ctrl 0)", "Vừa": "Fit",
-  "Tải app Android BlueRoblox Cloud": "Download the BlueRoblox Cloud Android app", "Tải app Android": "Get Android app", "Tải app": "Get app",
+  "Tải app Android CloudBlue": "Download the CloudBlue Android app", "Tải app Android": "Get Android app", "Tải app": "Get app",
   "Tất cả máy (admin)": "All phones (admin)", "Đang kết nối…": "Connecting…", "📐 Khớp ngay": "📐 Fit now", "Để sau": "Later", "Xem & gia hạn": "View & renew",
   "Màn hình điện thoại": "Phone screen", "Đang mở máy…": "Opening phone…", "Công cụ": "Tools",
   "Điều khiển máy ngay trên điện thoại, báo trước khi hết hạn": "Control your phone from your mobile, with expiry reminders", "Tải app miễn phí": "Free download",
@@ -1266,7 +1266,7 @@ const ACT = {
   },
   async clone() {
     ask({ title: L("🧬 Clone tab — chạy nhiều bản cùng lúc", "🧬 Clone tab — run several copies at once"),
-      desc: L("Tạo thêm bản của app (VD Roblox chính thức) để đăng nhập acc khác, chạy song song với bản chính. <b>Ô số</b>: muốn bao nhiêu bản clone thì nhập vào — chỉ cần 1 bản thì để trống, bấm Clone. Mỗi bản Roblox cần thêm ~2GB RAM · 2 nhân (2 bản: 8GB · 6 nhân).", "Make extra copies of an app (e.g. official Roblox) to sign in with other accounts side by side. <b>Number box</b>: type how many clones you want — leave it empty for just 1, then tap Clone. Each Roblox copy needs ~2GB RAM · 2 cores more (2 copies: 8GB · 6 cores)."),
+      desc: L("Tạo thêm bản của app (VD game) để đăng nhập acc khác, chạy song song với bản chính. <b>Ô số</b>: muốn bao nhiêu bản clone thì nhập vào — chỉ cần 1 bản thì để trống, bấm Clone. Mỗi bản game 3D cần thêm ~2GB RAM · 2 nhân (2 bản: 8GB · 6 nhân).", "Make extra copies of an app (e.g. a game) to sign in with other accounts side by side. <b>Number box</b>: type how many clones you want — leave it empty for just 1, then tap Clone. Each 3D game copy needs ~2GB RAM · 2 cores more (2 copies: 8GB · 6 cores)."),
       body: '<div class="apps" id="clonelist"><div class="spin" style="margin:16px auto"></div></div>', noOk: true });
     try {
       const [{ apps }, c] = await Promise.all([api(cur.id + "/apps"), api(cur.id + "/clone")]);
@@ -1275,7 +1275,7 @@ const ACT = {
         return `<div class="app"><span title="${esc(p)}">${k ? "🧬 " : ""}${esc(p)}${k ? ` <small style="color:var(--ok)">✓ ${k} ${L("bản clone", k > 1 ? "clones" : "clone")}</small>` : ""}</span>
           <input class="in clonen" type="number" min="1" max="${mx}" inputmode="numeric" placeholder="${k ? k + 1 : 1}" title="${L("Số bản clone (để trống = 1)", "Number of clones (empty = 1)")}" data-clonen="${esc(p)}" style="width:62px;padding:6px 8px;text-align:center">
           ${Array.from({ length: k }, (_, i) => `<button class="btn sm" data-cloneopen="${esc(p)}" data-ci="${i + 1}" title="${L("Mở bản clone", "Open clone")} ${i + 1}">▶ ${k > 1 ? L("Mở ", "Open ") + (i + 1) : L("Mở clone", "Open clone")}</button>`).join("")}<button class="btn sm" data-clone="${esc(p)}">${k ? L("Thêm", "More") : "Clone"}</button>${k ? `<button class="btn sm red" data-unclone="${esc(p)}">${L("Bỏ clone", "Remove")}</button>` : ""}</div>`; }).join("")
-        : L("<p>Chưa có app nào. Cài app (VD Roblox từ CH Play) trước, rồi quay lại đây để clone.</p>", "<p>No apps yet. Install an app first (e.g. Roblox from Play Store), then come back to clone it.</p>");
+        : L("<p>Chưa có app nào. Cài app (VD game từ CH Play) trước, rồi quay lại đây để clone.</p>", "<p>No apps yet. Install an app first (e.g. a game from Play Store), then come back to clone it.</p>");
     } catch (e) { $("clonelist").innerHTML = `<p style="color:var(--bad)">${esc(e.message)}</p>`; }
   },
   async apps() {
@@ -1352,8 +1352,8 @@ const ACT = {
     ask({ title: L("Chế độ hình", "Graphics mode"),
       desc: L(`Đang dùng: <b>${now === "directx" ? "⚡ Mượt" : now === "opengl" ? "🎮 Hiện 3D" : "?"}</b>. Đổi chế độ máy sẽ <b>khởi động lại khoảng 1–2 phút</b>, dữ liệu và app giữ nguyên.`,
               `Current: <b>${now === "directx" ? "⚡ Smooth" : now === "opengl" ? "🎮 Show 3D" : "?"}</b>. Switching <b>restarts the phone (~1–2 min)</b>; data and apps are kept.`),
-      body: `<div id="g-box">${pick([["directx", "⚡ " + L("Mượt", "Smooth"), L("Điều khiển mượt, ít trễ. Game 3D (Roblox…) có thể chỉ thấy nút, cảnh 3D đen. Hợp treo app, game 2D.", "Smooth, low latency. 3D games (Roblox…) may show only buttons with a black scene. Best for apps & 2D games.")],
-                                         ["opengl", "🎮 " + L("Hiện 3D", "Show 3D"), L("Thấy đủ cảnh game 3D (Roblox…), hình hơi trễ hơn.", "Shows full 3D game scenes (Roblox…), slightly more latency.")]], m, "c2")}</div>`,
+      body: `<div id="g-box">${pick([["directx", "⚡ " + L("Mượt", "Smooth"), L("Điều khiển mượt, ít trễ. Game 3D có thể chỉ thấy nút, cảnh 3D đen. Hợp treo app, game 2D.", "Smooth, low latency. 3D games may show only buttons with a black scene. Best for apps & 2D games.")],
+                                         ["opengl", "🎮 " + L("Hiện 3D", "Show 3D"), L("Thấy đủ cảnh game 3D, hình hơi trễ hơn.", "Shows full 3D game scenes, slightly more latency.")]], m, "c2")}</div>`,
       ok: L("Đổi chế độ", "Switch"),
       onOk: async () => {
         if (m === now) { toast(L("Máy đang dùng chế độ này rồi.", "Already using this mode.")); return false; }
@@ -1505,10 +1505,10 @@ function iosText() {        // chữ nút app trên iPhone (gọi lại khi đ�
   const ios = /iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
   const ids = ["dm-app", "getapp", "appcta"];
   if (ios) {
-    const guide = e => { e.preventDefault(); ask({ title: L("📱 Cài BlueRoblox lên iPhone", "📱 Install BlueRoblox on iPhone"), noOk: true, onOk: () => true,
+    const guide = e => { e.preventDefault(); ask({ title: L("📱 Cài CloudBlue lên iPhone", "📱 Install CloudBlue on iPhone"), noOk: true, onOk: () => true,
       desc: L("Dùng như app thật: mở toàn màn hình, điều khiển máy ngay trên iPhone. Miễn phí, không cần App Store.", "Works like a real app: full screen, control your phone right on your iPhone. Free, no App Store needed."),
-      body: L('<ol style="margin:0;padding-left:20px;line-height:1.7"><li>Mở trang này bằng <b>Safari</b> (hoặc Chrome).</li><li>Bấm nút <b>Chia sẻ</b> (ô vuông có mũi tên lên) ở thanh dưới — Chrome: góc trên bên phải.</li><li>Chọn <b>Thêm vào MH chính</b> → <b>Thêm</b>.</li><li>Mở biểu tượng <b>BlueRoblox</b> trên màn hình chính và đăng nhập.</li></ol>',
-        '<ol style="margin:0;padding-left:20px;line-height:1.7"><li>Open this page in <b>Safari</b> (or Chrome).</li><li>Tap <b>Share</b> (the square with an up arrow) in the bottom bar — in Chrome it is at the top right.</li><li>Choose <b>Add to Home Screen</b> → <b>Add</b>.</li><li>Open the <b>BlueRoblox</b> icon on your home screen and sign in.</li></ol>') }); };
+      body: L('<ol style="margin:0;padding-left:20px;line-height:1.7"><li>Mở trang này bằng <b>Safari</b> (hoặc Chrome).</li><li>Bấm nút <b>Chia sẻ</b> (ô vuông có mũi tên lên) ở thanh dưới — Chrome: góc trên bên phải.</li><li>Chọn <b>Thêm vào MH chính</b> → <b>Thêm</b>.</li><li>Mở biểu tượng <b>CloudBlue</b> trên màn hình chính và đăng nhập.</li></ol>',
+        '<ol style="margin:0;padding-left:20px;line-height:1.7"><li>Open this page in <b>Safari</b> (or Chrome).</li><li>Tap <b>Share</b> (the square with an up arrow) in the bottom bar — in Chrome it is at the top right.</li><li>Choose <b>Add to Home Screen</b> → <b>Add</b>.</li><li>Open the <b>CloudBlue</b> icon on your home screen and sign in.</li></ol>') }); };
     ids.forEach(id => { const el = $(id); el.removeAttribute("download"); el.href = "#"; el.onclick = guide; el.hidden = false; });
     IOS_TXT = true; iosText();
     return;

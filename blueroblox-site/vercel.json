@@ -50,8 +50,13 @@
   ],
   "redirects": [
     {
+      "source": "/download/CloudBluePC.zip",
+      "destination": "https://github.com/lehien205px/blueroblox/releases/download/pc-latest/CloudBluePC.zip",
+      "permanent": false
+    },
+    {
       "source": "/download/BlueRobloxPC.zip",
-      "destination": "https://github.com/lehien205px/blueroblox/releases/download/pc-latest/BlueRobloxPC.zip",
+      "destination": "https://github.com/lehien205px/blueroblox/releases/download/pc-latest/CloudBluePC.zip",
       "permanent": false
     },
     {

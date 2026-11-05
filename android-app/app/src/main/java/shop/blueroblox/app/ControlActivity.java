@@ -661,11 +661,11 @@ public class ControlActivity extends Activity {
                 ContentValues cv = new ContentValues();
                 cv.put(MediaStore.MediaColumns.DISPLAY_NAME, "cloudphone_" + System.currentTimeMillis() + ".png");
                 cv.put(MediaStore.MediaColumns.MIME_TYPE, "image/png");
-                cv.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/BlueRoblox");
+                cv.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/CloudBlue");
                 Uri u = getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, cv);
                 if (u == null) throw new Exception();
                 try (OutputStream o = getContentResolver().openOutputStream(u)) { if (o != null) o.write(png); }
-                Ui.toast(this, Ui.L("Đã lưu ảnh vào Thư viện › Pictures/BlueRoblox", "Saved to Pictures/BlueRoblox"));
+                Ui.toast(this, Ui.L("Đã lưu ảnh vào Thư viện › Pictures/CloudBlue", "Saved to Pictures/CloudBlue"));
             } catch (Exception e) { Ui.toast(this, Ui.L("Không lưu được ảnh.", "Could not save.")); }
         }, m -> Ui.toast(this, m));
     }
@@ -840,7 +840,7 @@ public class ControlActivity extends Activity {
     }
 
 
-    // ---------------- Clone tab: chạy thêm bản Roblox / app khác để đăng nhập acc khác ----------------
+    // ---------------- Clone tab: chạy thêm bản của 1 app (game…) để đăng nhập acc khác ----------------
     private void cloneTab() {
         Dialog[] pd = progress(Ui.L("Đang tải danh sách app…", "Loading apps…"));
         final String base = api, pid = id;
@@ -851,9 +851,9 @@ public class ControlActivity extends Activity {
             int mx = js[1].optInt("max", 4);
             LinearLayout c = Ui.col(this, 10);
             final Dialog[] d = new Dialog[1];
-            c.addView(Ui.muted(this, Ui.L("Tạo thêm bản của app (VD Roblox) để đăng nhập acc khác, chạy song song bản chính. Bản clone hiện thành biểu tượng \"Clone 1, 2…\" trên màn hình chính của máy, hoặc bấm ▶ ở đây.",
-                    "Make extra copies of an app (e.g. Roblox) for other accounts. Clones show as \"Clone 1, 2…\" icons on the phone's home screen, or tap ▶ here.")));
-            if (a == null || a.length() == 0) c.addView(Ui.muted(this, Ui.L("Chưa có app nào. Cài app (VD Roblox từ CH Play) trước.", "No apps yet. Install one first (e.g. Roblox).")));
+            c.addView(Ui.muted(this, Ui.L("Tạo thêm bản của app (VD game) để đăng nhập acc khác, chạy song song bản chính. Bản clone hiện thành biểu tượng \"Clone 1, 2…\" trên màn hình chính của máy, hoặc bấm ▶ ở đây.",
+                    "Make extra copies of an app (e.g. a game) for other accounts. Clones show as \"Clone 1, 2…\" icons on the phone's home screen, or tap ▶ here.")));
+            if (a == null || a.length() == 0) c.addView(Ui.muted(this, Ui.L("Chưa có app nào. Cài app (VD game từ CH Play) trước.", "No apps yet. Install one first (e.g. a game from Play Store).")));
             else for (int i = 0; i < a.length(); i++) {
                 String pkg = a.optString(i);
                 int k = cnt != null ? cnt.optInt(pkg, 0) : 0;

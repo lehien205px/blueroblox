@@ -142,8 +142,8 @@ public class MainActivity extends Activity {
         top.setPadding(Ui.dp(14), Ui.dp(10), Ui.dp(14), Ui.dp(10));
         top.setBackground(Ui.round(Ui.LIGHT ? Color.argb(246, 243, 247, 252) : Color.argb(246, 7, 18, 38), 0, 0));
         top.addView(Ui.whale(this, 34), new LinearLayout.LayoutParams(Ui.dp(50), Ui.dp(34)));
-        SpannableString bn = new SpannableString("BlueRoblox");
-        bn.setSpan(new ForegroundColorSpan(Ui.LIGHT ? Ui.BLUE : Color.rgb(90, 168, 255)), 0, 4, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        SpannableString bn = new SpannableString("CloudBlue");          // "Cloud" màu chữ thường + "Blue" xanh (giống logo web)
+        bn.setSpan(new ForegroundColorSpan(Ui.LIGHT ? Ui.BLUE : Color.rgb(90, 168, 255)), 5, 9, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         TextView brand = Ui.text(this, "", 19, Ui.FG, true);
         brand.setText(bn);
         brand.setSingleLine(true);
@@ -859,7 +859,7 @@ public class MainActivity extends Activity {
             pc.addView(Ui.text(this, Ui.L("💡 Gợi ý cấu hình — bấm để chọn nhanh", "💡 Presets — tap to fill"), 14, Ui.MUTED, true));
             Ui.Wrap pw = new Ui.Wrap(this, 8);
             String[][] PRE = {{"💬", Ui.L("Treo app", "Idle apps"), "2", "2"}, {"🎮", Ui.L("Game nhẹ", "Light games"), "4", "2"},
-                    {"🟥", "Roblox", "4", "4"}, {"🔥", Ui.L("Game nặng", "Heavy games"), "8", "8"}};
+                    {"🕹️", Ui.L("Game 3D", "3D games"), "4", "4"}, {"🔥", Ui.L("Game nặng", "Heavy games"), "8", "8"}};
             for (String[] pr : PRE) {
                 final int pr0 = clamp(Integer.parseInt(pr[2]), minR, maxR), pc0 = clamp(Integer.parseInt(pr[3]), minC, maxC);
                 TextView ch = Ui.chip(this, pr[0] + " " + pr[1] + "\n" + pr0 + "GB · " + pc0 + Ui.L(" nhân", " cores"), sRam == pr0 && sCpu == pc0);
@@ -1072,7 +1072,7 @@ public class MainActivity extends Activity {
         Button upd = Ui.button(this, "🔄 " + Ui.L("Kiểm tra cập nhật", "Check for updates"), Ui.GHOST);
         upd.setOnClickListener(v -> Updater.check(this, true));
         body.addView(upd, Ui.fill());
-        TextView ver = Ui.muted(this, "BlueRoblox Cloud Phone v" + Api.version);
+        TextView ver = Ui.muted(this, "CloudBlue v" + Api.version);
         ver.setGravity(Gravity.CENTER);
         body.addView(ver, Ui.fill());
         page(body);

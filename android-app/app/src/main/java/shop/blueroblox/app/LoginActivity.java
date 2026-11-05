@@ -15,7 +15,7 @@ import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
-/** Màn đăng nhập / đăng ký / quên mật khẩu (dùng chung tài khoản với web blueroblox.shop). */
+/** Màn đăng nhập / đăng ký / quên mật khẩu (dùng chung tài khoản với web cloudblue.vn). */
 public class LoginActivity extends Activity {
     private int mode = 0; // 0 đăng nhập · 1 đăng ký · 2 quên mật khẩu
     private LinearLayout form;
@@ -40,7 +40,10 @@ public class LoginActivity extends Activity {
         lp.gravity = Gravity.CENTER_HORIZONTAL;
         root.addView(logo, lp);
 
-        title = Ui.h1(this, "BlueRoblox Cloud Phone");
+        title = Ui.h1(this, "");
+        android.text.SpannableString bn = new android.text.SpannableString("CloudBlue");   // "Blue" màu xanh giống logo
+        bn.setSpan(new android.text.style.ForegroundColorSpan(Ui.LIGHT ? Ui.BLUE : Color.rgb(90, 168, 255)), 5, 9, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        title.setText(bn);
         title.setGravity(Gravity.CENTER);
         root.addView(title, Ui.fill());
         sub = Ui.muted(this, Ui.L("Điện thoại Android chạy 24/7 trên cloud — thuê và điều khiển ngay trên điện thoại của bạn.",
@@ -81,8 +84,8 @@ public class LoginActivity extends Activity {
         form.addView(forgot, Ui.fill());
         root.addView(form, Ui.fill());
 
-        TextView policy = Ui.text(this, Ui.L("Dùng app là bạn đồng ý Điều khoản & Chính sách của BlueRoblox.",
-                "By using the app you agree to BlueRoblox Terms & Policy."), 12, Ui.MUTED, false);
+        TextView policy = Ui.text(this, Ui.L("Dùng app là bạn đồng ý Điều khoản & Chính sách của CloudBlue.",
+                "By using the app you agree to CloudBlue Terms & Policy."), 12, Ui.MUTED, false);
         policy.setGravity(Gravity.CENTER);
         policy.setOnClickListener(v -> startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(Api.WEB + "/#policy"))));
         root.addView(policy, Ui.fill());

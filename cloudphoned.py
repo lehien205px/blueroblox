@@ -414,6 +414,16 @@ def cpu_temp():
 
 _alert = {"full": None}
 _hb_old = {"v": False}
+_loop_t = [time.time()]             # lần cuối vòng chính chạy xong 1 lượt
+def _hb_loop():
+    """Báo cáo tài nguyên + "máy chủ còn sống" mỗi 30 giây ở LUỒNG RIÊNG: tạo / bật / xoá máy lâu (nhân bản Android 12,
+       bật lần lượt từng máy) không làm web tưởng máy chủ mất kết nối (quá 3 phút không báo → web ngừng bán, app báo offline).
+       Vòng chính kẹt thật quá 30 phút → thôi báo, để web biết máy chủ này có vấn đề."""
+    while True:
+        if time.time() - _loop_t[0] < 1800:
+            try: heartbeat()
+            except Exception as e: print("lỗi báo cáo tài nguyên:", e)
+        time.sleep(30)
 def heartbeat():
     try:
         st = json.load(open(PHONES_JSON)).get("phones", [])
@@ -566,7 +576,9 @@ if __name__ == "__main__":
     e = engine(); print(f"Giả lập: {e['emu'] or '?'} · nhận đơn Android: {', '.join(e['androids']) or 'mọi bản'}")
     adopt_old()
     n = 0; last = 0.0; _rootjob = [None]
+    threading.Thread(target=_hb_loop, daemon=True).start()     # báo "còn sống" lên web ở luồng riêng
     while True:
+        _loop_t[0] = time.time()
         try: tick_orders()                  # đơn mới: kiểm tra mỗi 3 giây → nhận đơn gần như tức thì
         except Exception as e: print("lỗi vòng lặp:", e)
         if time.time() - last < 15:
@@ -576,9 +588,7 @@ if __name__ == "__main__":
         except Exception as e: print("lỗi vòng lặp:", e)
         try: phonectl(["connect-all"])      # mỗi 15 giây: máy nào rớt kết nối thì nối lại (tránh màn xám)
         except Exception as e: print("lỗi connect-all:", e)
-        if n % 2 == 0:                      # ~30 giây: báo cáo CPU/RAM/card/ổ cứng lên trang admin
-            try: heartbeat()
-            except Exception as e: print("lỗi báo cáo tài nguyên:", e)
+        if n % 2 == 0:                      # ~30 giây: khoá / mở khoá / bật lại máy (báo cáo tài nguyên chạy ở luồng riêng _hb_loop)
             try: do_locks()
             except Exception as e: print("lỗi khoá máy:", e)
         if n % 20 == 5:                     # ~5 phút: cài app còn thiếu (máy nào lỡ) + mở quyền cài APK cho app khách mới cài

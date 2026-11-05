@@ -1496,7 +1496,8 @@ def cmd_strays(a):
             ro = _roles(v); bad = [i for i in sorted(v) if ro[i] is None]
             if rnd == 0:
                 print(f"{EMU_NAME}: {len(v)} máy · {len(bad)} máy THỪA")
-                for i in sorted(v): print(f"  #{i} {v[i]['name']} — {ro[i] or 'THỪA'}{' · đang chạy' if v[i]['running'] else ''}")
+                av_ = {k: _mumu_major(x) for k, x in _mumu_info().items()} if EMU == "mumu" else {}
+                for i in sorted(v): print(f"  #{i} {v[i]['name']} — {ro[i] or 'THỪA'}{(' · Android ' + av_[i]) if av_.get(i) else ''}{' · đang chạy' if v[i]['running'] else ''}")
                 if not bad: print("✓ Không có máy thừa."); return
                 if not a.remove: print("→ Xoá các máy THỪA:  python phonectl.py strays --remove"); return
             if not bad: break
@@ -1571,8 +1572,10 @@ def cmd_engine(a):
     if EMU in ("memu", "mumu") and MEMU:
         try:
             names = {x["name"] for x in vms().values()}
-            mdef = _mumu_major(_mumu_info().get(0)) if EMU == "mumu" else ""      # MuMu: bản Android của máy gốc #0 = bản MuMu tạo mới mặc định
-            ok = [v for v in ANDROIDS if tpl_name(v) in names or (EMU == "memu" and v in MEMU_CODES) or (EMU == "mumu" and v == mdef)]
+            info = _mumu_info() if EMU == "mumu" else {}
+            mdef = _mumu_major(info.get(0))                                      # MuMu: bản Android của máy gốc #0 = bản MuMu tạo mới mặc định
+            tver = {str(x.get("name", "")): _mumu_major(x) for x in info.values()}  # MuMu: máy mẫu phải ĐÚNG bản (tpl_a12 mà là Android 15 → không tính)
+            ok = [v for v in ANDROIDS if (tpl_name(v) in names and tver.get(tpl_name(v), "") in (v, "")) or (EMU == "memu" and v in MEMU_CODES) or (EMU == "mumu" and v == mdef)]
             miss = [v for v in ANDROIDS if v not in ok]
             if ok or names: av = ok                       # đọc được danh sách → chỉ báo bản tạo được thật (có thể rỗng = chưa bán gì)
         except Exception: pass

@@ -408,6 +408,19 @@ class WindowSource:
             if gone: raise Deny("OFFLINE", "Máy đang tắt hoặc đang khởi động lại — chờ ít giây rồi mở lại.")
             log(f"  {self.name}: cửa sổ không ra khung hình nào sau 6 giây — {win_info(h)}")
             raise CaptureBlocked("cửa sổ giả lập không ra hình")
+        # Phải RA HÌNH LIÊN TỤC: giả lập ở cửa sổ khuất / chạy ngầm có thể ngừng vẽ (MuMu: chỉ 1 khung đầu rồi 0 khung/giây)
+        # → app thấy hình ĐỨNG. Giả lập đang vẽ thì vẽ đều mỗi khung dù màn hình Android đứng yên.
+        n1, t1 = self.n, time.time()
+        with self.cond:
+            while self.n < n1 + 4 and time.time() - t1 < 2.5 and not self.closed and not self.stopping:
+                self.cond.wait(0.2)
+        if self.n < n1 + 4:
+            k, gone, stopping = self.n - n1, self.closed, self.stopping
+            self._halt()
+            if stopping: raise Deny("OFFLINE", "Không lấy được hình từ cửa sổ máy — thử mở lại.")
+            if gone: raise Deny("OFFLINE", "Máy đang tắt hoặc đang khởi động lại — chờ ít giây rồi mở lại.")
+            log(f"  {self.name}: cửa sổ chỉ ra {k} khung mới trong 2,5 giây (giả lập ngừng vẽ khi cửa sổ khuất?) — {win_info(h)}")
+            raise CaptureBlocked("giả lập không vẽ hình liên tục ở cửa sổ này")
         return self.cw, self.ch
 
     def resized(self):
@@ -1408,6 +1421,7 @@ class Session:
         self.key_grace = 0.0
         self.from_android = False          # True: Windows không quay được cửa sổ máy này → cả phiên lấy hình thẳng từ Android (scrcpy)
         self.dead = 0                      # số lần scrcpy chết khi CHƯA gửi được khung nào
+        self._wn, self._wn_t = -1, time.time()   # số khung cửa sổ lần trước + lúc đổi (canh cửa sổ ngừng ra hình)
 
     # ---------- hình ----------
     def _dims(self):
@@ -1671,6 +1685,12 @@ class Session:
                         log(f"  {self.name}: xoay màn hình → phát lại")
                     else: log(f"  {self.name}: cửa sổ máy đóng/mở lại → quay lại")
                     await self.restart_video(size_msg=True); continue
+                if isinstance(self.src, WindowSource):         # cửa sổ ngừng ra hình giữa chừng (giả lập thôi vẽ) → app thấy hình đứng → lấy hình từ Android
+                    if self.src.n != self._wn: self._wn, self._wn_t = self.src.n, time.time()
+                    elif time.time() - self._wn_t > 5 and time.time() - self.last_restart > 5:
+                        log(f"  {self.name}: cửa sổ giả lập ngừng ra hình 5 giây → lấy hình thẳng từ Android (scrcpy)")
+                        self.from_android = True; self._wn = -1
+                        await self.restart_video(size_msg=True); continue
                 if self.enc and self.enc.failed_early() and self.enc.enc == "nvenc":
                     log(f"  {self.name}: card NVIDIA không nén được → CPU x264")
                     _nvenc_broken["until"] = time.time() + 120

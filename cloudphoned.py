@@ -110,12 +110,15 @@ def engine():
         except Exception:
             _eng.update(emu=CFG.get("EMU", "") or "", androids=[x.strip() for x in (CFG.get("ANDROIDS") or "").split(",") if x.strip()])
     return _eng
+# Bản Android bán ở máy chủ RIÊNG (LDPlayer 9 · MEmu 7/12 · MuMu 12/15…). Máy chủ chính KHÔNG được nhận các bản này nếu nó
+# không bán — trước đây thiếu "15" → máy chủ chính (LDPlayer, Android 9) giành đơn Android 15 rồi tạo nhầm Android 9.
+KNOWN_ANDROIDS = ("7", "9", "12", "13", "14", "15", "16")
 def android_ok(row):
     """Đơn này đúng bản Android máy chủ này bán? (đơn cũ không ghi bản / máy chủ chưa khai báo → nhận như cũ)"""
     av = engine()["androids"]
     if not av: return True
     v = str(row.get("android") or "").strip()
-    return (not v) or v in av or (v not in ("7", "9", "12") and PRIMARY)   # bản lạ (đơn cũ 11…) → máy chủ chính lo
+    return (not v) or v in av or (v not in KNOWN_ANDROIDS and PRIMARY)   # bản lạ (đơn cũ 11…) → máy chủ chính lo
 
 # ---------- các máy chủ KHÁC (đọc bảng cloud_nodes 30 giây/lần) → máy chủ chính biết lúc nào nên hoàn tiền ----------
 _nodes = {"t": 0, "rows": []}

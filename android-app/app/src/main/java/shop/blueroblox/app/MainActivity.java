@@ -33,7 +33,7 @@ import java.util.Locale;
 
 /** Màn chính: Máy của tôi · Thuê máy · Tài khoản. */
 public class MainActivity extends Activity {
-    static final int[] RAM = {2, 4, 6, 8, 12, 16, 24, 32}, CPU = {2, 4, 6, 8}, DAYS = {1, 3, 7, 15, 30, 60}, FPS = {30, 60, 90, 120}, QTY = {1, 2, 3, 5, 10};
+    static final int[] RAM = {2, 4, 6, 8, 12, 16, 24, 32, 48, 64, 96, 128}, CPU = {2, 4, 6, 8, 12, 16, 24, 32, 48, 64, 72}, DAYS = {1, 3, 7, 15, 30, 60}, FPS = {30, 60, 90, 120}, QTY = {1, 2, 3, 5, 10};
     static final String[][] RES = {{"540x960", "Nhẹ máy"}, {"720x1280", "HD"}, {"720x1600", "HD+ dài"}, {"1080x1920", "Full HD"}, {"1080x2400", "FHD+ 20:9"}, {"1280x720", "HD ngang"}};
 
     private FrameLayout content;
@@ -62,13 +62,24 @@ public class MainActivity extends Activity {
         return l;
     }
     /** "" = còn chỗ · "off" = máy chủ bản này bảo trì / chưa có · "full" = không đủ RAM/CPU cho cấu hình đang chọn. */
-    String andWhy(String v) {
+    String andWhy(String v, int ram, int cpu) {
         if (isAdmin()) return "";
         JSONObject m = status.optJSONObject("android");
         if (m == null) return "";                       // máy chủ chưa báo theo từng bản → không chặn (SQL vẫn kiểm tra)
         JSONObject a = m.optJSONObject(v);
         if (a == null || !a.optBoolean("online", true)) return "off";
-        return a.optDouble("free_ram", 0) < sRam || a.optDouble("free_cpu", 0) < sCpu ? "full" : "";
+        return a.optDouble("free_ram", 0) < ram || a.optDouble("free_cpu", 0) < cpu ? "full" : "";
+    }
+    /** So với cấu hình SAU khi kẹp theo trần của bản v (đổi bản thì RAM/CPU tự kẹp lại). */
+    String andWhy(String v) { int[] l = andLim(v); return andWhy(v, Math.min(sRam, l[0]), Math.min(sCpu, l[1])); }
+    /** Trần 1 máy của bản Android v = min(trần chung, trần của bản đó) → {RAM GB, nhân}. Mặc định LDPlayer 9: 8·8 · MuMu 12: 128·72 · MuMu 7: 16·16. */
+    int[] andLim(String v) {
+        int r = "9".equals(v) ? 8 : "12".equals(v) ? 128 : 16, c = "9".equals(v) ? 8 : "12".equals(v) ? 72 : 16;
+        JSONObject al = price == null ? null : price.optJSONObject("android_limits");
+        JSONObject x = al == null ? null : al.optJSONObject(v);
+        if (x != null) { r = x.optInt("ram", r); c = x.optInt("cpu", c); }
+        int gr = price == null ? r : price.optInt("max_ram", r), gc = price == null ? c : price.optInt("max_cpu", c);
+        return new int[]{Math.max(1, Math.min(Math.min(r, gr <= 0 ? r : gr), 256)), Math.max(1, Math.min(Math.min(c, gc <= 0 ? c : gc), 128))};
     }
     /** Mặc định Android 9; bản 9 hết chỗ / bảo trì → bản đầu tiên còn chỗ. */
     String andPick() {
@@ -82,7 +93,9 @@ public class MainActivity extends Activity {
     }
     /** Vẽ lại các nút bản Android theo chỗ trống hiện tại (đổi RAM/CPU là cập nhật ngay). */
     void paintAnd(Ui.Wrap aw) {
-        if (!andList().contains(sAnd) || !andWhy(sAnd).isEmpty()) sAnd = andPick();
+        if (!andList().contains(sAnd) || "off".equals(andWhy(sAnd))) {         // bản đang chọn bảo trì → tự đổi (hết chỗ thì giữ, báo lỗi để khách chọn lại)
+            sAnd = andPick(); int[] l = andLim(sAnd); sRam = Math.min(sRam, l[0]); sCpu = Math.min(sCpu, l[1]);
+        }
         for (int i = 0; i < aw.getChildCount(); i++) {
             TextView ch = (TextView) aw.getChildAt(i);
             String v = (String) ch.getTag(), why = andWhy(v);
@@ -92,11 +105,11 @@ public class MainActivity extends Activity {
             ch.setAlpha(why.isEmpty() ? 1f : .4f);
         }
     }
-    /** Máy ảo tối đa 8GB · 8 nhân · 60 FPS — không bán vượt sức máy (giống web). */
+    /** Trần tuyệt đối (trần thật mỗi máy theo bản Android ở andLim) · tối đa 60 FPS (giống web). */
     static JSONObject clampHard(JSONObject p) {
         try {
             String[] k = {"max_ram", "max_cpu", "max_fps", "free_max_ram", "free_max_cpu"};
-            int[] hv = {8, 8, 60, 8, 8};
+            int[] hv = {256, 128, 60, 256, 128};
             for (int i = 0; i < k.length; i++) {
                 if (p.isNull(k[i])) { if (i < 3) p.put(k[i], hv[i]); continue; }
                 int v = p.optInt(k[i], hv[i]);
@@ -562,7 +575,8 @@ public class MainActivity extends Activity {
     /** Khách tự nâng RAM / CPU: trả thêm cho phần thời gian còn lại (giá do máy chủ tính, có giảm CTV). */
     void upgrade(JSONObject p) {
         final int R0 = p.optInt("ram"), C0 = p.optInt("cpu");
-        final int maxR = price.optInt("max_ram", 16), maxC = price.optInt("max_cpu", 8);
+        final int[] ul = andLim(p.optString("android", "9").isEmpty() ? "9" : p.optString("android", "9"));
+        final int maxR = ul[0], maxC = ul[1];                    // trần theo bản Android của máy
         final int[] nr = {R0}, nc = {C0};
         final long[] cost = {0};
         final boolean gpu = p.optInt("port") >= 5600;          // máy GPU / máy MEmu (Windows): đổi cấu hình phải khởi động lại
@@ -600,7 +614,7 @@ public class MainActivity extends Activity {
             ok.setEnabled(!same);
             ok.setText(!same && bal < cost[0] ? Ui.L("Nạp thêm tiền", "Top up") : Ui.L("Nâng cấp ngay", "Upgrade now"));
         };
-        int[] rams = {2, 3, 4, 6, 8, 10, 12, 16, 24, 32, 48, 64}, cpus = {2, 3, 4, 6, 8, 10, 12, 16, 24, 32};
+        int[] rams = {2, 3, 4, 6, 8, 10, 12, 16, 24, 32, 48, 64, 96, 128}, cpus = {2, 3, 4, 6, 8, 10, 12, 16, 24, 32, 48, 64, 72};
         java.util.TreeSet<Integer> rs = new java.util.TreeSet<>(), cs = new java.util.TreeSet<>();
         rs.add(R0); for (int v : rams) if (v > R0 && v <= maxR) rs.add(v); if (maxR > R0) rs.add(maxR);
         cs.add(C0); for (int v : cpus) if (v > C0 && v <= maxC) cs.add(v); if (maxC > C0) cs.add(maxC);
@@ -798,7 +812,7 @@ public class MainActivity extends Activity {
         body.addView(Ui.muted(this, Ui.L("Chọn gợi ý bên dưới là xong — hoặc tự chỉnh RAM, CPU, số ngày. Máy mới tinh, có Play Store.",
                 "Pick a preset below — or set RAM, CPU and days yourself. Fresh device with Play Store.")), Ui.fill());
 
-        int minR = price.optInt("min_ram", 1), maxR = price.optInt("max_ram", 16), minC = price.optInt("min_cpu", 1), maxC = price.optInt("max_cpu", 8);
+        int minR = price.optInt("min_ram", 1), minC = price.optInt("min_cpu", 1);
         final int mpu = maxPerUser(), left = mpu > 0 ? mpu - myLive() : 20;
         if (mpu > 0 && left <= 0) {            // đã đủ số máy cho phép → không cho thuê thêm
             LinearLayout full = Ui.card(this);
@@ -816,8 +830,10 @@ public class MainActivity extends Activity {
         java.util.List<String> avs = andList();
         if (!freeLive()) sFree = false;
         int minD = price.optInt("min_days", 1), maxD = price.optInt("max_days", 90), minF = price.optInt("min_fps", 10), maxF = price.optInt("max_fps", 120);
-        sRam = clamp(sRam, minR, maxR); sCpu = clamp(sCpu, minC, maxC); sDays = clamp(sDays, minD, maxD); sFps = clamp(sFps, minF, maxF);
         if (!avs.contains(sAnd) || !andWhy(sAnd).isEmpty()) sAnd = andPick();
+        final int[] lim = andLim(sAnd);
+        final int maxR = lim[0], maxC = lim[1];                  // trần theo bản Android đang chọn (LDPlayer 9: 8 · MuMu 12: 128GB / 72 nhân)
+        sRam = clamp(sRam, minR, maxR); sCpu = clamp(sCpu, minC, maxC); sDays = clamp(sDays, minD, maxD); sFps = clamp(sFps, minF, maxF);
         final Ui.Wrap aw = new Ui.Wrap(this, 8);
 
         TextView total = Ui.text(this, "", 22, Ui.SKY, true);
@@ -879,8 +895,11 @@ public class MainActivity extends Activity {
             ch.setTag(v);
             ch.setOnClickListener(x -> {
                 if (!andWhy((String) x.getTag()).isEmpty()) return;      // bản đang bảo trì / hết chỗ
-                sAnd = (String) x.getTag();
-                upd.run();
+                String nv = (String) x.getTag();
+                int[] a0 = andLim(sAnd), a1 = andLim(nv);
+                sAnd = nv;
+                if (a0[0] != a1[0] || a0[1] != a1[1]) { sRam = Math.min(sRam, a1[0]); sCpu = Math.min(sCpu, a1[1]); renderRent(); }   // trần khác → vẽ lại danh sách RAM/CPU
+                else upd.run();
             });
             aw.addView(ch);
         }
@@ -970,6 +989,9 @@ public class MainActivity extends Activity {
             return Ui.L("Máy miễn phí tối đa " + price.optInt("free_max_ram", 4) + "GB RAM · " + price.optInt("free_max_cpu", 4) + " nhân — chọn nhỏ hơn.",
                     "Free phones are limited to " + price.optInt("free_max_ram", 4) + "GB RAM · " + price.optInt("free_max_cpu", 4) + " cores.");
         if (!andList().contains(sAnd)) return Ui.L("Hãy chọn hệ điều hành (bản Android).", "Choose an Android version.");
+        int[] al = andLim(sAnd);
+        if (sRam > al[0] || sCpu > al[1])
+            return Ui.L("Android " + sAnd + " tối đa " + al[0] + "GB RAM · " + al[1] + " nhân mỗi máy.", "Android " + sAnd + " allows up to " + al[0] + "GB RAM · " + al[1] + " cores per phone.");
         JSONObject am = isAdmin() ? null : status.optJSONObject("android");
         if (am != null) {
             JSONObject a = am.optJSONObject(sAnd);

@@ -1,11 +1,11 @@
 ﻿# =====================================================================
-#  setup.ps1 — Cài BlueRoblox Cloud Phone lên MÁY WINDOWS (MEmu) — thay hẳn server Ubuntu
+#  setup.ps1 — Cài CloudBlue Cloud Phone lên MÁY WINDOWS (LDPlayer 9 · MuMu · MEmu) — thay hẳn server Ubuntu
 #  Chạy trong PowerShell (Run as administrator):
 #     Set-ExecutionPolicy -Scope Process Bypass -Force; & C:\blue\setup.ps1
 #  Làm: Node.js · adb (Google) · cloudflared · ws-scrcpy (trình phát hình) · tải phonectl/cloudphoned/cpapi · tự chạy khi bật máy
-#  MÁY CHỦ THỨ 2, 3…:  & C:\blue\setup.ps1 -Node win2 -PubHost phone2.blueroblox.shop
+#  MÁY CHỦ THỨ 2, 3…:  & C:\blue\setup.ps1 -Node win2 -PubHost phone2.cloudblue.vn
 # =====================================================================
-param([string]$Node = "win1", [string]$PubHost = "phone.blueroblox.shop")
+param([string]$Node = "win1", [string]$PubHost = "phone.cloudblue.vn")
 $ErrorActionPreference = "Stop"
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12   # Windows cũ mặc định TLS 1.0 → GitHub/Google từ chối
 $B = "C:\blue"
@@ -30,7 +30,7 @@ Set-Location $B
 $env:Path = [Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [Environment]::GetEnvironmentVariable("Path", "User")
 function Dl($url, $out) { Invoke-WebRequest -UseBasicParsing -UserAgent "BlueRoblox-setup" -Uri $url -OutFile $out }
 function RefreshPath { $env:Path = [Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [Environment]::GetEnvironmentVariable("Path", "User") }
-# DNS Cloudflare + Google (IPv4 + IPv6): DNS của modem/nhà mạng hay nhớ "không có tên" → tên miền phoneN.blueroblox.shop mới tạo không vào được
+# DNS Cloudflare + Google (IPv4 + IPv6): DNS của modem/nhà mạng hay nhớ "không có tên" → tên miền phoneN.cloudblue.vn mới tạo không vào được
 try { Get-NetAdapter | Where-Object Status -eq Up | ForEach-Object { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ServerAddresses ("1.1.1.1","8.8.8.8","2606:4700:4700::1111","2001:4860:4860::8888") }; ipconfig /flushdns | Out-Null } catch {}
 $WG = [bool](Get-Command winget -ErrorAction SilentlyContinue)   # Windows 10 bản cũ / Server không có winget → tải thẳng bộ cài chính thức
 
@@ -69,19 +69,34 @@ if (-not (Test-Path "$B\platform-tools\adb.exe")) {
   Get "https://dl.google.com/android/repository/platform-tools-latest-windows.zip" "$B\pt.zip"
   Expand-Archive -Force "$B\pt.zip" $B; Remove-Item "$B\pt.zip" }
 Ok "$B\platform-tools\adb.exe"
-# Giả lập: LDPlayer 9 (ưu tiên) hoặc MEmu. Chúng kèm adb.exe cũ → 2 bản adb tranh nhau làm rớt máy → thay bằng bản của Google (giữ bản cũ .bak)
+# Giả lập: LDPlayer 9 (Android 9) · MuMu (Android 12 + 7) · MEmu. Chúng kèm adb.exe cũ → 2 bản adb tranh nhau làm rớt máy → thay bằng bản của Google (giữ bản cũ .bak)
 $LDP = @("C:\LDPlayer\LDPlayer9", "D:\LDPlayer\LDPlayer9", "C:\Program Files\LDPlayer\LDPlayer9", "C:\leidian\LDPlayer9") | Where-Object { Test-Path "$_\ldconsole.exe" } | Select-Object -First 1
 $MEMU = @("C:\Program Files\Microvirt\MEmu", "D:\Program Files\Microvirt\MEmu", "C:\Microvirt\MEmu", "D:\Microvirt\MEmu") | Where-Object { Test-Path "$_\memuc.exe" } | Select-Object -First 1
-if ($LDP) { $MEMU = $LDP }
-if (-not $MEMU) { throw "Khong thay gia lap. Cai LDPlayer 9 (ldplayer.net) truoc." }
+function IsMuMu($d) { $d -and ((Test-Path "$d\shell\MuMuManager.exe") -or (Test-Path "$d\nx_main\MuMuManager.exe") -or (Test-Path "$d\nx_main\mumu-cli.exe")) }
+$MUMU = @("C:\Program Files\Netease\MuMuPlayer-12.0", "D:\Program Files\Netease\MuMuPlayer-12.0", "C:\Program Files\Netease\MuMu Player 12",
+          "D:\Program Files\Netease\MuMu Player 12", "C:\Program Files\Netease\MuMu", "D:\Program Files\Netease\MuMu",
+          "C:\Program Files\Netease\MuMuPlayerGlobal-12.0", "C:\Program Files\MuMuPlayerGlobal-12.0") | Where-Object { IsMuMu $_ } | Select-Object -First 1
+if (-not $MUMU) { try {   # MuMu cài ở ổ / thư mục khác → tìm theo khoá gỡ cài đặt của MuMu
+  $MUMU = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*", "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*",
+                          "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*" -ErrorAction SilentlyContinue |
+    Where-Object { "$($_.DisplayName) $($_.PSChildName)" -match "mumu" } |
+    ForEach-Object { $_.InstallLocation; foreach ($v in $_.UninstallString, $_.DisplayIcon) { if ($v) { $x = ($v -replace '^"([^"]+)".*$', '$1') -replace ',\d+$', ''; $p = Split-Path $x -Parent; $p; Split-Path $p -Parent } } } |
+    ForEach-Object { "$_".TrimEnd("\") } | Where-Object { IsMuMu $_ } | Select-Object -First 1 } catch { $MUMU = $null } }
+$ADBD = @()
+if ($LDP) { $ADBD += $LDP } elseif ($MEMU) { $ADBD += $MEMU }
+if ($MUMU) { $ADBD += @("$MUMU\shell", "$MUMU\nx_main") | Where-Object { Test-Path "$_\adb.exe" } }
+if (-not ($LDP -or $MEMU -or $MUMU)) { throw "Khong thay gia lap. Cai LDPlayer 9 (ldplayer.net) hoac MuMu (mumuplayer.com) truoc." }
 [Environment]::SetEnvironmentVariable("ADB_LOCAL_TRANSPORT_MAX_PORT", "5553", "Machine"); $env:ADB_LOCAL_TRANSPORT_MAX_PORT = "5553"   # adb không tự dò emulator-55xx (LDPlayer hiện mỗi máy 2 lần)
 Get-Process adb -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-foreach ($f in "adb.exe", "AdbWinApi.dll", "AdbWinUsbApi.dll") {
-  if ((Test-Path "$MEMU\$f") -and -not (Test-Path "$MEMU\$f.bak")) { Copy-Item "$MEMU\$f" "$MEMU\$f.bak" }
-  Copy-Item -Force "$B\platform-tools\$f" "$MEMU\$f" }
-Ok "Gia lap: $MEMU (da dung chung adb cua Google)"
+foreach ($D in $ADBD) {
+  foreach ($f in "adb.exe", "AdbWinApi.dll", "AdbWinUsbApi.dll") {
+    try {
+      if ((Test-Path "$D\$f") -and -not (Test-Path "$D\$f.bak")) { Copy-Item "$D\$f" "$D\$f.bak" }
+      Copy-Item -Force "$B\platform-tools\$f" "$D\$f"
+    } catch { Write-Host "  [!] Chua thay duoc $D\$f (gia lap dang mo?) - tat gia lap roi chay lai neu may hay rot" -ForegroundColor Yellow } } }
+Ok "Gia lap: $(@($LDP, $MEMU, $MUMU) | Where-Object { $_ } | Select-Object -Unique) (da dung chung adb cua Google)"
 
-Step "4/7 cloudflared (duong ham phone.blueroblox.shop)"
+Step "4/7 cloudflared (duong ham $PubHost)"
 if (-not (Get-Command cloudflared -ErrorAction SilentlyContinue) -and -not (Test-Path "C:\Program Files (x86)\cloudflared\cloudflared.exe")) {
   if ($WG) { winget install -e --id Cloudflare.cloudflared --scope machine --accept-source-agreements --accept-package-agreements | Out-Null }
   else { Get "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.msi" "$B\cf.msi"; Start-Process -Wait msiexec.exe -ArgumentList "/i `"$B\cf.msi`" /qn /norestart"; Remove-Item "$B\cf.msi" } }
@@ -118,17 +133,19 @@ Get-ChildItem "$B\ws-scrcpy\dist" -Recurse -Filter *.js -ErrorAction SilentlyCon
 netsh advfirewall firewall delete rule name="BlueRoblox chan 8000" | Out-Null
 netsh advfirewall firewall add rule name="BlueRoblox chan 8000" dir=in action=block protocol=TCP localport=8000,8010 remoteip=localsubnet | Out-Null
 
-Step "6/7 Tai chuong trinh BlueRoblox"
+Step "6/7 Tai chuong trinh CloudBlue"
 & $PY -m pip install --quiet --disable-pip-version-check pillow windows-capture numpy cryptography 2>$null | Out-Null   # phát hình app: quay cửa sổ + chứng chỉ TLS
 foreach ($f in "cloudphoned.py", "cpapi.py") { Get "$RAW/$f" "$B\$f" }
-foreach ($f in "phonectl.py", "run.py", "remake.py", "keep.bat", "start-blue.bat", "panel.py", "wallpaper.png", "donweb.py", "kiemtra.py", "suachua.ps1", "bluestream.py") { Get "$RAW/windows/$f" "$B\$f" }
+foreach ($f in "phonectl.py", "run.py", "remake.py", "keep.bat", "start-blue.bat", "panel.py", "wallpaper.png", "donweb.py", "kiemtra.py", "suachua.ps1", "bluestream.py", "doi-ten-mien.py") { Get "$RAW/windows/$f" "$B\$f" }
 if (-not (Test-Path "$B\cloudphone.conf")) {
 $PRI = if ($Node -eq "win1") { "1" } else { "0" }
-$MAXR = if ($LDP) { "8" } else { "16" }
+$MAXR = if ($LDP) { "8" } elseif ($MUMU -and -not $MEMU) { "128" } else { "16" }     # 1 máy tối đa: LDPlayer 9 = 8GB · MuMu Android 12 = 128GB · MEmu = 16GB
+$MAXC = if ($MUMU -and -not $LDP -and -not $MEMU) { "72" } else { "8" }
+$EMUL = if ($LDP) { "EMU=ld`nANDROIDS=9" } elseif ($MUMU -and -not $MEMU) { "EMU=mumu`nANDROIDS=12,7" } else { "EMU=memu`nANDROIDS=7" }
 $NUM = [int]("0" + ($Node -replace '[^0-9]', ''))
 $SPORT = if ($NUM -ge 2) { 8188 + $NUM } else { 8189 }
 @"
-# BlueRoblox — cấu hình máy chủ (KHÔNG đưa file này lên GitHub)
+# CloudBlue — cấu hình máy chủ (KHÔNG đưa file này lên GitHub)
 SUPABASE_URL=https://nprftgodswlpzomcttal.supabase.co
 SUPABASE_SERVICE_KEY=DAN_SERVICE_ROLE_KEY_VAO_DAY
 PUBLIC_BASE=https://$PubHost
@@ -140,8 +157,9 @@ CPU_OVER=1
 WIN_VCPU_OVER=1
 WIN_RAM_RESERVE=3
 RAM_BUSY_PCT=98
+$EMUL
 MEMU_MAX_RAM=$MAXR
-MEMU_MAX_CPU=8
+MEMU_MAX_CPU=$MAXC
 MEMU_RENDER=1
 MEMU_GMEM_OPT=1
 POOL_SIZE=1
@@ -156,7 +174,8 @@ $ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut($lnk)
 $PYW = "C:\Program Files\Python312\pythonw.exe"
 if (Get-ScheduledTask -TaskName "BlueRoblox" -ErrorAction SilentlyContinue) { Remove-Item $lnk -ErrorAction SilentlyContinue }   # đã có tự chạy quyền Admin (nút 🔑)
 else { $s.TargetPath = $PYW; $s.Arguments = "`"$B\panel.py`" --auto"; $s.WorkingDirectory = $B; $s.Save() }
-$d = $ws.CreateShortcut("$env:Public\Desktop\BlueRoblox.lnk"); $d.TargetPath = $PYW; $d.Arguments = "`"$B\panel.py`""; $d.WorkingDirectory = $B; $d.Save()
-Ok "Bat may Windows -> tu chay BlueRoblox"
+$d = $ws.CreateShortcut("$env:Public\Desktop\CloudBlue.lnk"); $d.TargetPath = $PYW; $d.Arguments = "`"$B\panel.py`""; $d.WorkingDirectory = $B; $d.Save()
+Remove-Item "$env:Public\Desktop\BlueRoblox.lnk" -ErrorAction SilentlyContinue
+Ok "Bat may Windows -> tu chay CloudBlue"
 Set-Location $B
-Write-Host "`nXONG phan cai dat. Mo bieu tuong BlueRoblox tren man hinh Desktop de dieu khien." -ForegroundColor Yellow
+Write-Host "`nXONG phan cai dat. Mo bieu tuong CloudBlue tren man hinh Desktop de dieu khien." -ForegroundColor Yellow

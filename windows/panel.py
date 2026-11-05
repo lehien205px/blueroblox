@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
 # =====================================================================
-#  panel.py — BẢNG ĐIỀU KHIỂN BlueRoblox trên Windows (MEmu)
+#  panel.py — BẢNG ĐIỀU KHIỂN CloudBlue trên Windows (LDPlayer 9 · MuMu · MEmu)
 #  Mở: bấm đúp biểu tượng "BlueRoblox" trên Desktop  (hoặc: pythonw C:\blue\panel.py)
 #   • Đèn trạng thái: MEmu, adb, khoá Supabase, trình phát hình, cổng bảo vệ, chương trình nhận đơn, Cloudflare, web
 #   • Nút: Cài đặt/Cập nhật · Dán khoá Supabase · Nối Cloudflare · Bật/Tắt tất cả · Tạo/Xoá máy thử · Làm mới máy khách
 #   • Nhật ký từng phần, dòng lỗi tô đỏ. Chương trình nào bị tắt → tự bật lại.
 # =====================================================================
-import ctypes, json, os, queue, re, socket, subprocess, sys, threading, time, tkinter as tk, urllib.parse, urllib.request
-from tkinter import messagebox, simpledialog, ttk
+import ctypes, glob, json, os, queue, re, socket, subprocess, sys, threading, time, tkinter as tk, urllib.parse, urllib.request
+from tkinter import filedialog, messagebox, simpledialog, ttk
 
 B = os.path.dirname(os.path.abspath(__file__))
 PY = os.path.join(os.path.dirname(sys.executable), "python.exe") if sys.executable.lower().endswith("pythonw.exe") else sys.executable
@@ -43,13 +43,19 @@ SERVICES = {   # tên: (thư mục chạy, lệnh)
     "duong-thang": (B, [os.path.join(B, "caddy.exe"), "run", "--config", os.path.join(B, "Caddyfile"), "--adapter", "caddyfile"]),
     "phat-hinh": (B, [PY, "-u", "bluestream.py"]),                # PHÁT HÌNH v2 cho app PC + app Android (TLS cổng 8189 + WebSocket 8020)
 }
-FAST_HOST, FAST_PORT, ZONE = "fast.blueroblox.shop", 8443, "blueroblox.shop"
+FAST_PORT = 8443
 CADDY_URL = "https://caddyserver.com/api/download?os=windows&arch=amd64&p=github.com%2Fcaddy-dns%2Fcloudflare"
 
 def pub_host():
-    """Tên miền của MÁY CHỦ NÀY (máy 1: phone.blueroblox.shop, máy 2: phone2.blueroblox.shop…) — lấy từ PUBLIC_BASE."""
-    try: return urllib.parse.urlparse(conf().get("PUBLIC_BASE", "")).netloc or "phone.blueroblox.shop"
-    except Exception: return "phone.blueroblox.shop"
+    """Tên miền của MÁY CHỦ NÀY (máy 1: phone.cloudblue.vn, máy 2: phone2.cloudblue.vn…) — lấy từ PUBLIC_BASE."""
+    try: return urllib.parse.urlparse(conf().get("PUBLIC_BASE", "")).netloc or "phone.cloudblue.vn"
+    except Exception: return "phone.cloudblue.vn"
+
+def zone_of(h):
+    """Tên miền gốc: phone2.cloudblue.vn → cloudblue.vn (giữ 3 phần cho kiểu x.com.vn)."""
+    p = [x for x in (h or "").split(":")[0].split(".") if x]
+    n = 3 if len(p) >= 3 and len(p[-1]) == 2 and p[-2] in ("com", "net", "org", "edu", "gov", "co", "ac", "info", "biz") else 2
+    return ".".join(p[-n:]) if len(p) >= n else ""
 
 def conf():
     d = {}
@@ -59,6 +65,12 @@ def conf():
             if "=" in line and not line.startswith("#"): k, v = line.split("=", 1); d[k.strip()] = v.strip()
     except FileNotFoundError: pass
     return d
+
+_FB = ""
+try: _FB = urllib.parse.urlparse(conf().get("FAST_BASE", "")).hostname or ""
+except Exception: pass
+ZONE = zone_of(_FB or pub_host()) or "cloudblue.vn"          # đường thẳng đã bật trước đó thì giữ đúng tên cũ
+FAST_HOST = _FB or "fast." + ZONE
 
 def set_conf(key, val):
     lines, done = [], False
@@ -70,6 +82,112 @@ def set_conf(key, val):
     open(CONF, "w", encoding="utf-8").write("\n".join(lines) + "\n")
 
 EMUS = {"ld": ("LDPlayer 9", "9"), "mumu": ("MuMu", "12,7"), "memu": ("MEmu", "7")}
+MUMU_DIRS = [r"C:\Program Files\Netease\MuMuPlayer-12.0", r"D:\Program Files\Netease\MuMuPlayer-12.0", r"C:\Program Files\Netease\MuMu Player 12",
+             r"D:\Program Files\Netease\MuMu Player 12", r"C:\Program Files\Netease\MuMuPlayer", r"D:\Program Files\Netease\MuMuPlayer",
+             r"C:\Program Files\MuMuPlayerGlobal-12.0", r"D:\Program Files\MuMuPlayerGlobal-12.0", r"C:\Program Files\Netease\MuMuPlayerGlobal-12.0",
+             r"C:\Program Files\Netease\MuMu", r"D:\Program Files\Netease\MuMu"]
+MUMU_REL = (r"nx_main\mumu-cli.exe", r"shell\MuMuManager.exe", r"nx_main\MuMuManager.exe", "MuMuManager.exe", "mumu-cli.exe")
+MUMU_CACHE = os.path.join(B, "redroid", "mumu_dir.txt")      # phonectl.py dùng chung file này
+_MU = {"t": 0.0, "d": ""}
+
+def mumu_cli(d):
+    """File lệnh của MuMu trong thư mục d (tìm cả thư mục con ≤ 3 cấp). Không có → ""."""
+    if not d or not os.path.isdir(d): return ""
+    for rel in MUMU_REL:
+        f = os.path.join(d, rel)
+        if os.path.isfile(f): return f
+    top = os.path.abspath(d).rstrip("\\/").count(os.sep)
+    for root, dirs, files in os.walk(d):
+        if root.rstrip("\\/").count(os.sep) - top >= 3: dirs[:] = []
+        low = {x.lower(): x for x in files}
+        for n in ("mumu-cli.exe", "mumumanager.exe"):
+            if n in low: return os.path.join(root, low[n])
+    return ""
+
+def mumu_root(f):
+    d = os.path.dirname(f)
+    return os.path.dirname(d) if os.path.basename(d).lower() in ("shell", "nx_main") else d
+
+def _reg_dir(v):
+    v = (v or "").strip()
+    if v.startswith('"'): v = v[1:].split('"', 1)[0]
+    else:
+        m = re.match(r"(.+?\.(?:exe|ico|dll))(?:[\s,].*)?$", v, re.I)
+        if m: v = m.group(1)
+    v = v.strip().rstrip("\\/")
+    if re.search(r"\.(exe|ico|dll)$", v, re.I): v = os.path.dirname(v)
+    return v if v and os.path.isdir(v) else ""
+
+def mumu_guess():
+    """MuMu cài chỗ lạ: khoá gỡ cài đặt trong registry → chương trình MuMu đang chạy → thư mục Netease/MuMu ở mọi ổ cứng."""
+    out = []
+    try:
+        import winreg
+        for hv, base in ((winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"),
+                         (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"),
+                         (winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Uninstall")):
+            try: k = winreg.OpenKey(hv, base)
+            except OSError: continue
+            for i in range(winreg.QueryInfoKey(k)[0]):
+                try:
+                    sub = winreg.EnumKey(k, i); sk = winreg.OpenKey(k, sub)
+                    def val(n):
+                        try: return str(winreg.QueryValueEx(sk, n)[0] or "")
+                        except OSError: return ""
+                    if "mumu" not in (sub + " " + val("DisplayName")).lower(): continue
+                    for n in ("InstallLocation", "InstallDir", "DisplayIcon", "UninstallString"):
+                        d = _reg_dir(val(n))
+                        if d: out += [d, os.path.dirname(d)]
+                except OSError: continue
+    except Exception: pass
+    try:                                                           # MuMu đang mở → lấy đúng chỗ cài từ chương trình đang chạy
+        k = ctypes.WinDLL("kernel32"); ps = ctypes.WinDLL("psapi"); k.OpenProcess.restype = ctypes.c_void_p
+        arr = (ctypes.c_ulong * 8192)(); n = ctypes.c_ulong()
+        if ps.EnumProcesses(arr, ctypes.sizeof(arr), ctypes.byref(n)):
+            for pid in arr[:n.value // ctypes.sizeof(ctypes.c_ulong)]:
+                h = k.OpenProcess(0x1000, False, pid)
+                if not h: continue
+                try:
+                    buf = ctypes.create_unicode_buffer(1024); sz = ctypes.c_ulong(1024)
+                    if k.QueryFullProcessImageNameW(ctypes.c_void_p(h), 0, buf, ctypes.byref(sz)) and "mumu" in os.path.basename(buf.value).lower():
+                        out += [os.path.dirname(buf.value), os.path.dirname(os.path.dirname(buf.value))]
+                finally: k.CloseHandle(ctypes.c_void_p(h))
+    except Exception: pass
+    try:
+        kk = ctypes.windll.kernel32; m = kk.GetLogicalDrives()
+        drives = [chr(65 + i) for i in range(26) if m >> i & 1 and kk.GetDriveTypeW(f"{chr(65 + i)}:\\") == 3]
+    except Exception: drives = ["C", "D", "E"]
+    for dr in drives:
+        for pat in (r"\Program Files\Netease\*", r"\Program Files (x86)\Netease\*", r"\Netease\*", r"\Program Files\MuMu*",
+                    r"\Program Files (x86)\MuMu*", r"\MuMu*", r"\*\MuMu*", r"\*\Netease\*"):
+            out += glob.glob(dr + ":" + pat)
+    return out
+
+def find_mumu(c, deep=True):
+    """Thư mục MuMu ("" = chưa thấy). Dò sâu tối đa 2 phút/lần; thấy rồi thì ghi nhớ."""
+    for d in [c.get("MUMU_DIR", "")] + MUMU_DIRS:
+        f = mumu_cli(d)
+        if f: return mumu_root(f)
+    try:
+        f = mumu_cli(open(MUMU_CACHE, encoding="utf-8").read().strip())
+        if f: return mumu_root(f)
+    except OSError: pass
+    if not deep: return ""
+    if time.time() - _MU["t"] < 120: return _MU["d"]
+    _MU["t"] = time.time(); _MU["d"] = ""
+    seen = set()
+    for d in mumu_guess():
+        key = os.path.normcase(os.path.abspath(d))
+        if key in seen: continue
+        seen.add(key)
+        f = mumu_cli(d)
+        if f:
+            _MU["d"] = mumu_root(f)
+            try: os.makedirs(os.path.dirname(MUMU_CACHE), exist_ok=True); open(MUMU_CACHE, "w", encoding="utf-8").write(_MU["d"])
+            except OSError: pass
+            break
+    return _MU["d"]
+
 def find_emu(c=None):
     """(thư mục giả lập, chữ hiện trên đèn) theo loại đã chọn ở cloudphone.conf (EMU=ld|mumu|memu)."""
     c = c or conf(); e = (c.get("EMU") or "").lower()
@@ -77,16 +195,14 @@ def find_emu(c=None):
                if d and os.path.isfile(os.path.join(d, "ldconsole.exe"))), "")
     mm = next((d for d in [c.get("MEMU_DIR", ""), r"C:\Program Files\Microvirt\MEmu", r"D:\Program Files\Microvirt\MEmu"]
                if d and os.path.isfile(os.path.join(d, "memuc.exe"))), "")
-    mu = ""
-    for d in [c.get("MUMU_DIR", ""), r"C:\Program Files\Netease\MuMuPlayer-12.0", r"D:\Program Files\Netease\MuMuPlayer-12.0",
-              r"C:\Program Files\Netease\MuMu Player 12", r"D:\Program Files\Netease\MuMu Player 12", r"C:\Program Files\Netease\MuMuPlayer",
-              r"C:\Program Files\MuMuPlayerGlobal-12.0", r"D:\Program Files\MuMuPlayerGlobal-12.0", r"C:\Program Files\Netease\MuMuPlayerGlobal-12.0"]:
-        if d and any(os.path.isfile(os.path.join(d, x)) for x in (r"nx_main\mumu-cli.exe", r"shell\MuMuManager.exe", r"nx_main\MuMuManager.exe")): mu = d; break
+    mu = find_mumu(c, deep=e == "mumu" or (not e and not ld and not mm))
     found = {"ld": ld, "memu": mm, "mumu": mu}
     if e not in found: e = "ld" if ld else ("mumu" if mu else ("memu" if mm else ""))
     if not e: return "", "chưa thấy giả lập — cài LDPlayer 9 hoặc MuMu rồi bấm 🎛 Chọn giả lập"
     name = EMUS[e][0]; av = c.get("ANDROIDS") or EMUS[e][1]
-    return found[e], (f"{name} · bán Android {av.replace(',', ', ')}" if found[e] else f"chưa thấy {name} — cài từ trang chính thức")
+    if found[e]: return found[e], f"{name} · bán Android {av.replace(',', ', ')}"
+    if e == "mumu": return "", "chưa thấy MuMu — bấm 🎛 Chọn giả lập → 📂 Chọn thư mục MuMu"
+    return "", f"chưa thấy {name} — cài từ trang chính thức"
 
 def port_open(p):
     s = socket.socket(); s.settimeout(0.5)
@@ -197,14 +313,14 @@ class Svc:
 class App:
     def __init__(self, auto=False):
         self.q = queue.Queue()
-        r = self.root = tk.Tk(); r.title("BlueRoblox — Bảng điều khiển máy chủ Windows"); r.geometry("1100x720"); r.configure(bg=BG)
+        r = self.root = tk.Tk(); r.title("CloudBlue — Bảng điều khiển máy chủ Windows"); r.geometry("1100x720"); r.configure(bg=BG)
         r.minsize(900, 600)
         st = ttk.Style(); st.theme_use("clam")
         st.configure("TNotebook", background=BG, borderwidth=0); st.configure("TNotebook.Tab", background=CARD, foreground=MUTED, padding=(14, 6))
         st.map("TNotebook.Tab", background=[("selected", BLUE)], foreground=[("selected", "white")])
         self.svcs = {n: Svc(n, self) for n in SERVICES}
         top = tk.Frame(r, bg=BG); top.pack(fill="x", padx=14, pady=(12, 6))
-        tk.Label(top, text="🐋 BlueRoblox", fg=BLUE, bg=BG, font=("Segoe UI", 18, "bold")).pack(side="left")
+        tk.Label(top, text="🐋 CloudBlue", fg=BLUE, bg=BG, font=("Segoe UI", 18, "bold")).pack(side="left")
         tk.Label(top, text="  máy chủ Windows · LDPlayer 9 / MuMu / MEmu", fg=MUTED, bg=BG, font=("Segoe UI", 11)).pack(side="left", pady=(6, 0))
         self.adm = tk.Label(top, text="", bg=BG, font=("Segoe UI", 10)); self.adm.pack(side="right")
         # dòng tổng: đủ đèn xanh = OK
@@ -243,7 +359,7 @@ class App:
         btn("♻ Làm mới máy khách", self.remake)
         btn("⚡ Tối ưu Windows", self.optimize)
         btn("🛣 Đường thẳng (ít trễ)", self.fast_setup)
-        btn("🖼 Ảnh nền cho máy", lambda: self.job("Đặt ảnh nền BlueRoblox cho các máy đang chạy (máy chưa có)", [PY, "phonectl.py", "wallpaper", "--all"]))
+        btn("🖼 Ảnh nền cho máy", lambda: self.job("Đặt ảnh nền CloudBlue cho các máy đang chạy (máy chưa có)", [PY, "phonectl.py", "wallpaper", "--all"]))
         btn("⏻ Thoát hẳn", self.quit_all, "#3a2030", "#ffb3bb")
         btn("🔑 Tự đăng nhập + tự chạy", self.autologon, "#2a2350", "#d9ccff")
         btn("🧹 Dọn giả lập thừa", self.cleanup, "#3a2a10", "#ffd9a0")
@@ -400,7 +516,7 @@ class App:
             if free < 15: self.say("Tổng quan", f"⚠ Ổ C: chỉ còn {free:.0f} GB trống — máy mới có thể không tạo được. Xoá bớt máy hết hạn / file rác.")
 
     def cleanup(self):
-        if messagebox.askyesno("Dọn giả lập thừa", "XOÁ mọi giả lập trong MEmu KHÔNG thuộc danh sách BlueRoblox (giả lập cũ, tạo dở, bị kẹt)?\n"
+        if messagebox.askyesno("Dọn giả lập thừa", "XOÁ mọi giả lập trong MEmu KHÔNG thuộc danh sách CloudBlue (giả lập cũ, tạo dở, bị kẹt)?\n"
                                "Máy khách đang thuê và máy test1 được GIỮ NGUYÊN."):
             self.job("Dọn giả lập thừa", [PY, "phonectl.py", "cleanup"])
 
@@ -410,7 +526,7 @@ class App:
         if not messagebox.askyesno("Tự đăng nhập + tự chạy",
                 f"Bật 3 thứ để mất điện / khởi động lại là TỰ chạy lại hết, không cần ai bấm:\n\n"
                 f"1) Windows tự đăng nhập tài khoản '{user}' (không dừng ở màn hình mật khẩu)\n"
-                f"2) Bảng BlueRoblox tự mở bằng quyền Admin khi đăng nhập (tự sửa được cả đường hầm Cloudflare)\n"
+                f"2) Bảng CloudBlue tự mở bằng quyền Admin khi đăng nhập (tự sửa được cả đường hầm Cloudflare)\n"
                 f"3) Máy không tự ngủ / tắt màn hình\n\nWindows sẽ hỏi quyền Admin. Tiếp tục?"): return
         pw = simpledialog.askstring("Mật khẩu Windows",
                 f"Nhập mật khẩu đăng nhập Windows của tài khoản '{user}'.\n"
@@ -606,6 +722,8 @@ Write-Host '[OK] Khong ngu, khong tat man hinh'
         def pick(e, av):
             set_conf("EMU", e); set_conf("ANDROIDS", av); w.destroy()
             self.say("Tổng quan", f"✓ Máy chủ này: {EMUS[e][0]} · nhận đơn Android {av}. Đang bật lại phần nhận đơn…")
+            if e == "mumu":                                    # dò MuMu ở nền (không treo bảng); không thấy → mở hộp chọn thư mục
+                threading.Thread(target=lambda: find_mumu(conf()) or self.root.after(0, self.pick_mumu_dir), daemon=True).start()
             if self.svcs["cloudphoned"].alive(): threading.Thread(target=lambda: self._restart_svc("cloudphoned"), daemon=True).start()
         for e, (nm, av), desc in (("ld", EMUS["ld"], "Android 9 · ổn định, nhẹ"), ("mumu", EMUS["mumu"], "Android 12 + Android 7 (cần máy mẫu tpl_a7 nếu MuMu mặc định là 12)"),
                                   ("memu", EMUS["memu"], "Android 7 (MEmu) · thêm 12 bằng máy mẫu tpl_a12")):
@@ -613,7 +731,22 @@ Write-Host '[OK] Khong ngu, khong tat man hinh'
                           bg=BLUE if cur == e else CARD, fg="white" if cur == e else FG, relief="flat", font=("Segoe UI", 11, "bold"),
                           padx=14, pady=10, anchor="w", cursor="hand2", bd=0)
             b.pack(fill="x", padx=24, pady=4)
+        tk.Button(w, text="📂 Chọn thư mục MuMu (MuMu cài ở ổ / thư mục khác)", command=lambda: (w.destroy(), self.pick_mumu_dir()),
+                  bg=CARD, fg=MUTED, relief="flat", font=("Segoe UI", 10), padx=14, pady=6, anchor="w", cursor="hand2", bd=0).pack(fill="x", padx=24, pady=(10, 4))
         tk.Label(w, text="", bg=BG).pack(pady=4)
+
+    def pick_mumu_dir(self):
+        """Chọn tay thư mục cài MuMu (thư mục có MuMuManager.exe / mumu-cli.exe, hoặc thư mục cha của nó)."""
+        d = filedialog.askdirectory(parent=self.root, title="Chọn thư mục cài MuMu (VD: D:\\Program Files\\Netease\\MuMuPlayer-12.0)")
+        if not d: return
+        f = mumu_cli(os.path.normpath(d))
+        if not f:
+            messagebox.showerror("Không phải thư mục MuMu", "Trong thư mục này không có MuMuManager.exe / mumu-cli.exe.\n"
+                                 "Mẹo: chuột phải biểu tượng MuMu trên Desktop → Open file location → chọn thư mục đó (hoặc thư mục cha của nó)."); return
+        root = mumu_root(f); set_conf("MUMU_DIR", root)
+        try: os.makedirs(os.path.dirname(MUMU_CACHE), exist_ok=True); open(MUMU_CACHE, "w", encoding="utf-8").write(root)
+        except OSError: pass
+        self.say("Tổng quan", f"✓ Đã chọn MuMu: {root}  (lệnh: {os.path.basename(f)}). Bấm ⏹ Tắt tất cả → ▶ Bật tất cả để dùng.")
 
     def set_key(self):
         k = simpledialog.askstring("Khoá Supabase", "Mở Supabase → Project Settings → API Keys → khoá service_role (Reveal → Copy)\n"
@@ -622,7 +755,7 @@ Write-Host '[OK] Khong ngu, khong tat man hinh'
         k = k.strip()
         if not (k.startswith("eyJ") or k.startswith("sb_secret_")): messagebox.showerror("Sai khoá", "Khoá service_role bắt đầu bằng eyJ… hoặc sb_secret_…"); return False
         set_conf("SUPABASE_SERVICE_KEY", k)
-        for x, v in (("SUPABASE_URL", "https://nprftgodswlpzomcttal.supabase.co"), ("PUBLIC_BASE", "https://phone.blueroblox.shop"), ("NODE_ID", "win1")):
+        for x, v in (("SUPABASE_URL", "https://nprftgodswlpzomcttal.supabase.co"), ("PUBLIC_BASE", "https://phone.cloudblue.vn"), ("NODE_ID", "win1")):
             if not conf().get(x): set_conf(x, v)
         self.say("Tổng quan", "✓ Đã lưu khoá Supabase. Bấm ▶ Bật tất cả (hoặc Bật lại) để dùng khoá mới.")
         return True
@@ -707,7 +840,7 @@ Write-Host '[OK] Tat Xbox Game DVR'
         with urllib.request.urlopen(req, timeout=20) as r: return json.loads(r.read().decode())
 
     def fast_dns(self, token=None, quiet=False):
-        """Trỏ fast.blueroblox.shop về IP nhà mạng hiện tại (IP đổi thì tự cập nhật)."""
+        """Trỏ fast.<tên miền> về IP nhà mạng hiện tại (IP đổi thì tự cập nhật)."""
         token = token or conf().get("CF_DNS_TOKEN", "")
         if not token: return False
         try:
@@ -734,7 +867,7 @@ Write-Host '[OK] Tat Xbox Game DVR'
         t = simpledialog.askstring("Đường thẳng (ít trễ)",
             "Cần 1 mã Cloudflare (API Token) quyền sửa tên miền:\n"
             "dash.cloudflare.com → góc phải: My Profile → API Tokens → Create Token → mẫu \"Edit zone DNS\"\n"
-            "→ Permissions bấm \"+ Add more\": Zone · Zone · Read → Zone Resources: chọn blueroblox.shop\n"
+            f"→ Permissions bấm \"+ Add more\": Zone · Zone · Read → Zone Resources: chọn {ZONE}\n"
             "→ Continue → Create Token → Copy, rồi dán vào đây.\n"
             "(Mã chỉ lưu trong C:\\blue\\cloudphone.conf, không gửi đi đâu.)", show="•", parent=self.root)
         if not t: return
@@ -748,7 +881,7 @@ Write-Host '[OK] Tat Xbox Game DVR'
         try:
             self._cf("GET", f"/zones?name={ZONE}", token)["result"][0]["id"]
         except Exception as e:
-            S(f"✗ Mã Cloudflare không dùng được ({e}). Tạo lại mã theo mẫu \"Edit zone DNS\" cho blueroblox.shop."); return
+            S(f"✗ Mã Cloudflare không dùng được ({e}). Tạo lại mã theo mẫu \"Edit zone DNS\" cho {ZONE}."); return
         S("✓ Mã Cloudflare dùng được")
         set_conf("CF_DNS_TOKEN", token)
         exe = os.path.join(B, "caddy.exe")
@@ -879,5 +1012,5 @@ if __name__ == "__main__":
     try:   # chỉ mở 1 bảng điều khiển
         _lock = socket.socket(); _lock.bind(("127.0.0.1", 47123))
     except OSError:
-        ctypes.windll.user32.MessageBoxW(0, "Bảng điều khiển BlueRoblox đang mở rồi.", "BlueRoblox", 0); sys.exit(0)
+        ctypes.windll.user32.MessageBoxW(0, "Bảng điều khiển CloudBlue đang mở rồi.", "CloudBlue", 0); sys.exit(0)
     App(auto="--auto" in sys.argv).root.mainloop()

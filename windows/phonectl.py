@@ -8,7 +8,7 @@
 #   python phonectl.py resize TÊN --ram 6 --cpu 6 | waitboot TÊN | connect-all | reap | rootfix --all
 #  Máy số N của MEmu ⇄ adb 127.0.0.1:(21503 + 10·N)
 # =====================================================================
-import argparse, ctypes, datetime, json, os, re, subprocess, sys, time
+import argparse, ctypes, datetime, glob, hashlib, json, os, re, subprocess, sys, time
 
 HOME = os.environ.get("BLUE_HOME") or os.path.dirname(os.path.abspath(__file__))
 STATE = os.path.join(HOME, "redroid", "phones.json")
@@ -38,19 +38,110 @@ LD_DIRS = [CONF.get("LD_DIR", ""), r"C:\LDPlayer\LDPlayer9", r"D:\LDPlayer\LDPla
            r"C:\leidian\LDPlayer9", r"D:\leidian\LDPlayer9"]
 LD = next((d for d in LD_DIRS if d and os.path.isfile(os.path.join(d, "ldconsole.exe"))), "")
 # ---------- MuMu (NetEase, Android 12 / Android 7): MuMuManager.exe / mumu-cli.exe ----------
-MUMU_DIRS = [CONF.get("MUMU_DIR", ""), r"C:\Program Files\Netease\MuMuPlayer-12.0", r"D:\Program Files\Netease\MuMuPlayer-12.0",
+MUMU_DIRS = [CONF.get("MUMU_DIR", ""), os.environ.get("MUMU_DIR", ""), r"C:\Program Files\Netease\MuMuPlayer-12.0", r"D:\Program Files\Netease\MuMuPlayer-12.0",
              r"C:\Program Files\Netease\MuMu Player 12", r"D:\Program Files\Netease\MuMu Player 12", r"C:\Program Files\Netease\MuMuPlayer",
              r"D:\Program Files\Netease\MuMuPlayer", r"C:\Program Files\MuMuPlayerGlobal-12.0", r"D:\Program Files\MuMuPlayerGlobal-12.0",
-             r"C:\Program Files\Netease\MuMuPlayerGlobal-12.0"]
-def _find_mumu():
+             r"C:\Program Files\Netease\MuMuPlayerGlobal-12.0", r"C:\Program Files\Netease\MuMu", r"D:\Program Files\Netease\MuMu"]
+MUMU_REL = (r"nx_main\mumu-cli.exe", r"shell\MuMuManager.exe", r"nx_main\MuMuManager.exe", "MuMuManager.exe", "mumu-cli.exe")
+MUMU_CACHE = os.path.join(HOME, "redroid", "mumu_dir.txt")      # chỗ cài MuMu dò được lần trước (khỏi dò lại mỗi lệnh)
+def _mumu_in(d):
+    """File lệnh của MuMu trong thư mục d (tìm cả thư mục con ≤ 3 cấp). Không có → ""."""
+    if not d or not os.path.isdir(d): return ""
+    for rel in MUMU_REL:
+        f = os.path.join(d, rel)
+        if os.path.isfile(f): return f
+    top = os.path.abspath(d).rstrip("\\/").count(os.sep)
+    for root, dirs, files in os.walk(d):
+        if root.rstrip("\\/").count(os.sep) - top >= 3: dirs[:] = []
+        low = {x.lower(): x for x in files}
+        for n in ("mumu-cli.exe", "mumumanager.exe"):
+            if n in low: return os.path.join(root, low[n])
+    return ""
+def _mumu_root(f):
+    d = os.path.dirname(f)
+    return os.path.dirname(d) if os.path.basename(d).lower() in ("shell", "nx_main") else d
+def _reg_dir(v):
+    """Thư mục lấy từ 1 giá trị registry: đường dẫn uninstall.exe (có ngoặc kép, có tham số), MuMuPlayer.exe,0 hoặc InstallLocation."""
+    v = (v or "").strip()
+    if v.startswith('"'): v = v[1:].split('"', 1)[0]
+    else:
+        m = re.match(r"(.+?\.(?:exe|ico|dll))(?:[\s,].*)?$", v, re.I)
+        if m: v = m.group(1)
+    v = v.strip().rstrip("\\/")
+    if re.search(r"\.(exe|ico|dll)$", v, re.I): v = os.path.dirname(v)
+    return v if v and os.path.isdir(v) else ""
+def _fixed_drives():
+    try:
+        k = ctypes.windll.kernel32; m = k.GetLogicalDrives()
+        return [chr(65 + i) for i in range(26) if m >> i & 1 and k.GetDriveTypeW(f"{chr(65 + i)}:\\") == 3]
+    except Exception: return ["C", "D", "E"]
+def _proc_dirs(word):
+    """Thư mục của các chương trình ĐANG CHẠY có tên chứa word (MuMu đang mở → biết ngay MuMu cài ở đâu)."""
+    out = []
+    try:
+        k = ctypes.WinDLL("kernel32"); ps = ctypes.WinDLL("psapi"); k.OpenProcess.restype = ctypes.c_void_p
+        arr = (ctypes.c_ulong * 8192)(); n = ctypes.c_ulong()
+        if not ps.EnumProcesses(arr, ctypes.sizeof(arr), ctypes.byref(n)): return out
+        for pid in arr[:n.value // ctypes.sizeof(ctypes.c_ulong)]:
+            h = k.OpenProcess(0x1000, False, pid)              # PROCESS_QUERY_LIMITED_INFORMATION
+            if not h: continue
+            try:
+                buf = ctypes.create_unicode_buffer(1024); sz = ctypes.c_ulong(1024)
+                if k.QueryFullProcessImageNameW(ctypes.c_void_p(h), 0, buf, ctypes.byref(sz)) and word in os.path.basename(buf.value).lower():
+                    out += [os.path.dirname(buf.value), os.path.dirname(os.path.dirname(buf.value))]
+            finally: k.CloseHandle(ctypes.c_void_p(h))
+    except Exception: pass
+    return out
+def _mumu_guess():
+    """MuMu cài chỗ khác mặc định: khoá gỡ cài đặt trong registry → chương trình MuMu đang chạy → thư mục Netease/MuMu ở mọi ổ cứng."""
+    out = []
+    try:
+        import winreg
+        for hv, base in ((winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"),
+                         (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"),
+                         (winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Uninstall")):
+            try: k = winreg.OpenKey(hv, base)
+            except OSError: continue
+            for i in range(winreg.QueryInfoKey(k)[0]):
+                try:
+                    sub = winreg.EnumKey(k, i); sk = winreg.OpenKey(k, sub)
+                    def val(n):
+                        try: return str(winreg.QueryValueEx(sk, n)[0] or "")
+                        except OSError: return ""
+                    if "mumu" not in (sub + " " + val("DisplayName")).lower(): continue
+                    for n in ("InstallLocation", "InstallDir", "DisplayIcon", "UninstallString"):
+                        d = _reg_dir(val(n))
+                        if d: out += [d, os.path.dirname(d)]
+                except OSError: continue
+    except Exception: pass
+    out += _proc_dirs("mumu")
+    for dr in _fixed_drives():
+        for pat in (r"\Program Files\Netease\*", r"\Program Files (x86)\Netease\*", r"\Netease\*", r"\Program Files\MuMu*",
+                    r"\Program Files (x86)\MuMu*", r"\MuMu*", r"\*\MuMu*", r"\*\Netease\*"):
+            out += glob.glob(dr + ":" + pat)
+    return out
+def _find_mumu(deep=True):
     for d in MUMU_DIRS:
-        if not d: continue
-        for rel in (r"nx_main\mumu-cli.exe", r"shell\MuMuManager.exe", r"nx_main\MuMuManager.exe", "MuMuManager.exe", "mumu-cli.exe"):
-            f = os.path.join(d, rel)
-            if os.path.isfile(f): return d, f
+        f = _mumu_in(d)
+        if f: return _mumu_root(f), f
+    try:
+        f = _mumu_in(open(MUMU_CACHE, encoding="utf-8").read().strip())
+        if f: return _mumu_root(f), f
+    except OSError: pass
+    if not deep: return "", ""
+    seen = set()
+    for d in _mumu_guess():
+        key = os.path.normcase(os.path.abspath(d))
+        if key in seen: continue
+        seen.add(key)
+        f = _mumu_in(d)
+        if f:
+            try: open(MUMU_CACHE, "w", encoding="utf-8").write(_mumu_root(f))
+            except OSError: pass
+            return _mumu_root(f), f
     return "", ""
-MUMU, MUMU_CLI = _find_mumu()
 _E = CONF.get("EMU", "").lower()
+MUMU, MUMU_CLI = _find_mumu(deep=_E == "mumu" or (not _E and not LD and not MEMU))   # máy chủ LDPlayer/MEmu: khỏi dò MuMu sâu
 if _E in ("ld", "mumu", "memu"): EMU = _E
 elif LD and not MEMU and not MUMU: EMU = "ld"
 elif MUMU and not MEMU and not LD: EMU = "mumu"
@@ -386,7 +477,7 @@ def _sb_patch(name, fields):
 
 def stream_url(port):
     import urllib.parse
-    q = urllib.parse.quote; base = CONF.get("PUBLIC_BASE", "https://phone.blueroblox.shop").rstrip("/"); udid = f"127.0.0.1:{port}"
+    q = urllib.parse.quote; base = CONF.get("PUBLIC_BASE", "https://phone.cloudblue.vn").rstrip("/"); udid = f"127.0.0.1:{port}"
     ws = base.replace("https://", "wss://") + "/?action=proxy-adb&remote=" + q("tcp:8886", safe="") + "&udid=" + q(udid, safe="")
     return f"{base}/#!action=stream&udid={q(udid, safe='')}&player=webcodecs&ws={q(ws, safe='')}"
 
@@ -537,15 +628,36 @@ def grant_perms(name, port=None):
     except Exception: pass
 
 WP = os.path.join(HOME, "wallpaper.png")
+_WPV = {}
+def wp_ver():
+    """Mã phiên bản ảnh nền (đổi file wallpaper.png → mã đổi)."""
+    try:
+        st = os.stat(WP); k = (st.st_size, int(st.st_mtime))
+        if _WPV.get("k") != k: _WPV.update(k=k, v=hashlib.md5(open(WP, "rb").read()).hexdigest()[:12])
+        return _WPV["v"]
+    except OSError: return "0"
 def set_wallpaper(name, port, force=False):
-    """Ảnh nền BlueRoblox cho máy (1 lần/máy): chép thẳng vào file ảnh nền của Android (cần root) rồi khởi động lại giao diện ~30 giây."""
+    """Ảnh nền CloudBlue cho máy: chép thẳng vào file ảnh nền của Android (cần root) rồi khởi động lại giao diện ~30 giây.
+       Mỗi máy chỉ đặt 1 lần cho mỗi phiên bản ảnh. Ra ảnh mới → máy đang dùng ảnh nền cũ của mình được chép sẵn ảnh mới,
+       KHÔNG khởi động lại (khách không bị gián đoạn) — ảnh mới hiện từ lần khởi động sau. Khách đã TỰ ĐỔI ảnh nền → giữ ảnh của khách."""
     if CONF.get("WALLPAPER", "1") != "1" or not os.path.isfile(WP): return False
-    s_ = f"127.0.0.1:{port}"
-    if not force and "Y" in (adb("-s", s_, "shell", "[ -f /data/local/tmp/.br_wp ] && echo Y", timeout=15).stdout or ""): return False
+    s_ = f"127.0.0.1:{port}"; ver = wp_ver(); quiet = False
+    if not force:
+        o = adb("-s", s_, "shell", "[ -f /data/local/tmp/.br_wp ] && echo \"Y:$(cat /data/local/tmp/.br_wp)\"", timeout=15).stdout or ""
+        if "Y:" in o:
+            if o.split("Y:", 1)[1].strip() == ver: return False
+            same = adb("-s", s_, "shell", "su -c 'cmp -s /data/system/users/0/wallpaper_orig /data/local/tmp/br_wp.png && echo SAME'", timeout=30).stdout or ""
+            if "SAME" not in same or CONF.get("WALLPAPER_UPDATE", "1") != "1":      # khách đã đổi ảnh nền (hoặc tắt tự đổi) → giữ
+                adb("-s", s_, "shell", f"echo {ver} > /data/local/tmp/.br_wp", timeout=15); return False
+            quiet = True
     adb("-s", s_, "push", WP, "/data/local/tmp/br_wp.png", timeout=120)
     sc = ("D=/data/system/users/0; for f in wallpaper wallpaper_orig wallpaper_lock wallpaper_lock_orig; do "
           "cp /data/local/tmp/br_wp.png $D/$f; chown system:system $D/$f; chmod 600 $D/$f; done; "
-          "rm -f $D/wallpaper_info.xml; restorecon $D/wallpaper* 2>/dev/null; touch /data/local/tmp/.br_wp; sync")
+          f"rm -f $D/wallpaper_info.xml; restorecon $D/wallpaper* 2>/dev/null; echo {ver} > /data/local/tmp/.br_wp; sync")
+    if quiet:
+        adb("-s", s_, "shell", "su -c '" + sc + "'", timeout=60)
+        print(f"   🖼 {name}: đã chép ảnh nền CloudBlue mới (hiện từ lần khởi động sau)", flush=True)
+        return True
     if EMU == "ld":
         # LDPlayer: "stop; start" giao diện làm adb của máy treo → chép ảnh rồi KHỞI ĐỘNG LẠI CẢ MÁY bằng ldconsole (sạch, an toàn)
         adb("-s", s_, "shell", "su -c '" + sc + "'", timeout=60)
@@ -555,7 +667,7 @@ def set_wallpaper(name, port, force=False):
             _ldrun(["reboot", "--index", i], 60); time.sleep(20)
     else:
         adb("-s", s_, "shell", "su -c '" + sc + "; stop; sleep 2; start'", timeout=60)
-    print(f"   🖼 {name}: đã đặt ảnh nền BlueRoblox", flush=True)
+    print(f"   🖼 {name}: đã đặt ảnh nền CloudBlue", flush=True)
     time.sleep(8)
     t0 = time.time()
     while time.time() - t0 < 180:
@@ -571,8 +683,17 @@ def clamp_fps(v):
     except Exception: v = 30
     return min(max(v, 10), 120)
 
-MAX_RAM = float(CONF.get("MEMU_MAX_RAM", "8" if EMU == "ld" else "16") or 16)     # MEmu tối đa 16GB/máy · LDPlayer 9 tối đa 8GB
-MAX_CPU = int(float(CONF.get("MEMU_MAX_CPU", "8") or 8))                           # MEmu / LDPlayer 9: tối đa 8 nhân
+def _host_ram():
+    try: return mem()[0]
+    except Exception: return 0.0
+if EMU == "mumu":
+    # MuMu (Android 12 / 7) chạy được máy to → mặc định trần 1 máy = RAM / số luồng THẬT của máy chủ.
+    # Giới hạn bán theo từng bản Android (12: 128GB · 72 nhân, 7: 16GB · 16 nhân) đặt trên web (bảng giá → android_limits).
+    MAX_RAM = float(CONF.get("MEMU_MAX_RAM") or max(8, int(_host_ram())))
+    MAX_CPU = int(float(CONF.get("MEMU_MAX_CPU") or (os.cpu_count() or 8)))
+else:
+    MAX_RAM = float(CONF.get("MEMU_MAX_RAM", "8" if EMU == "ld" else "16") or 16)     # MEmu tối đa 16GB/máy · LDPlayer 9 tối đa 8GB
+    MAX_CPU = int(float(CONF.get("MEMU_MAX_CPU", "8") or 8))                           # MEmu / LDPlayer 9: tối đa 8 nhân
 LD_MEM = (256, 512, 768, 1024, 1536, 2048, 3072, 4096, 6144, 8192, 12288, 16384)
 def configure(idx, ram, cpu, res, dpi):
     w, h = res.lower().split("x")
@@ -873,7 +994,8 @@ def cmd_rootfix(a):
 
 def cmd_capacity(a):
     st = load(); tot, av = mem()
-    print(f"Windows: RAM {tot:.1f} GB (còn trống {av:.1f} GB, chừa {RESERVE:g} GB) · CPU {os.cpu_count()} luồng · MEmu: {MEMU or 'KHÔNG THẤY'}")
+    print(f"Windows: RAM {tot:.1f} GB (còn trống {av:.1f} GB, chừa {RESERVE:g} GB) · CPU {os.cpu_count()} luồng · {EMU_NAME}: {MEMU or 'KHÔNG THẤY'}"
+          f" · 1 máy tối đa {MAX_RAM:g}GB · {MAX_CPU} nhân")
     print(f"Đã cấp:  RAM {sum(float(p['ram']) for p in st['phones']):.1f} GB  ({len(st['phones'])} máy)")
 
 def cmd_list(a):
@@ -1141,15 +1263,59 @@ def cmd_probe(a):
     """In thông tin giả lập để kiểm tra / gửi hỗ trợ khi cài máy chủ mới."""
     print(f"Giả lập: {EMU_NAME} (EMU={EMU}) · thư mục: {MEMU or 'KHÔNG THẤY'}" + (f" · lệnh: {MUMU_CLI}" if EMU == "mumu" else ""))
     print(f"Bản Android bán ở máy chủ này: {', '.join(ANDROIDS)} (mặc định {DEF_ANDROID}) · máy mẫu: {', '.join(tpl_name(x) for x in ANDROIDS)}")
+    print(f"1 máy tối đa: {MAX_RAM:g}GB RAM · {MAX_CPU} nhân (đổi bằng MEMU_MAX_RAM / MEMU_MAX_CPU trong cloudphone.conf)")
     v = vms(); print(f"Có {len(v)} máy:")
     for i, x in sorted(v.items()): print(f"  #{i} {x['name']} {'đang chạy' if x['running'] else 'tắt'} · cổng adb {port_of(i)}")
+    names = {x["name"] for x in v.values()}
+    if EMU != "ld":
+        for ver in ANDROIDS:
+            print(f"Máy mẫu Android {ver} ({tpl_name(ver)}): " + ("CÓ ✓" if tpl_name(ver) in names else "CHƯA CÓ ✗ — tạo 1 máy Android " + ver + f" trong {EMU_NAME} rồi đổi tên thành {tpl_name(ver)}"))
+    mine = [q["name"] for q in load()["phones"]]
+    lost = [n for n in mine if n not in names]
+    print(f"Máy khách trong danh sách: {len(mine)}" + (f" · KHÔNG THẤY trong {EMU_NAME}: {', '.join(lost)}" if lost else " · đều thấy trong giả lập ✓"))
     if EMU == "mumu":
         r = _mumurun(["info", "-v", "all"], 60); print("--- MuMu info ---"); print((r.stdout or r.stderr or "")[:3000])
         if v:
             i0 = sorted(v)[0]; r = _mumurun(["setting", "-v", i0, "-a"], 60); print(f"--- MuMu setting máy #{i0} ---"); print((r.stdout or r.stderr or "")[:4000])
 
+SECRET_KEYS = {"SUPABASE_SERVICE_KEY", "CF_DNS_TOKEN", "TELEGRAM_TOKEN", "TG_TOKEN", "SEPAY_API_KEY", "WEBHOOK_SECRET"}
+def cmd_setconf(a):
+    """setconf KHOÁ=GIÁ_TRỊ …  → sửa / thêm dòng trong cloudphone.conf, giữ nguyên các dòng khác (kể cả khoá bí mật).
+       Chép bản cũ ra cloudphone.conf.bak trước khi sửa. Không nhận khoá bí mật (khoá dán bằng nút trong bảng)."""
+    want = {}
+    for kv in a.pairs:
+        if "=" not in kv: print(f"LỖI: '{kv}' phải viết dạng KHOÁ=GIÁ_TRỊ"); sys.exit(1)
+        k, v = kv.split("=", 1); k = k.strip().upper(); v = v.strip().strip('"').strip("'")
+        if not re.fullmatch(r"[A-Z][A-Z0-9_]{1,40}", k): print(f"LỖI: tên khoá '{k}' không hợp lệ"); sys.exit(1)
+        if k in SECRET_KEYS: print(f"LỖI: {k} là khoá bí mật — dán bằng nút trong bảng điều khiển, không gõ ở đây"); sys.exit(1)
+        if re.search(r"[\r\n]", v): print(f"LỖI: giá trị của {k} không được xuống dòng"); sys.exit(1)
+        want[k] = v
+    if not want: print("Cách dùng: python phonectl.py setconf EMU=mumu ANDROIDS=12,7 MEMU_MAX_RAM=128 MEMU_MAX_CPU=72"); sys.exit(1)
+    data = open(CONF_F, "rb").read() if os.path.isfile(CONF_F) else b""
+    bom = data[:3] == b"\xef\xbb\xbf"; raw = data[3 if bom else 0:].decode("utf-8", errors="replace")
+    nl = "\r\n" if "\r\n" in raw else "\n"
+    lines, done = [], set()
+    for l in raw.splitlines():
+        k = l.split("=", 1)[0].strip()
+        if "=" in l and not l.lstrip().startswith("#") and k in want:
+            if k in done: continue                                   # dòng trùng → bỏ (giữ 1 dòng)
+            l = f"{k}={want[k]}"; done.add(k)
+        lines.append(l)
+    lines += [f"{k}={v}" for k, v in want.items() if k not in done]
+    out = (b"\xef\xbb\xbf" if bom else b"") + (nl.join(lines) + nl).encode("utf-8")
+    if data: open(CONF_F + ".bak", "wb").write(data)
+    try:
+        open(CONF_F + ".tmp", "wb").write(out); os.replace(CONF_F + ".tmp", CONF_F)
+    except PermissionError:                                          # file đang được chương trình khác mở → ghi thẳng
+        open(CONF_F, "wb").write(out)
+        try: os.remove(CONF_F + ".tmp")
+        except OSError: pass
+    for k, v in want.items(): print(f"✓ {k}={v}")
+    print("Xong. Trong bảng bấm ■ Tắt tất cả → ▶ Bật tất cả để dùng cấu hình mới.")
+
 def main():
     ap = argparse.ArgumentParser(); s = ap.add_subparsers(dest="c", required=True)
+    sc = s.add_parser("setconf"); sc.add_argument("pairs", nargs="*"); sc.set_defaults(f=cmd_setconf)
     c = s.add_parser("create"); c.add_argument("name"); c.add_argument("--ram", type=float, default=2); c.add_argument("--cpu", type=float, default=2)
     c.add_argument("--days", type=int, default=7); c.add_argument("--res", default="720x1280"); c.add_argument("--dpi", type=int, default=0)
     c.add_argument("--fps", type=int, default=30); c.add_argument("--nowait", action="store_true"); c.add_argument("--android", default="9")

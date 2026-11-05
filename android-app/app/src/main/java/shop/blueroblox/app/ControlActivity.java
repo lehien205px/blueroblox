@@ -55,7 +55,7 @@ import java.util.regex.Pattern;
 /** Màn điều khiển máy ảo: hình máy (trình phát gốc, giao thức v2) ở giữa, thanh nút Android + công cụ bằng giao diện app. */
 public class ControlActivity extends Activity {
     private static final int REQ_APK = 51;
-    private static final String[][] QUAL = {{"eco", "Tiết kiệm", "Saver"}, {"bal", "Cân bằng", "Balanced"}, {"hd", "Siêu nét", "Ultra HD"}};
+    private static final String[][] QUAL = {{"auto", "Tự động", "Auto"}, {"eco", "Tiết kiệm", "Saver"}, {"bal", "Cân bằng", "Balanced"}, {"hd", "Siêu nét", "Ultra HD"}};
     private static final Pattern UUID = Pattern.compile("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}");
     private static final int META_CTRL = 0x1000;
 
@@ -99,10 +99,15 @@ public class ControlActivity extends Activity {
         Ui.edgeToEdge(this);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         pref = getSharedPreferences("control", MODE_PRIVATE);
-        // Điện thoại: mặc định CÂN BẰNG (mượt, bấm ăn ngay). Bản cũ đang ép Siêu nét → chuyển về Cân bằng 1 lần; khách muốn nét hơn tự chọn.
-        if (!pref.getBoolean("q_bal_v3", false)) pref.edit().putString("q", "bal").putBoolean("q_bal_v3", true).apply();
-        quality = pref.getString("q", "bal");
-        if (!"eco".equals(quality) && !"bal".equals(quality) && !"hd".equals(quality)) quality = "bal";
+        // Điện thoại: mặc định TỰ ĐỘNG — máy chủ đo mạng thật (app báo đã nhận khung nào) rồi tự chọn độ nét + khung/giây:
+        // 4G yếu → nhẹ, ít trễ; wifi khoẻ → 60 FPS. Bản cũ đang để Cân bằng (mặc định trước đây) → chuyển sang Tự động 1 lần;
+        // khách đã tự chọn Tiết kiệm / Siêu nét thì giữ nguyên.
+        if (!pref.getBoolean("q_auto_v4", false)) {
+            String old = pref.getString("q", "bal");
+            pref.edit().putBoolean("q_auto_v4", true).putBoolean("q_bal_v3", true).putString("q", "bal".equals(old) ? "auto" : old).apply();
+        }
+        quality = pref.getString("q", "auto");
+        if (!"auto".equals(quality) && !"eco".equals(quality) && !"bal".equals(quality) && !"hd".equals(quality)) quality = "auto";
         showStats = pref.getBoolean("stats", false);
 
         LinearLayout root = Ui.col(this, 0);
@@ -754,8 +759,9 @@ public class ControlActivity extends Activity {
     private void pickQuality() {
         LinearLayout c = Ui.col(this, 10);
         final Dialog[] d = new Dialog[1];
-        String[] desc = {Ui.L("Nhẹ nhất, 30 FPS — mạng 4G/wifi yếu", "Lightest, 30 FPS — weak 4G/wifi"),
-                Ui.L("Mượt 60 FPS, nét vừa — khuyên dùng", "Smooth 60 FPS — recommended"),
+        String[] desc = {Ui.L("Tự đo mạng, chọn độ nét + khung hình hợp lý — khuyên dùng", "Measures your network, picks sharpness + FPS — recommended"),
+                Ui.L("Nhẹ nhất, 30 FPS — mạng 4G/wifi yếu", "Lightest, 30 FPS — weak 4G/wifi"),
+                Ui.L("Mượt 60 FPS, nét vừa", "Smooth 60 FPS"),
                 Ui.L("Nét nhất, 60 FPS — cần mạng khoẻ", "Sharpest, 60 FPS — needs a fast network")};
         for (int i = 0; i < QUAL.length; i++) {
             final String k = QUAL[i][0];

@@ -115,7 +115,7 @@ public final class StreamClient {
         app = c.getApplicationContext();
         prefs = app.getSharedPreferences("stream", Context.MODE_PRIVATE);
         phone = phoneId;
-        q = quality == null || quality.isEmpty() ? "bal" : quality;
+        q = quality == null || quality.isEmpty() ? "auto" : quality;
         ui = listener;
     }
 
@@ -527,7 +527,8 @@ public final class StreamClient {
         try {
             if (closed) return;
             JSONObject hello = new JSONObject().put("v", 2).put("token", token).put("phone", phone)
-                    .put("client", "android").put("ver", Api.version).put("q", q);
+                    .put("client", "android").put("ver", Api.version).put("q", q)
+                    .put("net", netTag());                       // w = wifi · c = 4G/5G → chế độ Tự động bắt đầu nhẹ hơn khi dùng 4G
             writeMsg(s, C_HELLO, hello.toString().getBytes(StandardCharsets.UTF_8));
             s.lastRx = SystemClock.uptimeMillis();
             Thread tx = new Thread(() -> writer(s), "BRS-tx");

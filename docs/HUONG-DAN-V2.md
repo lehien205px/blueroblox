@@ -99,8 +99,12 @@ Cho khách ở mạng chặn cổng lạ:
 Android 9 (LDPlayer) 8GB · 8 nhân — Android 12 và Android 7 (MEmu / MuMu) 16GB · 16 nhân. 16GB · 16 nhân là trần tuyệt đối
 (web, app PC, app Android đều chặn ở 16; admin đổi trần từng bản ở ô "Trần 1 máy theo bản Android" trong trang quản trị, không vượt 16).
 Web / app PC / app Android chỉ hiện các mức trong giới hạn của bản đang chọn. Khách vẫn chỉ thuê được trong phần **còn trống**
-của máy chủ (RAM trống − phần chừa cho Windows; tổng nhân ≤ số luồng × `WIN_VCPU_OVER`).
-Đổi giới hạn 1 bản: `update cloudphone_pricing set android_limits = android_limits || '{"7": {"ram": 64, "cpu": 32}}' where id = 1;`
+của máy chủ (RAM trống − phần chừa cho Windows; tổng nhân ảo ≤ số luồng × `WIN_VCPU_OVER`).
+**CPU dùng chung**: `CPU_OVER=1.8` + `WIN_VCPU_OVER=1.8` trong `cloudphone.conf` → máy 72 luồng bán được ~130 nhân ảo
+(máy ảo ít khi dùng hết CPU cùng lúc). CPU thật trung bình 5 phút ≥ `CPU_BUSY_PCT` (85%) → tự ngừng nhận máy mới.
+Đổi: `python C:\blue\phonectl.py setconf CPU_OVER=1.8 WIN_VCPU_OVER=1.8` rồi bật lại phần nhận đơn (cloudphoned).
+Đổi giới hạn 1 bản (không vượt 16): ô "Trần 1 máy theo bản Android" trong trang quản trị, hoặc SQL
+`update cloudphone_pricing set android_limits = android_limits || '{"7": {"ram": 12, "cpu": 8}}' where id = 1;`
 
 **Ảnh nền máy khách**: `windows/wallpaper.png`. Đổi ảnh → máy mới nhận ảnh mới; máy cũ còn ảnh nền cũ của mình được chép
 sẵn ảnh mới (không khởi động lại, hiện từ lần bật máy sau); máy khách đã tự đổi ảnh nền thì giữ nguyên. Tắt tự đổi: `WALLPAPER_UPDATE=0`.

@@ -445,7 +445,8 @@ async function connect() {
   $("m-sub").textContent = ep.android ? "Android " + ep.android : "";
   if (ep.status && ep.status !== "active") { P.fatal = true; return overlay("err", statusMsg(ep.status) || "Máy chưa chạy.", [["Thử lại", retryNow], ["Về danh sách", toList]]); }
   const url = ep.stream && ep.stream.ws;
-  if (!ep.online || !url) return retryLater("Máy chủ đang bảo trì hoặc tạm offline — tự thử lại…", 8000);
+  if (!url) return retryLater("Máy chủ đang bảo trì hoặc tạm offline — tự thử lại…", 8000);
+  // "online" chỉ là nhịp báo của phần nhận đơn; phần phát hình có thể vẫn chạy → cứ thử nối (máy chủ tự báo OFFLINE nếu không giữ máy này)
   let ws;
   try { ws = new WebSocket(url); } catch { return retryLater("Không mở được kết nối — tự thử lại…", 4000); }
   ws.binaryType = "arraybuffer"; P.ws = ws; P.lastRx = Date.now();
@@ -468,7 +469,7 @@ function detach() {                        // bỏ kết nối hiện tại (kh�
 function reconnectSoon() {
   resetDecoder();
   const d = [500, 1000, 2000, 4000, 5000][Math.min(P.tries++, 4)];
-  overlay("wait", "Mất kết nối — đang nối lại…");
+  overlay("wait", P.ep && P.ep.online === false && !P.first ? "Máy chủ đang tạm offline — tự thử lại…" : "Mất kết nối — đang nối lại…");
   clearTimeout(P.timer); P.timer = setTimeout(connect, d);
 }
 const maxH = () => Math.min(1920, Math.max(960, Math.round(Math.max(screen.width, screen.height) * (devicePixelRatio || 1))));

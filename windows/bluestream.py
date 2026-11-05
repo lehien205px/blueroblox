@@ -82,6 +82,10 @@ CERT, CKEY = os.path.join(RTC, "stream-cert.pem"), os.path.join(RTC, "stream-key
 PHONES_JSON = os.path.join(B, "redroid", "phones.json")
 
 PRESETS = {"eco": (960, 30, 1500), "bal": (1280, 60, 3000), "hd": (1600, 60, 6000)}     # cạnh dài tối đa, FPS, kbps
+# Chế độ TỰ ĐỘNG: bitrate tự hạ / tự tăng theo tốc độ app nhận thật (ACK). Bitrate thấp → giảm luôn độ nét + khung/giây
+# (ít điểm ảnh = ít dữ liệu, máy ảo mã hoá + điện thoại giải mã kịp → hết giật, hết trễ dồn). Mạng khoẻ thì về đủ 1280 · 60 FPS.
+AUTO_TIERS = ((450, 640, 20), (800, 854, 24), (1300, 1024, 30), (2000, 1280, 30))      # (dưới kbps, cạnh dài tối đa, FPS tối đa)
+AUTO_CELL_KBPS = 1500                     # app báo đang dùng 4G/5G → bắt đầu nhẹ (1280 · 30 FPS), mạng ổn thì tự tăng sau ~20 giây
 KEYCODE = {"back": 4, "home": 3, "recents": 187, "power": 26, "volup": 24, "voldown": 25, "menu": 82}
 
 # loại tin nhắn (docs/STREAM-PROTOCOL.md)
@@ -1417,6 +1421,8 @@ class Session:
         self.vw = self.vh = 0; self.gen = 0; self.fps = 30; self.kbps = 0
         self.ack_pts = None; self.ack_t = 0.0; self.lag_ms = 0; self.base_ms = 0.0
         self.kbps_cur = None; self.kbps_cap = PRESETS[self.cur_q][2]; self.rate_t = 0.0
+        self.net = str(hello.get("net") or "")[:2]           # app điện thoại báo loại mạng: w = wifi · c = 4G/5G
+        self.kbps_cur = self._kbps_start()
         self.inflight = collections.deque(); self.delivered = collections.deque(); self.lat = collections.deque()
         self.key_grace = 0.0
         self.from_android = False          # True: Windows không quay được cửa sổ máy này → cả phiên lấy hình thẳng từ Android (scrcpy)
@@ -1424,6 +1430,10 @@ class Session:
         self._wn, self._wn_t = -1, time.time()   # số khung cửa sổ lần trước + lúc đổi (canh cửa sổ ngừng ra hình)
 
     # ---------- hình ----------
+    def _kbps_start(self):
+        """Bitrate lúc bắt đầu (None = trần của mức chất lượng). Tự động + 4G/5G → bắt đầu nhẹ, mạng ổn tự tăng dần."""
+        return AUTO_CELL_KBPS if self.q == "auto" and self.net == "c" else None
+
     def _dims(self):
         maxh, fps, kbps = PRESETS[self.cur_q]
         if self.maxh_req: maxh = min(maxh, max(320, self.maxh_req))
@@ -1436,6 +1446,9 @@ class Session:
         kbps = self.kbps_cur                                   # tự hạ theo mạng khách (đo bằng ACK)
         if kbps < 700: fps = min(fps, 20)
         elif kbps < 1400: fps = min(fps, 30)
+        if self.q == "auto":                                   # Tự động: mạng yếu → giảm cả độ nét
+            for lim, mh, mf in AUTO_TIERS:
+                if kbps < lim: maxh, fps = min(maxh, mh), min(fps, mf); break
         sw, sh = self.src.cw, self.src.ch
         sc = min(1.0, maxh / max(sw, sh, 1))
         ow, oh = (sw, sh) if sc >= 0.999 else (max(16, int(sw * sc) & ~7), max(16, int(sh * sc) & ~7))
@@ -1667,7 +1680,7 @@ class Session:
                     if j.get("q") in PRESETS or j.get("q") == "auto":
                         self.q = j["q"]; self.cur_q = "bal" if self.q == "auto" else self.q
                     self.fps_req = int(j.get("fps") or self.fps_req or 0); self.kbps_req = int(j.get("kbps") or 0)
-                    self.kbps_cur = None; self.restart_req = "quality"
+                    self.kbps_cur = self._kbps_start(); self.restart_req = "quality"
                 elif t == C_BYE:
                     return
             except (ValueError, TypeError, struct.error, json.JSONDecodeError, AttributeError):

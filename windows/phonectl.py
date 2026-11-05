@@ -383,8 +383,16 @@ def _mumu(a, timeout):
         return _ok("Value: 1")
     if c == "clone": return _mumurun(["clone", "-v", ix()], timeout)
     return _ok()
+_IDX_CHECK = ("remove", "rename")                 # lệnh làm mất / đổi máy → phải chắc máy số đó CÓ THẬT trước khi chạy
 def memuc(*a, timeout=300):
-    """memuc chỉ xử lý 1 lệnh một lúc (chạy chồng → "read failed: 233") → xếp hàng bằng khoá + thử lại."""
+    """memuc chỉ xử lý 1 lệnh một lúc (chạy chồng → "read failed: 233") → xếp hàng bằng khoá + thử lại.
+       memuc gặp số máy KHÔNG CÓ (VD "-i 7" khi không có máy 7, hay "-i None") thì làm NHẦM SANG MÁY #0 (đã thấy: rename -i 7 đổi tên máy #0)
+       → chặn số máy sai ở đây; remove / rename còn kiểm tra máy số đó đang có trong listvms ngay trước khi chạy."""
+    iv = None
+    if "-i" in a:
+        k = a.index("-i"); iv = str(a[k + 1]).strip() if k + 1 < len(a) else ""
+        if not iv.isdigit():
+            return subprocess.CompletedProcess([], 1, "", f"bỏ lệnh {a[0]}: số máy không hợp lệ ({iv or 'trống'}) — không chạy để khỏi làm nhầm máy #0")
     if EMU == "mumu":
         lk = _Lock("memuc", wait=min(max(120, timeout), 260))
         try: lk.__enter__()
@@ -406,6 +414,11 @@ def memuc(*a, timeout=300):
             try: lk.__enter__()
             except RuntimeError: return subprocess.CompletedProcess([], 1, "", "MEmu đang bận quá lâu (đợi khoá memuc) — thử lại sau")
         try:
+            if iv is not None and str(a[0]) in _IDX_CHECK:
+                lv = run([os.path.join(MEMU, "memuc.exe"), "listvms"], 60)
+                have = {ln.split(",")[0].strip() for ln in (lv.stdout or "").splitlines() if ln.strip()[:1].isdigit()}
+                if iv not in have:
+                    return subprocess.CompletedProcess([], 1, "", f"MEmu không có máy #{iv} (hoặc chưa đọc được danh sách) — không {a[0]}, tránh làm nhầm máy #0")
             if long_op: _long_mark(True)
             r = run([os.path.join(MEMU, "memuc.exe")] + list(a), timeout)
         finally:
@@ -910,15 +923,24 @@ def cmd_delete(a):
     if not p: print("Không có máy tên này."); sys.exit(1)
     v = vms_sure()
     if not v: print(f"LỖI: không đọc được danh sách máy của {EMU_NAME} — thử lại sau."); sys.exit(4)
-    if IDX(p, v) is None:                  # máy đã không còn trong MEmu → chỉ xoá khỏi danh sách
+    i = IDX(p, v)
+    if i is None:                          # máy đã không còn trong MEmu → chỉ xoá khỏi danh sách
         st = load(); st["phones"] = [x for x in st["phones"] if x["name"] != a.name]; save(st)
         print(f"🗑️  '{a.name}' không còn trong MEmu — đã bỏ khỏi danh sách."); return
     adb("disconnect", serial(p), timeout=15)
     with _Lock("memu"):
-        memuc("stop", "-i", IDX(p), timeout=120); time.sleep(3)
-        memuc("remove", "-i", IDX(p), timeout=180)
+        if EMU == "memu": i = IDX(p, vms_sure())        # số máy đọc lại NGAY trước khi xoá, dùng 1 số cho cả tắt + xoá
+        r = None
+        if i is not None:
+            memuc("stop", "-i", i, timeout=120); time.sleep(3)
+            r = memuc("remove", "-i", i, timeout=180)
+    v2 = vms_sure()
+    left = i is None or bool(v2 and any(x["name"] == a.name for x in v2.values()))
     st = load(); st["phones"] = [x for x in st["phones"] if x["name"] != a.name]; save(st)
-    print(f"🗑️  Đã xoá máy '{a.name}' và toàn bộ dữ liệu.")
+    if left:                                         # không xoá được → báo, KHÔNG thử số máy khác
+        why = "chưa đọc được số máy" if i is None else ((r.stdout or "") + (r.stderr or "")).strip()[-160:]
+        print(f"⚠ Chưa xoá được '{a.name}' trong {EMU_NAME} ({why}) — máy còn lại sẽ hiện THỪA, xoá bằng: phonectl strays --remove")
+    else: print(f"🗑️  Đã xoá máy '{a.name}' và toàn bộ dữ liệu.")
 
 def cmd_forget(a):
     """forget TÊN: bỏ máy khỏi danh sách CHỈ KHI giả lập chắc chắn không còn máy đó (máy "ma") — không bao giờ xoá máy thật."""

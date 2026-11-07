@@ -1252,8 +1252,13 @@ class Control:
         b = s.encode("utf-8")[:200000]; self.seq += 1
         self._send(struct.pack(">BqBI", 9, self.seq, 0, len(b)) + b)
 
-    def rotate(self):
-        if self.mode != "input": self._send(bytes([11]))
+    def rotate(self, to=None):
+        """Xoay màn máy: to = "land" (ngang) | "port" (dọc); không ghi → đổi sang hướng kia của hình đang phát.
+           Khoá hướng bằng cài đặt Android (tắt tự xoay + user_rotation). Lệnh xoay của scrcpy chỉ đổi rồi TRẢ LẠI hướng cũ
+           khi máy đang bật tự xoay → khách bấm "Xoay" mà máy đứng im."""
+        if to not in ("land", "port"): to = "port" if (self.vw or 0) > (self.vh or 0) else "land"
+        r = 1 if to == "land" else 0
+        self._shell(f"settings put system accelerometer_rotation 0; settings put system user_rotation {r}; wm user-rotation lock {r} >/dev/null 2>&1")
 
     def notif(self):
         if self.mode != "input": self._send(bytes([5]))
@@ -1667,9 +1672,9 @@ class Session:
                 elif t == C_SCROLL and len(p) >= 8:
                     x, y, h, v = struct.unpack(">HHhh", p[:8]); c.scroll(x, y, h, v)
                 elif t == C_CMD:
-                    cmd = (json.loads(p.decode() or "{}").get("cmd") or "")
+                    jc = json.loads(p.decode() or "{}"); cmd = str(jc.get("cmd") or "")
                     if cmd in KEYCODE: c.press(KEYCODE[cmd])
-                    elif cmd == "rotate": c.rotate()
+                    elif cmd == "rotate": c.rotate(jc.get("to"))
                     elif cmd == "notif": c.notif()
                 elif t == C_CLIP and len(p) >= 1:
                     c.clip_set(p[1:].decode("utf-8", "replace"), bool(p[0]))

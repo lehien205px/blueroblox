@@ -26,6 +26,19 @@ jobs:
         with:
           python-version: "3.12"
 
+      # số bản thật của app (1.<số lần build>) → app so với download/pc.json trên web để báo khách tải bản mới
+      - name: Stamp version
+        shell: python
+        working-directory: pc-client
+        run: |
+          import os, re
+          v = "1." + os.environ["GITHUB_RUN_NUMBER"]
+          s = open("bluepc.py", encoding="utf-8").read()
+          s, n = re.subn(r'^APP_VER = "[^"]*"', f'APP_VER = "{v}"', s, count=1, flags=re.M)
+          if n != 1: raise SystemExit("APP_VER not found in bluepc.py")
+          open("bluepc.py", "w", encoding="utf-8", newline="\n").write(s)
+          print("APP_VER =", v)
+
       - name: Build exe
         shell: pwsh
         working-directory: pc-client
@@ -62,3 +75,25 @@ jobs:
           gh release edit pc-latest --title "CloudBlue PC (bản mới nhất)" --notes "$NOTES" || true
           # bản tên cũ không còn được cập nhật → xoá cho khỏi tải nhầm (link cũ trên web đã chuyển sang tên mới)
           gh release delete-asset pc-latest BlueRobloxPC.zip --yes 2>/dev/null || true
+
+      # web ghi số bản mới nhất (cloudblue.vn/download/pc.json) → app máy tính bản cũ hiện dải "Có bản app mới — bấm để tải"
+      - name: Publish version file for the app's update notice
+        if: github.ref == 'refs/heads/main'
+        shell: bash
+        run: |
+          git checkout -- pc-client                     # bỏ dòng số bản vừa ghi vào bluepc.py (chỉ dùng lúc đóng gói)
+          mkdir -p blueroblox-site/download
+          SIZE=$(stat -c %s pc-client/dist/CloudBluePC.zip)
+          printf '{"version":"1.%s","code":%s,"size":%s,"date":"%s"}\n' "${{ github.run_number }}" "${{ github.run_number }}" "$SIZE" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > blueroblox-site/download/pc.json
+          cat blueroblox-site/download/pc.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add blueroblox-site/download/pc.json
+          git commit -m "App PC v1.${{ github.run_number }}" || exit 0
+          for i in 1 2 3; do
+            if git pull --rebase origin main && git push origin HEAD:main; then echo "pc.json published"; exit 0; fi
+            git rebase --abort 2>/dev/null || true
+            sleep 5
+          done
+          # bản app đã lên Release; chỉ thiếu dải báo bản mới → cảnh báo vàng trên trang chạy, không làm đỏ cả lần build
+          echo "::warning::Could not push blueroblox-site/download/pc.json — app update notice not published for v1.${{ github.run_number }}"

@@ -247,6 +247,13 @@ def shell(port, cmd, timeout=60):
     return adb(port, ["shell", cmd], timeout)
 
 
+# Đầu lệnh shell: Android 10+ → biến $W = "--windowingMode 1" (mở app TOÀN MÀN, không thành cửa sổ nổi); Android cũ → $W rỗng
+FULLSCREEN_SH = "W=; [ \"$(getprop ro.build.version.sdk)\" -ge 29 ] 2>/dev/null && W='--windowingMode 1'; "
+# Mở app y như bấm biểu tượng trên màn hình chính (MAIN + LAUNCHER + NEW_TASK|RESET_TASK_IF_NEEDED): app đang chạy → chỉ đưa lên trước,
+# KHÔNG mở thêm 1 màn khởi động nữa (am start -n trơn sẽ chồng thêm màn mở đầu lên app đang chạy)
+AS_ICON = "-a android.intent.action.MAIN -c android.intent.category.LAUNCHER -f 0x10200000"
+
+
 def out(r):
     return ((r.stdout or b"") + (r.stderr or b"")).decode(errors="ignore").strip()
 
@@ -955,15 +962,48 @@ class H(BaseHTTPRequestHandler):
             r = shell(port, "am start -a android.intent.action.VIEW -d " + shlex.quote(link), 20)
             return self.send_json(200, {"ok": True, "out": out(r)[-200:]})
 
-        if act == "rotate" and self.command == "POST":
-            d = 1 if self.jbody().get("dir") else 0
-            shell(port, f"settings put system accelerometer_rotation 0; settings put system user_rotation {d}", 15)
-            return self.send_json(200, {"ok": True})
+        if act == "rotate" and self.command == "POST":       # XOAY MÀN: khoá ngang / dọc (tắt tự xoay của Android + đặt hướng). Game cần màn ngang vẫn tự xoay.
+            b = self.jbody(); to = str(b.get("to") or "")
+            d = 1 if to == "land" or (to != "port" and b.get("dir")) else 0
+            r = shell(port, f"settings put system accelerometer_rotation 0 && settings put system user_rotation {d} && echo ROT_OK; "
+                            f"wm user-rotation lock {d} >/dev/null 2>&1; true", 15)      # wm user-rotation: Android 10+ (máy cũ báo lỗi → bỏ qua)
+            if "ROT_OK" not in out(r): return self.send_json(500, {"error": "Chưa xoay được — máy chưa sẵn sàng, thử lại sau giây lát."})
+            return self.send_json(200, {"ok": True, "to": "land" if d else "port",
+                                        "msg": "Đã khoá màn NGANG." if d else "Đã khoá màn DỌC."})
+
+        if act == "density":                                  # ĐỘ RỘNG NHỎ NHẤT (Smallest width): số dp càng lớn → chữ / biểu tượng càng nhỏ, màn chứa được nhiều hơn
+            def screen_now():
+                o = out(shell(port, "wm size; wm density", 15))
+                size = {k: (int(a), int(b)) for k, a, b in re.findall(r"(Physical|Override) size:\s*(\d+)x(\d+)", o)}
+                den = {k: int(v) for k, v in re.findall(r"(Physical|Override) density:\s*(\d+)", o)}
+                w, h = size.get("Override") or size.get("Physical") or (0, 0)
+                pd = den.get("Physical") or 0; d = den.get("Override") or pd; short = min(w, h)
+                # đổi độ phân giải không khởi động lại (phonectl liveres) đặt wm size + wm density theo cỡ mới → mặc định = mật độ đó,
+                # KHÔNG phải mật độ lúc tạo máy (wm density reset lúc đó làm chữ / biểu tượng bé tí)
+                dd = max(160, min(640, round(short / 2.25))) if ("Override" in size and short) else pd
+                return {"w": w, "h": h, "density": d, "physical": pd, "default": dd, "size_override": "Override" in size, "override": d != dd,
+                        "sw": round(short * 160 / d) if d and short else 0, "sw_default": round(short * 160 / dd) if dd and short else 0}
+            c = screen_now()
+            if not c["density"] or not min(c["w"], c["h"]): return self.send_json(500, {"error": "Chưa đọc được màn hình máy — thử lại sau giây lát."})
+            if self.command == "GET": return self.send_json(200, c)
+            b = self.jbody()
+            if b.get("reset"):
+                shell(port, f"wm density {c['default']}" if c["size_override"] else "wm density reset", 15)
+            else:
+                try: sw = int(b.get("sw"))
+                except (TypeError, ValueError): return self.send_json(400, {"error": "Độ rộng nhỏ nhất không hợp lệ."})
+                if not 240 <= sw <= 1600: return self.send_json(400, {"error": "Độ rộng nhỏ nhất phải từ 240 đến 1600 dp."})
+                shell(port, f"wm density {max(72, min(640, round(min(c['w'], c['h']) * 160 / sw)))}", 15)
+            n = screen_now()
+            msg = (f"Đã trả về mặc định: {n['sw']} dp." if b.get("reset")
+                   else f"Đã đặt độ rộng nhỏ nhất {n['sw']} dp. App đang mở sẽ tự vẽ lại giao diện (game có thể tải lại).")
+            return self.send_json(200, dict(n, ok=True, msg=msg))
 
         if act == "shot":          # ảnh màn hình; ?w=270 → ẢNH NHỎ (JPEG) cho "màn hình trực tiếp" / "xem tất cả máy"
             try: w = max(0, min(720, int(q.get("w") or 0)))
             except ValueError: w = 0
             key = (int(port), w); c = SHOTS.get(key)
+            if q.get("fresh") == "1": c = None                     # nút "Chụp màn" của app: luôn chụp MỚI (không trả ảnh cũ trong bộ nhớ đệm)
             ttl = 1.0 if w > 300 else 5.0                          # ảnh nhỏ: 5 giây/ảnh là đủ cho danh sách
             if LIVE.get(int(port)): ttl = 30.0                     # máy đang được điều khiển → hầu như không chụp (giữ luồng hình mượt)
             busy = c is not None and not SHOT_SEM.acquire(blocking=False)   # đang có 2 ảnh khác chụp → trả ảnh cũ ngay
@@ -1104,7 +1144,7 @@ class H(BaseHTTPRequestHandler):
                 if len(us) < i: return self.send_json(404, {"error": "Chưa có bản clone này — bấm Clone trước."})
                 u = us[i - 1][1]
                 o = out(shell(port, f"am start-user {u} >/dev/null 2>&1; C=$(cmd package resolve-activity --brief --user {u} {q} | tail -n 1); "
-                                    f"am start --user {u} -n \"$C\" 2>&1", 40))
+                                    f"{FULLSCREEN_SH}am start $W --user {u} {AS_ICON} -n \"$C\" 2>&1", 40))   # mở TOÀN MÀN (không cửa sổ nổi) → game tự xoay ngang
                 if "Error" in o or "Exception" in o: return self.send_json(500, {"error": "Chưa mở được bản clone: " + o[-160:]})
                 return self.send_json(200, {"ok": True, "msg": f"Đã mở bản clone {i} của {pkg}."})
             memu_cap = None
@@ -1159,7 +1199,10 @@ class H(BaseHTTPRequestHandler):
         if act in ("launch", "stop", "uninstall", "clear") and self.command == "POST":
             pkg = str(self.jbody().get("pkg") or "")
             if not PKG.match(pkg): return self.send_json(400, {"error": "Tên ứng dụng không hợp lệ."})
-            if act == "launch": r = shell(port, f"monkey -p {pkg} -c android.intent.category.LAUNCHER 1", 20)
+            if act == "launch":                               # mở TOÀN MÀN (Android 10+: không bật thành cửa sổ nổi) → game cần ngang tự xoay ngang
+                r = shell(port, f"{FULLSCREEN_SH}C=$(cmd package resolve-activity --brief {pkg} 2>/dev/null | tail -n 1); "   # android/… = hộp chọn (app có 2 màn mở) → monkey
+                                f"case \"$C\" in android/*) monkey -p {pkg} -c android.intent.category.LAUNCHER 1 ;; */*) am start $W {AS_ICON} -n \"$C\" ;; "
+                                f"*) monkey -p {pkg} -c android.intent.category.LAUNCHER 1 ;; esac", 20)
             elif act == "stop": r = shell(port, f"am force-stop {pkg}", 15)
             elif act == "clear": r = shell(port, f"pm clear {pkg}", 30)
             else: r = adb(port, ["uninstall", pkg], 60)

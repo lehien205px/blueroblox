@@ -34,6 +34,8 @@ public final class StreamView extends ViewGroup implements SurfaceHolder.Callbac
         void onFirstFrame();
         /** Ngón đầu tiên vừa chạm vào hình. Luồng giao diện. */
         void onTouchDown();
+        /** Máy chủ báo cỡ hình (mở phiên / máy xoay ngang-dọc / đổi độ nét). Luồng giao diện. */
+        default void onVideoSize(int w, int h) { }
     }
 
     private static final String MIME = "video/avc";
@@ -259,7 +261,11 @@ public final class StreamView extends ViewGroup implements SurfaceHolder.Callbac
     // ================================================================ StreamClient.VideoSink (luồng mạng → chuyển sang luồng giải mã)
 
     @Override public void onVideoFormat(int w, int h) {
-        main.post(() -> setVideoSize(w, h));
+        main.post(() -> {
+            setVideoSize(w, h);
+            Events e = events;
+            if (e != null && !released) e.onVideoSize(w, h);
+        });
         dec.post(() -> {
             fmtW = w;
             fmtH = h;

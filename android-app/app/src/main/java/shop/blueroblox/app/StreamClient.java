@@ -209,6 +209,11 @@ public final class StreamClient {
         try { send(C_CMD, new JSONObject().put("cmd", name).toString().getBytes(StandardCharsets.UTF_8)); } catch (Exception ignored) { }
     }
 
+    /** Xoay máy: "land" (khoá ngang) · "port" (khoá dọc). Máy chủ cũ chỉ hiểu "rotate" (đổi qua lại) — vẫn chạy. */
+    public void rotate(String to) {
+        try { send(C_CMD, new JSONObject().put("cmd", "rotate").put("to", to).toString().getBytes(StandardCharsets.UTF_8)); } catch (Exception ignored) { }
+    }
+
     /** Đổi chất lượng: eco · bal · hd · auto (nhớ luôn cho lần nối lại). */
     public void quality(String nq) {
         if (nq == null || nq.isEmpty()) return;

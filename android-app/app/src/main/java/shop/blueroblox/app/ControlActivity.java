@@ -8,9 +8,11 @@ import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.ActivityInfo;
 import android.database.Cursor;
 import android.graphics.Color;
 import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -26,7 +28,9 @@ import android.text.TextWatcher;
 import android.view.Gravity;
 import android.view.InputDevice;
 import android.view.KeyEvent;
+import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewConfiguration;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
 import android.view.WindowManager;
@@ -63,8 +67,13 @@ public class ControlActivity extends Activity {
     private FrameLayout stage;
     private StreamView screen;
     private StreamClient client;
-    private LinearLayout topBar, navBar, veil;
-    private TextView title, info, veilText, fsExit, stats;
+    private LinearLayout topBar, navBar, veil, mini;
+    private TextView title, info, veilText, stats, ball;
+    // Ẩn thanh (toàn màn): nút nổi tròn hiện độ trễ mạng (kéo để dời chỗ) · bấm → thanh nút nhỏ ◁ ○ ▢ 🔄 ⋯ ⤢
+    // Xoay: máy cloud ngang → app tự xoay ngang + ẩn thanh cho hình to nhất; về dọc → trả lại (tắt được trong menu Xoay màn)
+    private Object backCb;                                   // Android 13+: Back qua OnBackInvokedDispatcher (kiểu Object: máy cũ không nạp lớp mới)
+    private boolean autoRot = true, streamLand = false, haveSize = false, autoFull = false;
+    private int ping = -1;
     private ProgressBar veilSpin;
     private Button veilBtn;
     private Runnable veilAct;
@@ -109,23 +118,24 @@ public class ControlActivity extends Activity {
         quality = pref.getString("q", "auto");
         if (!"auto".equals(quality) && !"eco".equals(quality) && !"bal".equals(quality) && !"hd".equals(quality)) quality = "auto";
         showStats = pref.getBoolean("stats", false);
+        autoRot = pref.getBoolean("auto_rot", true);
 
         LinearLayout root = Ui.col(this, 0);
         root.setBackgroundColor(Color.BLACK);
 
-        // Thanh trên: quay lại · tên máy · chất lượng
-        topBar = Ui.row(this, 8);
-        topBar.setPadding(Ui.dp(8), Ui.dp(6), Ui.dp(12), Ui.dp(6));
+        // Thanh trên (gọn): quay lại · tên máy · chất lượng · ⛶ ẩn thanh
+        topBar = Ui.row(this, 6);
+        topBar.setPadding(Ui.dp(4), Ui.dp(3), Ui.dp(6), Ui.dp(3));
         topBar.setBackgroundColor(Ui.BG);
-        TextView back = Ui.text(this, "‹", 30, Ui.FG, false);
-        back.setPadding(Ui.dp(10), 0, Ui.dp(10), Ui.dp(4));
+        TextView back = Ui.text(this, "‹", 28, Ui.FG, false);
+        back.setPadding(Ui.dp(10), 0, Ui.dp(8), Ui.dp(3));
         back.setContentDescription(Ui.L("Quay lại danh sách máy", "Back to phones"));
         back.setOnClickListener(v -> finish());
         topBar.addView(back, Ui.wrap());
         LinearLayout tt = Ui.col(this, 0);
-        title = Ui.text(this, "…", 16, Ui.FG, true);
+        title = Ui.text(this, "…", 15, Ui.FG, true);
         title.setSingleLine(true);
-        info = Ui.text(this, "", 12, Ui.MUTED, false);
+        info = Ui.text(this, "", 11, Ui.MUTED, false);
         info.setSingleLine(true);
         tt.addView(title);
         tt.addView(info);
@@ -134,6 +144,8 @@ public class ControlActivity extends Activity {
         q.setOnClickListener(v -> pickQuality());
         q.setTag("q");
         topBar.addView(q, Ui.wrap());
+        topBar.addView(barBtn("⛶", Ui.L("Ẩn thanh — hình to hết màn", "Hide bars — full screen"), v -> { autoFull = false; setFull(true); }),
+                new LinearLayout.LayoutParams(Ui.dp(40), Ui.dp(40)));
         root.addView(topBar, Ui.fill());
 
         // Màn hình máy (SurfaceView + bộ giải mã phần cứng)
@@ -143,6 +155,7 @@ public class ControlActivity extends Activity {
         screen.setEvents(new StreamView.Events() {
             @Override public void onFirstFrame() { frameShown(); }
             @Override public void onTouchDown() { touchedScreen(); }
+            @Override public void onVideoSize(int w, int h) { videoSized(w, h); }
         });
         stage.addView(screen, new FrameLayout.LayoutParams(-1, -1));
 
@@ -195,35 +208,78 @@ public class ControlActivity extends Activity {
         veil.addView(veilBtn, Ui.wrap());
         stage.addView(veil, new FrameLayout.LayoutParams(-1, -1));
 
-        fsExit = Ui.text(this, "⤡", 18, Color.WHITE, true);
-        fsExit.setGravity(Gravity.CENTER);
-        fsExit.setBackground(Ui.round(Color.argb(140, 14, 22, 56), 99, Ui.LINE2));
-        fsExit.setContentDescription(Ui.L("Thoát toàn màn hình", "Exit full screen"));
-        fsExit.setOnClickListener(v -> setFull(false));
-        fsExit.setVisibility(View.GONE);
-        FrameLayout.LayoutParams fp = new FrameLayout.LayoutParams(Ui.dp(40), Ui.dp(40), Gravity.TOP | Gravity.END);
-        fp.setMargins(0, Ui.dp(10), Ui.dp(10), 0);
-        stage.addView(fsExit, fp);
+        // Nút nổi (khi ẩn thanh): tròn, hiện độ trễ mạng như app cloud phone lớn · bấm = hiện/ẩn thanh nút nhỏ · giữ kéo = dời chỗ
+        ball = Ui.text(this, "", 11, Color.WHITE, true);
+        ball.setGravity(Gravity.CENTER);
+        ball.setLineSpacing(0, 0.85f);
+        ball.setContentDescription(Ui.L("Nút điều khiển — bấm để hiện các nút", "Controls — tap to show buttons"));
+        ball.setVisibility(View.GONE);
+        ball.setOnTouchListener(new BallDrag());
+        ball.setOnClickListener(v -> toggleMini());
+        stage.addView(ball, new FrameLayout.LayoutParams(Ui.dp(48), Ui.dp(48), Gravity.TOP | Gravity.START));
+        mini = Ui.row(this, 0);
+        mini.setBackground(Ui.round(Color.argb(225, 10, 16, 30), 24, Color.argb(90, 120, 160, 255)));
+        mini.setPadding(Ui.dp(4), 0, Ui.dp(4), 0);
+        mini.addView(miniBtn("◁", Ui.L("Quay lại", "Back"), () -> cmd("back")));
+        mini.addView(miniBtn("○", Ui.L("Màn chính", "Home"), () -> cmd("home")));
+        mini.addView(miniBtn("▢", Ui.L("Đa nhiệm", "Recents"), () -> cmd("recents")));
+        mini.addView(miniBtn("🔄", Ui.L("Xoay ngang / dọc", "Rotate"), this::quickRotate));
+        mini.addView(miniBtn("⋯", Ui.L("Công cụ", "Tools"), () -> { hideMini(); tools(); }));
+        mini.addView(miniBtn("⤢", Ui.L("Hiện thanh", "Show bars"), () -> { autoFull = false; setFull(false); }));
+        mini.setVisibility(View.GONE);
+        stage.addView(mini, new FrameLayout.LayoutParams(-2, Ui.dp(48), Gravity.TOP | Gravity.START));
+        paintBall();
+        stage.addOnLayoutChangeListener((v, l, t, r, bt, ol, ot, or, ob) -> {   // xoay điện thoại / đổi cỡ → đặt lại nút nổi đúng chỗ đã lưu
+            if (r - l != or - ol || bt - t != ob - ot) h.post(() -> { restoreBall(); if (mini.getVisibility() == View.VISIBLE) placeMini(); });
+        });
         stage.setOnApplyWindowInsetsListener((v, in) -> {      // biết bàn phím điện thoại đang hiện hay không
             imeUp = Build.VERSION.SDK_INT >= 30 ? in.isVisible(WindowInsets.Type.ime()) : in.getSystemWindowInsetBottom() > Ui.dp(120);
             return in;
         });
         root.addView(stage, new LinearLayout.LayoutParams(-1, 0, 1));
 
-        // Thanh nút Android
+        // Thanh nút Android (gọn: chỉ biểu tượng, giữ lâu hiện tên)
         navBar = Ui.row(this, 0);
         navBar.setBackgroundColor(Ui.BG);
-        navBar.setPadding(Ui.dp(6), Ui.dp(2), Ui.dp(6), Ui.dp(2));
-        navBar.addView(Ui.tool(this, "◁", Ui.L("Quay lại", "Back"), v -> cmd("back")), Ui.weight(1));
-        navBar.addView(Ui.tool(this, "○", Ui.L("Màn chính", "Home"), v -> cmd("home")), Ui.weight(1));
-        navBar.addView(Ui.tool(this, "▢", Ui.L("Đa nhiệm", "Recents"), v -> cmd("recents")), Ui.weight(1));
-        navBar.addView(Ui.tool(this, "⋯", Ui.L("Công cụ", "Tools"), v -> tools()), Ui.weight(1));
+        navBar.setPadding(Ui.dp(6), 0, Ui.dp(6), 0);
+        navBar.addView(barBtn("◁", Ui.L("Quay lại", "Back"), v -> cmd("back")), new LinearLayout.LayoutParams(0, Ui.dp(44), 1));
+        navBar.addView(barBtn("○", Ui.L("Màn chính", "Home"), v -> cmd("home")), new LinearLayout.LayoutParams(0, Ui.dp(44), 1));
+        navBar.addView(barBtn("▢", Ui.L("Đa nhiệm", "Recents"), v -> cmd("recents")), new LinearLayout.LayoutParams(0, Ui.dp(44), 1));
+        navBar.addView(barBtn("🔄", Ui.L("Xoay ngang / dọc", "Rotate"), v -> quickRotate()), new LinearLayout.LayoutParams(0, Ui.dp(44), 1));
+        navBar.addView(barBtn("⋯", Ui.L("Công cụ", "Tools"), v -> tools()), new LinearLayout.LayoutParams(0, Ui.dp(44), 1));
         root.addView(navBar, Ui.fill());
 
         Ui.insets(root, true, true);
         setContentView(root);
         updQ();
+        if (pref.getBoolean("full", false)) setFull(true);     // lần trước khách để ẩn thanh → mở lại vẫn ẩn
+        if (Build.VERSION.SDK_INT >= 33) {                    // Android 16 + targetSdk 36: hệ thống KHÔNG gọi onBackPressed nữa → Back đi qua đây
+            android.window.OnBackInvokedCallback cb = () -> { if (!handleBack()) finish(); };
+            backCb = cb;
+            getOnBackInvokedDispatcher().registerOnBackInvokedCallback(android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT, cb);
+        }
         load();
+    }
+
+    /** Nút chỉ có biểu tượng (thanh trên / thanh dưới): giữ lâu hiện tên nút. */
+    private TextView barBtn(String icon, String desc, View.OnClickListener on) {
+        TextView t = Ui.text(this, icon, 19, Ui.FG, false);
+        t.setGravity(Gravity.CENTER);
+        t.setContentDescription(desc);
+        t.setClickable(true);
+        t.setFocusable(true);
+        if (Build.VERSION.SDK_INT >= 26) t.setTooltipText(desc);
+        else t.setOnLongClickListener(v -> { Ui.toast(this, desc); return true; });
+        Ui.ripple(t, Color.TRANSPARENT, 12, 0);
+        t.setOnClickListener(on);
+        return t;
+    }
+
+    private TextView miniBtn(String icon, String desc, Runnable act) {
+        TextView t = barBtn(icon, desc, v -> { act.run(); armMini(); });
+        t.setTextColor(Color.WHITE);
+        t.setLayoutParams(new LinearLayout.LayoutParams(Ui.dp(44), Ui.dp(48)));
+        return t;
     }
 
     /** Mã máy: từ màn danh sách (extra "id") hoặc từ link blueroblox://phone/<uuid>. */
@@ -259,6 +315,8 @@ public class ControlActivity extends Activity {
     }
 
     @Override protected void onDestroy() {
+        if (Build.VERSION.SDK_INT >= 33 && backCb != null)
+            getOnBackInvokedDispatcher().unregisterOnBackInvokedCallback((android.window.OnBackInvokedCallback) backCb);
         h.removeCallbacksAndMessages(null);
         stopStream();
         if (screen != null) screen.release();
@@ -335,6 +393,7 @@ public class ControlActivity extends Activity {
         @Override public void onClipboard(String text) { phoneCopied(text); }
 
         @Override public void onStats(int fps, int kbps, int ping, boolean direct, JSONObject server) {
+            if (ControlActivity.this.ping != ping) { ControlActivity.this.ping = ping; paintBall(); }   // nút nổi: độ trễ mạng
             if (stats.getVisibility() != View.VISIBLE) return;
             stats.setText(fps + " fps · " + kbps + " kbps · " + (ping >= 0 ? ping + " ms" : "– ms") + " · "
                     + (direct ? Ui.L("trực tiếp", "direct") : "Cloudflare"));
@@ -453,7 +512,7 @@ public class ControlActivity extends Activity {
     private final Runnable kbPoll = new Runnable() {
         @Override public void run() {
             if (!resumed || id == null || kbDead) return;
-            if (kbBusy || full || client == null) { h.postDelayed(this, 1200); return; }
+            if (kbBusy || client == null) { h.postDelayed(this, 1200); return; }        // cả khi ẩn thanh / màn ngang (chat trong game)
             kbBusy = true;
             final String pid = id, base = api;
             Api.bg(() -> {
@@ -492,7 +551,7 @@ public class ControlActivity extends Activity {
     /** Chạm vào hình: chỗ gõ trên máy có thể đã đổi → làm trống ô gõ; máy vẫn đang chờ gõ mà bàn phím đã bị ẩn → bật lại. */
     private void touchedScreen() {
         if (!mirror.isEmpty() || sink.length() > 0) resetSink();
-        if (remoteIme && kbOpen && !imeUp && !full) h.postDelayed(() -> { if (remoteIme && kbOpen && !imeUp) kbShow(true); }, 350);
+        if (remoteIme && kbOpen && !imeUp) h.postDelayed(() -> { if (remoteIme && kbOpen && !imeUp) kbShow(true); }, 350);
     }
 
     /** Ô gõ đổi chữ → so với phần đã gửi: gửi phím Xoá cho phần bị sửa + gõ phần mới (bộ gõ Telex / tự sửa chữ vẫn đúng). */
@@ -613,7 +672,8 @@ public class ControlActivity extends Activity {
                 {"🔊", Ui.L("Tăng âm", "Vol +"), (Runnable) () -> cmd("volup")},
                 {"🔉", Ui.L("Giảm âm", "Vol −"), (Runnable) () -> cmd("voldown")},
                 {"⏻", Ui.L("Tắt/mở màn", "Power"), (Runnable) () -> cmd("power")},
-                {"🔄", Ui.L("Xoay màn", "Rotate"), (Runnable) () -> cmd("rotate")},
+                {"🔄", Ui.L("Xoay màn", "Rotate"), (Runnable) this::rotateMenu},
+                {"📐", Ui.L("Độ rộng nhỏ nhất", "Smallest width"), (Runnable) this::smallestWidth},
                 {"🔔", Ui.L("Thông báo", "Notifications"), (Runnable) () -> cmd("notif")},
                 {"📷", Ui.L("Chụp màn", "Screenshot"), (Runnable) this::shot},
                 {"⌨️", Ui.L("Bàn phím", "Keyboard"), (Runnable) () -> kbShow(!(kbOpen && imeUp))},
@@ -629,7 +689,7 @@ public class ControlActivity extends Activity {
                 {"🔓", Ui.L("Root máy", "Root"), (Runnable) this::root},
                 {"✨", Ui.L("Chất lượng", "Quality"), (Runnable) this::pickQuality},
                 {"📊", Ui.L("Thông số", "Stats"), (Runnable) this::toggleStats},
-                {"⛶", Ui.L("Toàn màn", "Full screen"), (Runnable) () -> setFull(true)},
+                {"⛶", Ui.L("Ẩn thanh", "Hide bars"), (Runnable) () -> { autoFull = false; setFull(true); }},
                 {"📱", Ui.L("Đổi máy", "Switch"), (Runnable) this::switchPhone},
                 {"↻", Ui.L("Tải lại hình", "Reload"), (Runnable) this::connect},
                 {"⚡", Ui.L("Khởi động lại", "Reboot"), (Runnable) this::reboot},
@@ -660,7 +720,7 @@ public class ControlActivity extends Activity {
     private void shot() {
         Ui.toast(this, Ui.L("Đang chụp…", "Capturing…"));
         final String base = api, pid = id;
-        Api.bg(() -> Api.cpBytesAt(base, pid + "/shot"), png -> {
+        Api.bg(() -> Api.cpBytesAt(base, pid + "/shot?fresh=1"), png -> {          // fresh=1: luôn ảnh mới (máy chủ cũ bỏ qua)
             if (Build.VERSION.SDK_INT < 29) { Ui.toast(this, Ui.L("Cần Android 10 trở lên để lưu ảnh.", "Android 10+ required to save.")); return; }
             try {
                 ContentValues cv = new ContentValues();
@@ -1058,12 +1118,231 @@ public class ControlActivity extends Activity {
         } catch (Exception ignored) { }
     }
 
-    // ---------------- Toàn màn hình ----------------
+    // ---------------- Xoay màn: máy cloud ngang / dọc ↔ app điện thoại ----------------
+    /** Máy chủ báo cỡ hình. Đổi hướng (ngang ↔ dọc) → app xoay theo (nếu bật) — khỏi phải nghiêng đầu xem màn ngang. */
+    private void videoSized(int w, int h) {
+        if (w <= 0 || h <= 0) return;
+        boolean land = w > h;
+        if (haveSize && land == streamLand) return;                 // chỉ đổi độ nét (cùng hướng) → thôi
+        haveSize = true;
+        streamLand = land;
+        applyRotation();
+    }
+
+    private void applyRotation() {
+        if (!autoRot) {                                              // tắt: app xoay theo cách khách cầm điện thoại (như trước)
+            setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_FULL_USER);
+            if (autoFull && full) setFull(false);
+            autoFull = false;
+            return;
+        }
+        if (!haveSize) return;
+        setRequestedOrientation(streamLand ? ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE : ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT);
+        if (streamLand && !full) { autoFull = true; setFull(true); }              // ngang: ẩn thanh → hình to hết màn, còn nút nổi
+        else if (!streamLand && full && autoFull) { setFull(false); autoFull = false; }   // về dọc: trả thanh (nếu do app tự ẩn)
+    }
+
+    /** Nút 🔄: đổi sang hướng kia. */
+    private void quickRotate() { rotateTo(!streamLand); }
+
+    /** Khoá màn máy cloud ngang / dọc qua cổng công cụ (mọi máy chủ đều có); không tới được thì gửi qua luồng hình. */
+    private void rotateTo(boolean land) {
+        if (id == null || !live()) return;
+        Ui.toast(this, land ? Ui.L("Đang xoay ngang…", "Rotating to landscape…") : Ui.L("Đang xoay dọc…", "Rotating to portrait…"));
+        final String base = api, pid = id, to = land ? "land" : "port";
+        final JSONObject b = new JSONObject();
+        try { b.put("to", to).put("dir", land ? 1 : 0); } catch (Exception ignored) { }
+        Api.bg(() -> Api.cpAt(base, "POST", pid + "/rotate", b), r -> checkRotated(land), m -> {
+            if (client != null && client.isLive()) { client.rotate(to); checkRotated(land); }
+            else Ui.toast(this, m);
+        });
+    }
+
+    /** 3,5 giây sau hình vẫn chưa đổi hướng: app đang mở trên máy chỉ chạy 1 hướng → nói rõ cho khách (khỏi tưởng nút hỏng). */
+    private void checkRotated(boolean land) {
+        h.postDelayed(() -> {
+            if (isFinishing() || client == null || streamLand == land) return;
+            Ui.toast(this, land ? Ui.L("Đã khoá màn NGANG. App đang mở chỉ chạy màn dọc nên chưa xoay — mở game / app hỗ trợ ngang là tự ngang.",
+                            "Landscape is locked. The open app is portrait-only — apps that support landscape will rotate.")
+                    : Ui.L("Đã khoá màn DỌC. App đang mở chỉ chạy màn ngang nên chưa xoay.", "Portrait is locked. The open app is landscape-only."));
+        }, 3500);
+    }
+
+    private void rotateMenu() {
+        LinearLayout c = Ui.col(this, 10);
+        final Dialog[] d = new Dialog[1];
+        c.addView(Ui.muted(this, Ui.L("Khoá màn máy cloud theo hướng bạn chọn (giữ luôn cả khi tắt app). Game cần màn ngang vẫn tự xoay ngang.",
+                "Locks the cloud phone's orientation (kept after you leave). Landscape games still rotate by themselves.")));
+        LinearLayout r = Ui.row(this, 10);
+        Button land = Ui.button(this, "▭  " + Ui.L("Màn ngang", "Landscape"), streamLand ? Ui.PRIMARY : Ui.GHOST);
+        Button port = Ui.button(this, "▯  " + Ui.L("Màn dọc", "Portrait"), streamLand ? Ui.GHOST : Ui.PRIMARY);
+        r.addView(land, Ui.weight(1));
+        r.addView(port, Ui.weight(1));
+        c.addView(r, Ui.fill());
+        Button auto = Ui.button(this, "", Ui.GHOST);
+        Runnable paint = () -> auto.setText((autoRot ? "✓  " : "✗  ") + Ui.L("App tự xoay theo máy: ", "Follow the cloud phone: ") + (autoRot ? Ui.L("BẬT", "ON") : Ui.L("TẮT", "OFF")));
+        paint.run();
+        c.addView(auto, Ui.fill());
+        c.addView(Ui.muted(this, Ui.L("BẬT: máy cloud ngang thì app cũng ngang + ẩn thanh cho hình to nhất. TẮT: app xoay theo cách bạn cầm điện thoại.",
+                "ON: when the cloud phone turns landscape, this app turns too and hides the bars. OFF: the app follows how you hold your phone.")));
+        land.setOnClickListener(v -> { d[0].dismiss(); rotateTo(true); });
+        port.setOnClickListener(v -> { d[0].dismiss(); rotateTo(false); });
+        auto.setOnClickListener(v -> { autoRot = !autoRot; pref.edit().putBoolean("auto_rot", autoRot).apply(); paint.run(); applyRotation(); });
+        d[0] = Ui.sheet(this, "🔄 " + Ui.L("Xoay màn", "Rotate"), c);
+        d[0].show();
+    }
+
+    // ---------------- Độ rộng nhỏ nhất (Smallest width / DPI) ----------------
+    private void smallestWidth() {
+        if (id == null) return;
+        Dialog[] pd = progress(Ui.L("Đang đọc màn hình máy…", "Reading the screen…"));
+        final String base = api, pid = id;
+        Api.bg(() -> Api.cpAt(base, "GET", pid + "/density", null), j -> {
+            pd[0].dismiss();
+            final int sw = j.optInt("sw"), def = j.optInt("sw_default");
+            LinearLayout c = Ui.col(this, 10);
+            final Dialog[] d = new Dialog[1];
+            c.addView(Ui.muted(this, Ui.L("Như \"Độ rộng nhỏ nhất\" trong Tuỳ chọn nhà phát triển: số càng LỚN thì chữ, biểu tượng, cửa sổ app càng NHỎ — màn chứa được nhiều hơn (VD xếp nhiều tab clone). Mặc định của máy: ",
+                    "Like \"Smallest width\" in Developer options: a BIGGER number makes text, icons and app windows SMALLER. Default: ") + def + " dp."));
+            c.addView(Ui.text(this, Ui.L("Đang dùng: ", "Current: ") + sw + " dp", 15, Ui.FG, true), Ui.fill());
+            Ui.Wrap g = new Ui.Wrap(this, 6);
+            for (int v : new int[]{320, 360, 411, 480, 540, 600, 720, 800}) {
+                TextView ch = Ui.chip(this, v + " dp", v == sw);
+                ch.setOnClickListener(x -> { d[0].dismiss(); setDensity(v, false); });
+                g.addView(ch);
+            }
+            c.addView(g, Ui.fill());
+            LinearLayout r = Ui.row(this, 8);
+            EditText e = Ui.input(this, Ui.L("Số khác, VD 450", "Other, e.g. 450"), InputType.TYPE_CLASS_NUMBER);
+            r.addView(e, Ui.weight(1));
+            Button ok = Ui.button(this, Ui.L("Đặt", "Set"), Ui.PRIMARY);
+            r.addView(ok, Ui.wrap());
+            c.addView(r, Ui.fill());
+            Button reset = Ui.button(this, Ui.L("Trả về mặc định", "Reset to default") + " (" + def + " dp)", Ui.GHOST);
+            c.addView(reset, Ui.fill());
+            ok.setOnClickListener(x -> {
+                int v;
+                try { v = Integer.parseInt(e.getText().toString().trim()); } catch (Exception ex) { v = 0; }
+                if (v < 240 || v > 1600) { Ui.toast(this, Ui.L("Nhập từ 240 đến 1600 dp.", "Enter 240–1600 dp.")); return; }
+                d[0].dismiss();
+                setDensity(v, false);
+            });
+            reset.setOnClickListener(x -> { d[0].dismiss(); setDensity(0, true); });
+            d[0] = Ui.sheet(this, "📐 " + Ui.L("Độ rộng nhỏ nhất", "Smallest width"), c);
+            d[0].show();
+        }, m -> { pd[0].dismiss(); Ui.toast(this, missing(m)); });
+    }
+
+    private void setDensity(int sw, boolean reset) {
+        Dialog[] pd = progress(Ui.L("Đang đổi…", "Applying…"));
+        final String base = api, pid = id;
+        final JSONObject b = new JSONObject();
+        try { if (reset) b.put("reset", true); else b.put("sw", sw); } catch (Exception ignored) { }
+        Api.bg(() -> Api.cpAt(base, "POST", pid + "/density", b), j -> { pd[0].dismiss(); Ui.toast(this, j.optString("msg", Ui.L("Đã đổi.", "Done."))); },
+                m -> { pd[0].dismiss(); Ui.toast(this, missing(m)); });
+    }
+
+    /** Máy chủ chưa lên bản có chức năng này → nói rõ thay vì lỗi khó hiểu. */
+    private static String missing(String m) {
+        return m != null && m.contains("Không có chức năng") ? Ui.L("Máy chủ của máy này chưa có tính năng này — đang được cập nhật, thử lại sau.",
+                "This phone's server doesn't have this feature yet — try again later.") : m;
+    }
+
+    // ---------------- Nút nổi + thanh nút nhỏ (khi ẩn thanh) ----------------
+    private final Runnable hideMiniR = this::hideMini;
+
+    private void paintBall() {
+        if (ball == null) return;
+        int ring = ping < 0 ? Color.rgb(140, 150, 170) : ping < 80 ? Color.rgb(46, 204, 113) : ping < 160 ? Color.rgb(255, 196, 61) : Color.rgb(255, 92, 108);
+        ball.setText(ping < 0 ? "•••" : ping + "\nms");
+        ball.setTextColor(ring);
+        GradientDrawable g = new GradientDrawable();
+        g.setShape(GradientDrawable.OVAL);
+        g.setColor(Color.argb(200, 8, 12, 22));
+        g.setStroke(Ui.dp(2), ring);
+        ball.setBackground(g);
+    }
+
+    private void restoreBall() {
+        int bs = Ui.dp(48), W = stage.getWidth() - bs, H = stage.getHeight() - bs;
+        if (W <= 0 || H <= 0) return;
+        ball.setX(W * Math.max(0f, Math.min(1f, pref.getFloat("ball_x", 0f))));
+        ball.setY(H * Math.max(0f, Math.min(1f, pref.getFloat("ball_y", 0.3f))));
+    }
+
+    private void saveBall() {
+        int bs = Ui.dp(48), W = stage.getWidth() - bs, H = stage.getHeight() - bs;
+        if (W > 0 && H > 0) pref.edit().putFloat("ball_x", ball.getX() / W).putFloat("ball_y", ball.getY() / H).apply();
+    }
+
+    /** Thanh nút nhỏ nằm cạnh nút nổi (bên phải nếu nút ở nửa trái màn, ngược lại bên trái). */
+    private void placeMini() {
+        mini.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED);
+        int mw = mini.getMeasuredWidth(), bs = Ui.dp(48), gap = Ui.dp(6), W = stage.getWidth(), H = stage.getHeight();
+        float bx = ball.getX();
+        float x = bx + bs / 2f < W / 2f ? bx + bs + gap : bx - mw - gap;
+        mini.setX(Math.max(0, Math.min(Math.max(0, W - mw), x)));
+        mini.setY(Math.max(0, Math.min(Math.max(0, H - bs), ball.getY())));
+    }
+
+    private void toggleMini() {
+        if (mini.getVisibility() == View.VISIBLE) { hideMini(); return; }
+        mini.setVisibility(View.VISIBLE);
+        placeMini();
+        armMini();
+    }
+
+    /** Thanh nút nhỏ tự ẩn sau 5 giây không bấm (bấm nút nào cũng tính lại từ đầu — bấm Quay lại liên tiếp được). */
+    private void armMini() {
+        h.removeCallbacks(hideMiniR);
+        if (mini != null && mini.getVisibility() == View.VISIBLE) h.postDelayed(hideMiniR, 5000);
+    }
+
+    private void hideMini() {
+        h.removeCallbacks(hideMiniR);
+        if (mini != null) mini.setVisibility(View.GONE);
+    }
+
+    /** Kéo nút nổi để dời chỗ (nhớ chỗ cho lần sau); chạm nhẹ = bấm. */
+    private final class BallDrag implements View.OnTouchListener {
+        private float sx, sy, ox, oy;
+        private boolean moved;
+
+        @Override public boolean onTouch(View v, MotionEvent e) {
+            switch (e.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    sx = e.getRawX(); sy = e.getRawY(); ox = v.getX(); oy = v.getY(); moved = false;
+                    return true;
+                case MotionEvent.ACTION_MOVE: {
+                    float dx = e.getRawX() - sx, dy = e.getRawY() - sy;
+                    if (!moved && Math.hypot(dx, dy) < ViewConfiguration.get(ControlActivity.this).getScaledTouchSlop()) return true;
+                    moved = true;
+                    v.setX(Math.max(0, Math.min(Math.max(0, stage.getWidth() - v.getWidth()), ox + dx)));
+                    v.setY(Math.max(0, Math.min(Math.max(0, stage.getHeight() - v.getHeight()), oy + dy)));
+                    if (mini.getVisibility() == View.VISIBLE) { placeMini(); armMini(); }
+                    return true;
+                }
+                case MotionEvent.ACTION_UP:
+                    if (moved) saveBall(); else v.performClick();
+                    return true;
+                case MotionEvent.ACTION_CANCEL:
+                    if (moved) saveBall();
+                    return true;
+                default:
+                    return false;
+            }
+        }
+    }
+
+    // ---------------- Ẩn / hiện thanh (toàn màn hình) ----------------
     private void setFull(boolean on) {
         full = on;
+        if (!autoFull) pref.edit().putBoolean("full", on).apply();   // khách tự bấm ẩn / hiện → nhớ cho lần mở sau (tự ẩn khi máy ngang thì không nhớ)
         topBar.setVisibility(on ? View.GONE : View.VISIBLE);
         navBar.setVisibility(on ? View.GONE : View.VISIBLE);
-        fsExit.setVisibility(on ? View.VISIBLE : View.GONE);
+        ball.setVisibility(on ? View.VISIBLE : View.GONE);
+        if (on) ball.post(this::restoreBall);
+        else hideMini();
         if (Build.VERSION.SDK_INT >= 30) {
             WindowInsetsController c = getWindow().getInsetsController();
             if (c != null) {
@@ -1079,8 +1358,16 @@ public class ControlActivity extends Activity {
 
     @SuppressWarnings("deprecation")
     @Override
-    public void onBackPressed() {
-        if (full) { setFull(false); return; }
-        super.onBackPressed();
+    public void onBackPressed() {                                     // Android 15 trở xuống (16 + targetSdk 36 dùng backCb)
+        if (!handleBack()) super.onBackPressed();
+    }
+
+    /** Back khi đang ẩn thanh: đóng thanh nút nhỏ / hiện lại thanh — không thoát màn điều khiển (game ngang tự ẩn thanh, vuốt nhầm mép màn rất hay gặp). */
+    private boolean handleBack() {
+        if (!full) return false;
+        if (mini.getVisibility() == View.VISIBLE) { hideMini(); return true; }
+        autoFull = false;
+        setFull(false);
+        return true;
     }
 }

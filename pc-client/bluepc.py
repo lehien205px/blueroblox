@@ -2083,10 +2083,369 @@ ERRORS.update({"UPGRADE_PENDING": "Máy đang được nâng cấp, đợi kho�
                "PHONE_NOT_ACTIVE": "Máy phải đang chạy mới làm được việc này.", "BAD_UPGRADE": "Cấu hình nâng cấp không hợp lệ."})
 
 
+# ================================================================ TỰ CẬP NHẬT app PC (bấm 1 nút như app điện thoại)
+# Bản cũ: tải CloudBluePC.zip (kiểm cỡ + SHA-256 trong download/pc.json) → giải nén vào thư mục "<tên>.update" CẠNH thư mục app
+# → chạy CloudBluePC.exe MỚI trong đó với --finish-update rồi tự thoát. Bản mới: chờ app cũ tắt (đóng nốt cửa sổ máy) → đổi tên
+# thư mục app cũ thành "<tên>.old-<giờ>" → chép bản mới vào đúng chỗ cũ (lỗi thì trả bản cũ) → mở lại app. Lần mở sau dọn thư mục thừa.
+# AN TOÀN: chỉ đổi tên / xoá thư mục CHỈ chứa app (CloudBluePC.exe + _internal) — app nằm chung thư mục với file của khách → tải tay.
+IS_WIN = os.name == "nt"
+EXE_NAME = os.path.basename(sys.executable) if FROZEN else "CloudBluePC.exe"
+EXTRA_OK = {"desktop.ini", "thumbs.db"}                # file Windows tự tạo trong thư mục — vẫn coi là thư mục chỉ có app
+
+
+def app_folder_ok(d):
+    """Thư mục CHỈ chứa app (CloudBluePC.exe + _internal) → mới được đổi tên / thay / xoá cả thư mục."""
+    try: names = {n.lower() for n in os.listdir(d)}
+    except OSError: return False
+    return EXE_NAME.lower() in names and names <= {EXE_NAME.lower(), "_internal"} | EXTRA_OK
+
+
+def find_app_dir(d):
+    """Thư mục app trong d: chính d, hoặc thư mục con DUY NHẤT của d (file zip có thư mục gốc CloudBluePC/)."""
+    if app_folder_ok(d): return d
+    try: subs = os.listdir(d)
+    except OSError: return None
+    one = os.path.join(d, subs[0]) if len(subs) == 1 else ""
+    return one if one and os.path.isdir(one) and app_folder_ok(one) else None
+
+
+def _no_files(p):
+    for _r, _d, files in os.walk(p):
+        if files: return False
+    return True
+
+
+def remove_app_tree(p):
+    """Xoá thư mục bản app cũ / gói cập nhật (CHỈ khi đúng là bản app, hoặc rỗng): _internal trước, CloudBluePC.exe SAU CÙNG
+       → xoá dở (file đang bị giữ, VD trình cập nhật chưa thoát hẳn) thì lần sau vẫn nhận ra là của app để xoá tiếp. False = không phải của app."""
+    import shutil
+    if not os.path.isdir(p): return False
+    a = find_app_dir(p)
+    if a is None:
+        if not _no_files(p): return False                                      # có file không phải của app → không đụng
+        shutil.rmtree(p); return True
+    if os.path.isdir(os.path.join(a, "_internal")): shutil.rmtree(os.path.join(a, "_internal"))
+    for n in sorted(os.listdir(a), key=lambda n: n.lower() == EXE_NAME.lower()):   # exe sau cùng
+        os.remove(os.path.join(a, n))
+    os.rmdir(a)
+    if a != p: os.rmdir(p)
+    return True
+
+
+def can_self_update(here=None):
+    here = os.path.abspath(here or HERE)
+    return bool(FROZEN and IS_WIN and os.path.dirname(here) != here and app_folder_ok(here))
+
+
+def parent_writable(here=None):
+    """Ghi được vào thư mục chứa thư mục app không (VD app đặt trong Program Files thì không) — thử tạo rồi xoá 1 thư mục tạm."""
+    import tempfile
+    try: os.rmdir(tempfile.mkdtemp(prefix=".cb-", dir=os.path.dirname(os.path.abspath(here or HERE)))); return True
+    except OSError: return False
+
+
+def _k32():
+    import ctypes
+    from ctypes import wintypes as wt
+    k = ctypes.windll.kernel32
+    k.CreateToolhelp32Snapshot.argtypes = [wt.DWORD, wt.DWORD]; k.CreateToolhelp32Snapshot.restype = wt.HANDLE
+    k.OpenProcess.argtypes = [wt.DWORD, wt.BOOL, wt.DWORD]; k.OpenProcess.restype = wt.HANDLE
+    k.QueryFullProcessImageNameW.argtypes = [wt.HANDLE, wt.DWORD, wt.LPWSTR, ctypes.POINTER(wt.DWORD)]; k.QueryFullProcessImageNameW.restype = wt.BOOL
+    k.TerminateProcess.argtypes = [wt.HANDLE, wt.UINT]; k.TerminateProcess.restype = wt.BOOL
+    k.CloseHandle.argtypes = [wt.HANDLE]; k.CloseHandle.restype = wt.BOOL
+    return ctypes, wt, k
+
+
+def procs_at(exe):
+    """PID mọi tiến trình đang chạy ĐÚNG file exe này (trừ chính mình) — Windows."""
+    if not IS_WIN: return []
+    ctypes, wt, k = _k32()
+    class PE(ctypes.Structure):
+        _fields_ = [("dwSize", wt.DWORD), ("cntUsage", wt.DWORD), ("th32ProcessID", wt.DWORD), ("th32DefaultHeapID", ctypes.c_size_t),
+                    ("th32ModuleID", wt.DWORD), ("cntThreads", wt.DWORD), ("th32ParentProcessID", wt.DWORD), ("pcPriClassBase", ctypes.c_long),
+                    ("dwFlags", wt.DWORD), ("szExeFile", ctypes.c_wchar * 260)]
+    k.Process32FirstW.argtypes = k.Process32NextW.argtypes = [wt.HANDLE, ctypes.POINTER(PE)]
+    k.Process32FirstW.restype = k.Process32NextW.restype = wt.BOOL
+    target = os.path.normcase(os.path.abspath(exe)); name = os.path.basename(target); out = []
+    snap = k.CreateToolhelp32Snapshot(0x2, 0)                                   # TH32CS_SNAPPROCESS
+    if not snap or snap == ctypes.c_void_p(-1).value: return out
+    try:
+        e = PE(); e.dwSize = ctypes.sizeof(PE); ok = k.Process32FirstW(snap, ctypes.byref(e))
+        while ok:
+            if e.szExeFile.lower() == name and e.th32ProcessID != os.getpid():
+                h = k.OpenProcess(0x1000, False, e.th32ProcessID)                # PROCESS_QUERY_LIMITED_INFORMATION
+                if h:
+                    try:
+                        buf = ctypes.create_unicode_buffer(1024); n = wt.DWORD(1024)
+                        if k.QueryFullProcessImageNameW(h, 0, buf, ctypes.byref(n)) and os.path.normcase(buf.value) == target: out.append(int(e.th32ProcessID))
+                    finally: k.CloseHandle(h)
+            ok = k.Process32NextW(snap, ctypes.byref(e))
+    finally: k.CloseHandle(snap)
+    return out
+
+
+def kill_pid(pid):
+    if not IS_WIN: return False
+    ctypes, wt, k = _k32()
+    h = k.OpenProcess(0x0001, False, int(pid))                                   # PROCESS_TERMINATE
+    if not h: return False
+    try: return bool(k.TerminateProcess(h, 1))
+    finally: k.CloseHandle(h)
+
+
+def launch_app(exe, *args):
+    """Mở 1 exe tách hẳn khỏi tiến trình này; thư mục làm việc = thư mục của exe (không giữ thư mục app cũ)."""
+    kw = {"creationflags": 0x00000008 | 0x00000200} if IS_WIN else {"start_new_session": True}   # DETACHED_PROCESS | NEW_PROCESS_GROUP
+    subprocess.Popen([exe, *args], cwd=os.path.dirname(exe), close_fds=True, **kw)
+
+
+def download_file(url, dest, on_prog=None, cancelled=lambda: False):
+    """Tải về file (theo chuyển hướng) → (số byte, SHA-256)."""
+    req = urllib.request.Request(url, headers={"User-Agent": f"BlueRobloxPC/{APP_VER}", "Accept": "*/*"})
+    h = hashlib.sha256(); done = 0
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r, open(dest, "wb") as f:
+            total = int(r.headers.get("Content-Length") or 0)
+            while True:
+                if cancelled(): raise ApiError(0, "Đã huỷ cập nhật.")
+                b = r.read(262144)
+                if not b: break
+                f.write(b); h.update(b); done += len(b)
+                if on_prog: on_prog(done, total)
+    except urllib.error.HTTPError as e:
+        raise ApiError(e.code, f"Tải bản mới lỗi (HTTP {e.code}) — thử lại sau ít phút.") from e
+    except (urllib.error.URLError, ConnectionError, TimeoutError) as e:
+        raise ApiError(0, "Mất mạng khi tải bản mới — kiểm tra mạng rồi thử lại.") from e
+    except OSError as e:
+        raise ApiError(0, f"Không ghi được file tải về (ổ đĩa đầy?): {e}") from e
+    return done, h.hexdigest()
+
+
+def prepare_update(info, here=None, on_prog=None, cancelled=lambda: False, url=None):
+    """Bản cũ: tải + kiểm + giải nén bản mới vào '<thư mục app>.update' → trả thư mục app mới (chứa CloudBluePC.exe)."""
+    import shutil, tempfile
+    here = os.path.abspath(here or HERE); parent, base = os.path.split(here)
+    stage = os.path.join(parent, base + ".update")
+    _clear_stage(stage)                                                        # lần cập nhật trước dở dang
+    fd, zp = tempfile.mkstemp(prefix="CloudBluePC-", suffix=".zip"); os.close(fd)
+    try:
+        n, sha = download_file(url or (WEB.rstrip("/") + "/download/CloudBluePC.zip"), zp, on_prog, cancelled)
+        if num(info.get("size")) and n != int(num(info.get("size"))):
+            raise ApiError(0, "File tải về chưa đủ — có thể web vừa lên bản mới hơn, thử lại.")
+        if info.get("sha256") and sha != str(info["sha256"]).lower():
+            raise ApiError(0, "File tải về không khớp mã kiểm tra — có thể web vừa lên bản mới hơn, thử lại.")
+        if cancelled(): raise ApiError(0, "Đã huỷ cập nhật.")
+        return extract_update(zp, here)
+    finally:
+        try: os.remove(zp)
+        except OSError: pass
+
+
+def _clear_stage(stage):
+    if not os.path.exists(stage): return
+    try: ok = remove_app_tree(stage)
+    except OSError as e: raise ApiError(0, f"Thư mục cập nhật lần trước còn bị giữ ({stage}) — thử lại sau ít phút.") from e
+    if not ok: raise ApiError(0, f"Có thư mục lạ trùng tên {stage} — đổi tên / xoá nó rồi thử lại.")
+
+
+def extract_update(zp, here=None):
+    """Giải nén gói cập nhật vào '<thư mục app>.update' → trả thư mục app mới. (GitHub Actions chạy hàm này với file zip thật trên Windows.)"""
+    import shutil, zipfile
+    here = os.path.abspath(here or HERE); parent, base = os.path.split(here)
+    stage = os.path.join(parent, base + ".update")
+    _clear_stage(stage)
+    try:
+        os.makedirs(stage)
+        with zipfile.ZipFile(zp) as z:
+            if z.testzip() is not None: raise ApiError(0, "File cập nhật bị hỏng — thử lại.")
+            z.extractall(stage)
+    except (OSError, zipfile.BadZipFile) as e:
+        shutil.rmtree(stage, ignore_errors=True)
+        raise ApiError(0, f"Không giải nén được bản mới (ổ đĩa đầy / không có quyền ghi?): {e}") from e
+    except ApiError:
+        shutil.rmtree(stage, ignore_errors=True); raise
+    src = find_app_dir(stage)
+    if not src:
+        shutil.rmtree(stage, ignore_errors=True); raise ApiError(0, "Gói cập nhật thiếu CloudBluePC.exe — báo hỗ trợ.")
+    return src
+
+
+def finish_update(src, install, wait_pid=0, say=lambda m: None, procs=None, kill=None, sleep=time.sleep):
+    """Bản MỚI (chạy từ thư mục .update): thay thư mục app cũ bằng bản mới. Trả (exe để mở lại, lỗi hoặc None, số cửa sổ phải đóng)."""
+    import shutil
+    procs = procs or procs_at; kill = kill or kill_pid
+    src, install = os.path.abspath(src), os.path.abspath(install)
+    exe = os.path.join(install, EXE_NAME)
+    if not app_folder_ok(src): return None, "Bản mới tải về không đầy đủ — mở lại app rồi cập nhật lại.", 0
+    if not app_folder_ok(install):                                             # không bao giờ đụng thư mục có file khác của khách
+        return (exe if os.path.isfile(exe) else None), "Thư mục app có thêm file khác — không tự thay được. Tải bản mới trên web rồi giải nén đè.", 0
+    say("Chờ app cũ đóng…")
+    for _ in range(30):                                                        # app cũ tự thoát ngay sau khi mở trình cập nhật
+        if not wait_pid or wait_pid not in procs(exe): break
+        sleep(0.5)
+    left = procs(exe); closed = len(left)
+    if left:
+        say("Đang đóng các cửa sổ máy đang mở…")
+        for p in left: kill(p)
+        for _ in range(20):
+            if not procs(exe): break
+            sleep(0.5)
+    say("Đang thay bản mới…")
+    old = f"{install}.old-{int(time.time())}"; err = None
+    for _ in range(30):                                                        # phần mềm diệt virus đang quét file → thử lại vài giây
+        try: os.rename(install, old); err = None; break
+        except OSError as e: err = e; sleep(1)
+    if err is not None:
+        log("update: không đổi tên được thư mục app:", repr(err))
+        return exe, ("Không thay được thư mục app vì có chương trình khác đang mở file trong đó (cửa sổ cmd, phần mềm diệt virus…). "
+                     "Đã mở lại bản cũ — đóng chương trình đó rồi bấm cập nhật lại."), closed
+    try:
+        say("Đang chép bản mới…")
+        shutil.copytree(src, install)
+    except Exception as e:
+        log("update: chép bản mới lỗi:", repr(e))
+        shutil.rmtree(install, ignore_errors=True)
+        try: os.rename(old, install)
+        except OSError: return None, f"Cập nhật lỗi và chưa trả lại được bản cũ — app cũ đang nằm ở: {old}", closed
+        return exe, f"Chép bản mới bị lỗi ({e}) — đã giữ nguyên bản cũ.", closed
+    return exe, None, closed
+
+
+def cleanup_update_leftovers(here=None, tries=10, gap=3.0):
+    """Bản mới mở lên: xoá thư mục '<tên>.update' và '<tên>.old-<số>' cạnh thư mục app — CHỈ khi bên trong đúng là bản app."""
+    import shutil
+    here = os.path.abspath(here or HERE); parent, base = os.path.split(here)
+    if parent == here: return
+    old_re = re.compile(re.escape(base) + r"\.old-\d+", re.I)
+    try: names = os.listdir(parent)
+    except OSError: return
+    for n in names:
+        if n.lower() != (base + ".update").lower() and not old_re.fullmatch(n): continue
+        p = os.path.join(parent, n)
+        if not os.path.isdir(p) or not (find_app_dir(p) or _no_files(p)): continue
+        for i in range(tries):                                                 # trình cập nhật có thể còn đang thoát
+            try: remove_app_tree(p); break
+            except OSError:
+                if i + 1 < tries: time.sleep(gap)
+
+
+def run_finish_update(install, wait_pid, test_out=None):
+    """--finish-update: cửa sổ nhỏ "Đang cập nhật…" trong lúc thay bản → mở lại app (lỗi thì mở lại bản cũ).
+       test_out (GitHub Actions): không cửa sổ, không mở lại app — ghi kết quả ra file."""
+    if test_out:
+        try:
+            exe, err, closed = finish_update(HERE, install, wait_pid)
+            res = ["FAIL", err] if err else ["OK", f"closed={closed}", f"exe={exe}"]
+        except Exception:
+            res = ["FAIL", traceback.format_exc()]
+        with open(test_out, "w", encoding="utf-8") as f: f.write("\n".join(res) + "\n")
+        return
+    import tkinter as tk
+    root = tk.Tk(); root.title("CloudBlue — đang cập nhật"); root.configure(bg=BG); root.resizable(False, False)
+    sw, sh = root.winfo_screenwidth(), root.winfo_screenheight(); root.geometry(f"470x150+{(sw - 470) // 2}+{(sh - 150) // 3}")
+    tk.Label(root, text="Đang cập nhật CloudBlue PC…", font=("Segoe UI", 12, "bold"), fg=TXT, bg=BG, anchor="w").pack(fill="x", padx=20, pady=(22, 4))
+    sub = tk.Label(root, text="Chờ app cũ đóng…", font=("Segoe UI", 10), fg=DIM, bg=BG, anchor="w", justify="left", wraplength=430)
+    sub.pack(fill="x", padx=20)
+    q = queue.Queue()
+    def work():
+        try: q.put(("done",) + finish_update(HERE, install, wait_pid, lambda m: q.put(("msg", m))))
+        except Exception as e:
+            log("update:", traceback.format_exc()); q.put(("done", os.path.join(install, EXE_NAME), f"Cập nhật lỗi: {e}", 0))
+    def pump():
+        try:
+            while True:
+                it = q.get_nowait()
+                if it[0] == "msg": sub.config(text=it[1]); continue
+                _, exe, err, _closed = it
+                if err is None:
+                    sub.config(text="Xong — đang mở lại app…", fg=OK)
+                    try: launch_app(exe, "--updated")
+                    except Exception as e: log("update: mở app mới lỗi:", e)
+                    root.after(700, root.destroy); return
+                sub.config(text=err, fg=BAD); log("update:", err)
+                if exe and os.path.isfile(exe):
+                    try: launch_app(exe)
+                    except Exception as e: log("update: mở lại bản cũ lỗi:", e)
+                tk.Button(root, text="Đóng", command=root.destroy, bg=LINE, fg=TXT, relief="flat", bd=0, font=("Segoe UI", 10, "bold"),
+                          padx=14, pady=5, cursor="hand2").pack(anchor="e", padx=20, pady=(8, 0))
+                root.geometry("470x200"); return
+        except queue.Empty: pass
+        root.after(100, pump)
+    threading.Thread(target=work, daemon=True).start()
+    root.after(100, pump); root.mainloop()
+
+
+class UpdateDlg(Dlg):
+    """Bấm dải "Có bản app mới": tải + thay bản mới + tự mở lại (giống app điện thoại). App nằm chung thư mục với file khác → hướng dẫn tải tay."""
+    def __init__(self, app, info):
+        super().__init__(app, "Cập nhật CloudBlue PC", 540, 360)
+        tk = app.tk; self.info = info; self.stop = False; self.running = False; self.auto = can_self_update() and parent_writable()
+        mb_ = num(info.get("size")) / 1048576
+        f = self.section(f"Bản mới {info.get('version') or ''}" + (f"  ·  {mb_:.0f} MB" if mb_ else "") + f"  (đang dùng {APP_VER})")
+        if self.auto:
+            txt = ("Bấm Cập nhật ngay: app tự tải bản mới, đóng các cửa sổ máy đang mở, thay bản mới rồi tự mở lại (khoảng 1 phút). "
+                   "Tài khoản, máy và cài đặt giữ nguyên.")
+        else:
+            txt = ("App đang nằm chung thư mục với file khác (hoặc trong thư mục không được ghi) nên không tự thay được. "
+                   "Bấm Tải về → đóng app → giải nén file vừa tải đè lên thư mục app cũ → mở lại CloudBluePC.exe.")
+        self.label(f, txt, self.app.f_t, TXT, wraplength=490).pack(fill="x")
+        self.msg = self.label(f, "", ("Segoe UI", 10, "bold"), TXT, wraplength=490); self.msg.pack(fill="x", pady=(14, 0))
+        bb = tk.Frame(self.foot, bg=CARD); bb.pack(fill="x", padx=16, pady=10)
+        self.later = self.app.btn(bb, "Để sau", self.close, "soft"); self.later.pack(side="left")
+        self.go = self.app.btn(bb, "Cập nhật ngay" if self.auto else "Tải về", self.start if self.auto else self.manual); self.go.pack(side="right")
+        self.hand = self.app.btn(bb, "Tải bằng tay", self.manual, "soft")       # hiện khi tự cập nhật bị lỗi
+
+    def say_(self, text, col=TXT):
+        if self.alive and self.msg.winfo_exists(): self.msg.config(text=text, fg=col)
+
+    def close(self):
+        self.stop = True; super().close()
+
+    def manual(self):
+        webbrowser.open(WEB.rstrip("/") + "/download/CloudBluePC.zip")
+        self.say_("Đang tải trong trình duyệt — tải xong: đóng app, giải nén đè lên thư mục app cũ, mở lại CloudBluePC.exe.", OK)
+
+    def cancel(self):
+        self.stop = True; self.say_("Đang huỷ…", WARN)
+
+    def start(self):
+        if self.running: return
+        self.running = True; self.stop = False
+        self.go.config(state="disabled"); self.later.config(text="Huỷ", command=self.cancel)
+        self.say_("Đang tải bản mới…", WARN); last = [-1]
+        def prog(done, total):
+            pct = done * 100 // total if total else -1
+            if pct == last[0]: return
+            last[0] = pct
+            t = f"Đang tải bản mới… {pct}%  ({done / 1048576:.0f} / {total / 1048576:.0f} MB)" if total else f"Đang tải bản mới… {done / 1048576:.0f} MB"
+            self.app.ui(lambda: self.say_(t, WARN))
+        def job():
+            src = prepare_update(self.info, HERE, prog, lambda: self.stop)
+            if self.stop: raise ApiError(0, "Đã huỷ cập nhật.")
+            self.app.ui(lambda: self.say_("Đang mở trình cập nhật — app tự đóng rồi mở lại…", WARN))
+            try: launch_app(os.path.join(src, EXE_NAME), "--finish-update", HERE, str(os.getpid()))
+            except OSError as e:
+                log("update: không mở được trình cập nhật:", repr(e))
+                raise ApiError(0, "Không mở được bản mới vừa tải (phần mềm diệt virus chặn?) — bấm Tải bằng tay.") from e
+            return src
+        def ok(_src):
+            self.app.root.after(500, self.app.root.destroy)                # thoát để trình cập nhật thay được thư mục app
+        def fail(m):
+            self.running = False
+            if self.go.winfo_exists(): self.go.config(state="normal")
+            if self.later.winfo_exists(): self.later.config(text="Để sau", command=self.close)
+            if self.go.winfo_exists(): self.go.config(text="Thử lại")
+            if self.hand.winfo_exists() and not self.hand.winfo_ismapped() and "huỷ" not in m: self.hand.pack(side="right", padx=(0, 8))
+            self.say_("✗ " + m, BAD)
+        self.bg(job, ok, fail)
+
+
 class Launcher:
-    def __init__(self, open_id=None, tools_for=None):
+    def __init__(self, open_id=None, tools_for=None, updated=False):
         import tkinter as tk
         self.tk = tk; self.auth = Auth(); self.shop = Shop(self.auth); self.open_id = open_id; self.rows = []; self.busy = False
+        self.just_updated = updated
+        if FROZEN and not tools_for: threading.Thread(target=cleanup_update_leftovers, daemon=True).start()   # dọn thư mục của lần cập nhật trước
         self.scrollers = {}; self._fast = None; self._q = queue.Queue()
         self.root = tk.Tk(); self.root.title("CloudBlue PC"); self.root.configure(bg=BG); self.root.geometry("600x760"); self.root.minsize(480, 540)
         self.root.bind_all("<MouseWheel>", self._wheel)
@@ -2279,17 +2638,22 @@ class Launcher:
         threading.Thread(target=job, daemon=True).start()
 
     def _paint_update(self):
-        """Dải báo "Có bản app mới" trên danh sách máy — bấm để tải bản mới trên web (app máy tính chưa tự cập nhật được)."""
+        """Dải báo trên danh sách máy: "Có bản app mới — Cập nhật" (bấm 1 lần: tự tải, thay bản, mở lại) / "Đã cập nhật lên bản …"."""
         u = getattr(self, "update_info", None); slot = getattr(self, "upd_slot", None)
-        if not u or slot is None or not slot.winfo_exists() or slot.winfo_children(): return
+        if slot is None or not slot.winfo_exists() or slot.winfo_children(): return
         tk = self.tk
-        b = tk.Frame(slot, bg="#14324f", highlightbackground=ACC, highlightthickness=1, cursor="hand2"); b.pack(fill="x", pady=(10, 0))
-        t1 = tk.Label(b, text=f"Có bản app mới {u.get('version') or ''} (máy đang dùng {APP_VER}) — bấm để tải về", font=("Segoe UI", 10, "bold"),
-                      fg=TXT, bg="#14324f", anchor="w", cursor="hand2")
-        t2 = tk.Label(b, text="Tải xong: đóng app này, giải nén đè lên thư mục app cũ rồi mở lại CloudBluePC.exe.", font=self.f_s, fg=DIM,
-                      bg="#14324f", anchor="w", cursor="hand2")
+        if not u:
+            if self.just_updated:
+                tk.Label(slot, text=f"✓ Đã cập nhật lên bản {APP_VER}.", font=("Segoe UI", 10, "bold"), fg=OK, bg=BG, anchor="w").pack(fill="x", pady=(8, 0))
+            return
+        C2 = "#14324f"
+        b = tk.Frame(slot, bg=C2, highlightbackground=ACC, highlightthickness=1, cursor="hand2"); b.pack(fill="x", pady=(10, 0))
+        go = self.btn(b, "Cập nhật", lambda: UpdateDlg(self, u), padx=12, pady=5); go.pack(side="right", padx=10, pady=8)
+        t1 = tk.Label(b, text=f"Có bản app mới {u.get('version') or ''} (đang dùng {APP_VER})", font=("Segoe UI", 10, "bold"), fg=TXT, bg=C2, anchor="w", cursor="hand2")
+        t2 = tk.Label(b, text="Bấm Cập nhật: app tự tải, thay bản mới rồi tự mở lại — tài khoản giữ nguyên." if can_self_update() and parent_writable()
+                      else "Bấm Cập nhật để xem cách tải bản mới.", font=self.f_s, fg=DIM, bg=C2, anchor="w", cursor="hand2", justify="left", wraplength=400)
         t1.pack(fill="x", padx=12, pady=(8, 0)); t2.pack(fill="x", padx=12, pady=(0, 8))
-        for w in (b, t1, t2): w.bind("<Button-1>", lambda *_: webbrowser.open(WEB.rstrip("/") + "/download/CloudBluePC.zip"))
+        for w in (b, t1, t2): w.bind("<Button-1>", lambda *_: UpdateDlg(self, u))
 
     def render(self, rows):
         tk = self.tk
@@ -2359,6 +2723,7 @@ def selftest(out):
         from pygame._sdl2.video import Window, Renderer, Texture                 # noqa: F401
         ctx = av.CodecContext.create("h264", "r"); ctx.options = {"flags": "+low_delay"}
         res.append(f"av {av.__version__} · pygame {pygame.version.ver} · numpy {numpy.__version__} · {ssl.OPENSSL_VERSION}")
+        res.append(f"procs {len(procs_at(sys.executable))} · app folder ok {app_folder_ok(HERE)}")    # đọc được tiến trình (cần cho tự cập nhật)
         pygame.init()
         try:
             w = Window("selftest", size=(64, 64), hidden=True); r = Renderer(w)
@@ -2380,6 +2745,11 @@ def main():
     args = sys.argv[1:]
     if len(args) >= 2 and args[0] == "--selftest":                 # GitHub Actions: kiểm tra bản exe có đủ thư viện trước khi đưa khách
         return selftest(args[1])
+    if len(args) >= 3 and args[0] == "--finish-update":              # bản mới vừa tải: thay thư mục app cũ rồi mở lại app
+        t = args.index("--test") if "--test" in args else -1
+        try: wp = int(args[2])
+        except ValueError: wp = 0
+        return run_finish_update(args[1], wp, args[t + 1] if 0 <= t < len(args) - 1 else None)
     if len(args) >= 2 and args[0] == "--view":
         return run_viewer(args[1])
     if len(args) >= 2 and args[0] == "--tools":
@@ -2391,7 +2761,7 @@ def main():
     register_protocol()
     if open_id and Auth().logged_in:
         spawn_viewer(open_id); return                     # bấm "Mở bằng app" trên web → mở thẳng cửa sổ máy
-    Launcher(open_id).run()
+    Launcher(open_id, updated="--updated" in args).run()
 
 
 if __name__ == "__main__":

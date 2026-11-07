@@ -11,7 +11,7 @@
 # =====================================================================================================
 import datetime, hashlib, json, os, queue, re, secrets, subprocess, sys, threading, time, traceback, urllib.error, urllib.parse, urllib.request, webbrowser
 
-APP_VER = "1.0.0"
+APP_VER = "1.0.0"                                 # GitHub Actions ghi số bản thật (1.<số lần build>) trước khi đóng gói
 SB = "https://nprftgodswlpzomcttal.supabase.co"
 KEY = "sb_publishable_qfNcnOMv70nq5LIlYXDJzg_UtdWHVze"          # khoá CÔNG KHAI (giống web + app Android)
 WEB = "https://cloudblue.vn"                    # web chính; Supabase settings.data.web ghi đè được (đổi tên miền không cần cập nhật app)
@@ -25,6 +25,12 @@ SESS, LOCKF, LOGF, PREFS = (os.path.join(DATA, x) for x in ("session.json", "ses
 UUID_RE = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
 
 
+def app_code():
+    """Số bản đang chạy (1.57 → 57) để so với download/pc.json trên web; bản chạy thử từ mã nguồn = 0."""
+    m = re.match(r"^1\.(\d+)$", APP_VER)
+    return int(m.group(1)) if m else 0
+
+
 def log(*a):
     try:
         with open(LOGF, "a", encoding="utf-8") as f: f.write(time.strftime("%Y-%m-%d %H:%M:%S ") + " ".join(str(x) for x in a) + "\n")
@@ -33,12 +39,21 @@ def log(*a):
 
 
 def prefs(upd=None):
-    try: p = json.load(open(PREFS, encoding="utf-8"))
+    try:
+        with open(PREFS, encoding="utf-8") as f: p = json.load(f)
     except Exception: p = {}
     if upd:
         p.update(upd)
-        try: json.dump(p, open(PREFS, "w", encoding="utf-8"))
-        except Exception: pass
+        tmp = f"{PREFS}.{os.getpid()}.tmp"           # ghi file tạm rồi thay 1 lần: cửa sổ khác đang đọc không bao giờ thấy file dở (mất cài đặt)
+        try:
+            with open(tmp, "w", encoding="utf-8") as f: json.dump(p, f)
+            os.replace(tmp, PREFS)
+        except Exception:
+            try:
+                with open(PREFS, "w", encoding="utf-8") as f: json.dump(p, f)
+            except Exception: pass
+            try: os.remove(tmp)
+            except Exception: pass
     return p
 
 
@@ -341,8 +356,104 @@ def spawn_viewer(pid, mode="--view"):
 
 
 def spawn_tools(pid):
-    """Cửa sổ Công cụ (cài APK, clone tab) của 1 máy — tiến trình riêng, mở từ thanh bên cửa sổ máy."""
+    """Cửa sổ Công cụ (xoay màn, độ rộng, cài APK, ứng dụng, clone tab…) của 1 máy — tiến trình riêng, mở từ thanh bên cửa sổ máy."""
     spawn_viewer(pid, "--tools")
+
+
+def pictures_dir():
+    """Thư mục Ảnh (Pictures) của Windows — kể cả khi đã chuyển sang OneDrive / ổ khác — + \\CloudBlue."""
+    p = ""
+    if os.name == "nt":
+        try:
+            import ctypes, uuid
+            from ctypes import wintypes as wt
+            class GUID(ctypes.Structure):
+                _fields_ = [("d1", wt.DWORD), ("d2", wt.WORD), ("d3", wt.WORD), ("d4", ctypes.c_ubyte * 8)]
+            g = GUID(); ctypes.memmove(ctypes.byref(g), uuid.UUID("33E28130-4E1E-4676-835A-98395C3BC3BB").bytes_le, 16)   # FOLDERID_Pictures
+            res = ctypes.c_wchar_p(); sh = ctypes.windll.shell32
+            sh.SHGetKnownFolderPath.argtypes = [ctypes.POINTER(GUID), wt.DWORD, wt.HANDLE, ctypes.POINTER(ctypes.c_wchar_p)]
+            if sh.SHGetKnownFolderPath(ctypes.byref(g), 0, None, ctypes.byref(res)) == 0:
+                p = res.value or ""; ctypes.windll.ole32.CoTaskMemFree(res)
+        except Exception as e:
+            log("pictures_dir:", e); p = ""
+    d = os.path.join(p or os.path.join(os.path.expanduser("~"), "Pictures"), "CloudBlue")
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def shot_path():
+    t = time.time()
+    return os.path.join(pictures_dir(), time.strftime("cloudphone_%Y%m%d_%H%M%S", time.localtime(t)) + f"_{int(t * 1000) % 1000:03d}.png")
+
+
+def open_folder(fp):
+    """Mở thư mục chứa file (Windows: chọn sẵn file trong Explorer)."""
+    try:
+        if os.name == "nt": subprocess.Popen(["explorer", "/select,", os.path.normpath(fp)])
+        else: webbrowser.open("file://" + os.path.dirname(os.path.abspath(fp)))
+    except Exception as e: log("open_folder:", e)
+
+
+def work_area(x=None, y=None):
+    """Vùng làm việc (x, y, rộng, cao — đã trừ thanh tác vụ) của màn hình máy tính chứa điểm (x, y); không ghi điểm → màn hình chính."""
+    if os.name == "nt":
+        try:
+            import ctypes
+            from ctypes import wintypes as wt
+            class MI(ctypes.Structure):
+                _fields_ = [("cbSize", wt.DWORD), ("rcMonitor", wt.RECT), ("rcWork", wt.RECT), ("dwFlags", wt.DWORD)]
+            u = ctypes.windll.user32
+            u.MonitorFromPoint.argtypes = [wt.POINT, wt.DWORD]; u.MonitorFromPoint.restype = ctypes.c_void_p
+            u.GetMonitorInfoW.argtypes = [ctypes.c_void_p, ctypes.POINTER(MI)]; u.GetMonitorInfoW.restype = wt.BOOL
+            hm = u.MonitorFromPoint(wt.POINT(int(x or 0), int(y or 0)), 1 if x is None else 2)   # 1 = màn hình chính · 2 = màn hình gần nhất
+            mi = MI(); mi.cbSize = ctypes.sizeof(MI)
+            if hm and u.GetMonitorInfoW(hm, ctypes.byref(mi)):
+                r = mi.rcWork
+                if r.right > r.left and r.bottom > r.top: return (r.left, r.top, r.right - r.left, r.bottom - r.top)
+        except Exception as e: log("work_area:", e)
+    try:
+        import pygame
+        sw, sh = pygame.display.get_desktop_sizes()[0]
+    except Exception: sw, sh = 1280, 800
+    return (0, 0, sw, sh - 48)
+
+
+def orient(wh): return "land" if wh[0] > wh[1] else "port"
+
+
+def fit_geometry(vw, vh, area, bar, cur=None, prev=None, keep=None):
+    """Cỡ + chỗ cửa sổ máy (x, y, rộng, cao — tính cả thanh công cụ) cho hình máy vw×vh.
+       area = vùng làm việc của màn hình máy tính (x, y, rộng, cao). cur = cửa sổ hiện tại (x, y, rộng, cao).
+       prev = (rộng, cao) hình lúc chỉnh cỡ lần trước — không có → lần đầu: cao ~90% màn hình, đặt giữa màn hình.
+       Có prev (máy XOAY dọc ↔ ngang): giữ cạnh dài của hình (cửa sổ xoay theo, hình không to / nhỏ đi) + giữ tâm cửa sổ.
+       keep = (rộng, cao) vùng hình đã dùng cho hướng này lần trước → xoay qua lại trả đúng cỡ khách đã kéo."""
+    ax, ay, aw, ah = area; TOP = 34                         # chừa thanh tiêu đề cửa sổ
+    mw, mh = max(200, aw * 0.97 - bar), max(150, ah - TOP - 8)
+    if keep and keep[0] > 0 and keep[1] > 0 and abs(keep[0] / keep[1] - vw / vh) < 0.03 * vw / vh: w, h = keep
+    elif cur and prev:
+        sc = min(max(1, cur[2] - bar) / prev[0], max(1, cur[3]) / prev[1]); L = max(prev) * sc
+        w, h = vw * L / max(vw, vh), vh * L / max(vw, vh)
+    else:
+        h = min(mh, ah * 0.9); w = h * vw / vh
+    k = min(1.0, mw / w, mh / h); w, h = max(160, int(w * k)), max(120, int(h * k))
+    W, H = w + bar, h
+    if cur and prev: x, y = int(cur[0] + cur[2] / 2 - W / 2), int(cur[1] + cur[3] / 2 - H / 2)
+    else: x, y = ax + (aw - W) // 2, ay + TOP + (ah - TOP - H) // 2
+    x = max(ax, min(x, ax + aw - W)); y = max(ay + TOP, min(y, ay + ah - H))
+    return x, y, W, H
+
+
+def wrap_text(font, text, maxw):
+    """Cắt chữ thành nhiều dòng vừa maxw điểm ảnh (font pygame)."""
+    out = []
+    for para in str(text).split("\n"):
+        cur = ""
+        for w in para.split(" "):
+            t = (cur + " " + w).strip()
+            if cur and font.size(t)[0] > maxw: out.append(cur); cur = w
+            else: cur = t
+        out.append(cur)
+    return out
 
 
 # ================================================================ CỬA SỔ MÁY (pygame + PyAV)
@@ -353,8 +464,9 @@ AK = {  # phím máy tính → mã phím Android
 META_CTRL, META_SHIFT, META_ALT = 0x1000, 0x1, 0x2
 QUALITIES = [("auto", "Tự động"), ("hd", "Siêu nét"), ("bal", "Cân bằng"), ("eco", "Tiết kiệm")]
 TOOLS = [("back", "Quay lại"), ("home", "Màn chính"), ("recents", "Đa nhiệm"), ("volup", "Âm +"), ("voldown", "Âm −"),
-         ("rotate", "Xoay"), ("paste", "Dán chữ"), ("tools", "Công cụ"), ("quality", "Chất lượng"), ("full", "Toàn màn"), ("info", "Thông số")]
-BAR = 72
+         ("rotate", "Xoay"), ("shot", "Chụp màn"), ("paste", "Dán chữ"), ("tools", "Công cụ"), ("quality", "Chất lượng"),
+         ("full", "Toàn màn"), ("hide", "Ẩn thanh"), ("info", "Thông số")]
+BAR, BAR_MIN = 72, 14              # thanh công cụ bên phải · khi ẩn còn dải mỏng (bấm để hiện lại)
 C_BG, C_BAR, C_ICON, C_HOT, C_TXT, C_DIM, C_ACC = (8, 12, 22), (17, 24, 39), (210, 220, 235), (47, 123, 255), (235, 240, 248), (130, 142, 160), (47, 123, 255)
 
 
@@ -368,25 +480,40 @@ class Viewer:
         self.dec_errors = 0; self.mouse_down = False; self.kicked = False; self.cli = None; self.hover = None
         self.fps_n = 0; self.fps_t = time.time(); self.fps_show = 0.0
         self._ui_key = None; self._ui_surf = None; self._ui_tex = None
+        self.bar_on = not prefs().get("bar_hidden")     # "Ẩn thanh" (F10): thanh công cụ thu thành dải mỏng bên phải, bấm dải để hiện lại
+        self.full = False; self.fit = None; self.geo = {}  # fit = (rộng, cao) hình lúc chỉnh cỡ cửa sổ lần trước · geo = cỡ hình đã dùng cho từng hướng
+        self.notice = None; self.notice_rect = None       # (chữ, hết hạn lúc, việc khi bấm vào) — thông báo nhỏ trên hình
+        self.cp = None; self.gen = 0                      # cp = cổng công cụ máy (xoay, chụp màn…) · gen: tải lại hình thì bỏ sự kiện của luồng cũ
 
     # ---------- mạng ----------
     def connect(self):
         import brstream
+        g0 = self.gen                                    # trong lúc hỏi máy chủ mà khách bấm F5 → lượt nối này bỏ (lượt mới lo)
         ep = self.auth.rpc("cloudphone_endpoint", {"p_id": self.pid}) or {}
+        if g0 != self.gen: return
         self.name = ep.get("name") or self.name
         if ep.get("status") and ep.get("status") != "active":
             raise ApiError(0, "Máy chưa chạy (đang tạo, tạm dừng hoặc đã hết hạn).")
+        if self.cp is None: self.cp = CpClient(self.auth, self.pid); self.cp.ep = ep
         pref = prefs().get("path_" + str(ep.get("node")))
-        self.cli = brstream.StreamClient(ep, lambda force=False: self.auth.token(force), self.pid, self.on_event, q=self.q, client="pc",
-                                         prefer=tuple(pref) if pref else None)
+        self.gen += 1; g = self.gen
+        cli = brstream.StreamClient(ep, lambda force=False: self.auth.token(force), self.pid,
+                                    lambda k, d, g=g: self.on_event(k, d) if g == self.gen else None, q=self.q, client="pc",
+                                    prefer=tuple(pref) if pref else None)
         self.node = ep.get("node")
-        self.cli.start()
+        old, self.cli = self.cli, cli                    # luôn chỉ 1 luồng hình: luồng cũ (nếu có) đóng hẳn, không chạy ngầm đá phiên mới
+        if old is not None and old is not cli: threading.Thread(target=old.close, daemon=True).start()
+        cli.start()
+
+    def _cp(self):
+        if self.cp is None: self.cp = CpClient(self.auth, self.pid)
+        return self.cp
 
     def on_event(self, k, d):
         if k == "video": self._decode(*d)
         elif k == "welcome":
             self.name = d.get("name") or self.name; self._reset_decoder(); self._post()
-        elif k == "size": self._reset_decoder(); self.sized_once = False; self._post()
+        elif k == "size": self._reset_decoder(); self._post()        # máy xoay / đổi cỡ: cửa sổ tự xoay theo khi có khung hình mới (run)
         elif k == "clip": clip_put(d)
         elif k == "stats": self.stats = d; self._post()
         elif k == "ping": self.ping = d
@@ -451,13 +578,12 @@ class Viewer:
         try:
             from pygame._sdl2.video import Window, Renderer, Texture
             self.Texture = Texture
-            self.win = Window("CloudBlue", size=(vw + BAR, vh), resizable=True)
+            self.win = Window("CloudBlue", size=(vw + self._bw(), vh), resizable=True)
             self.ren = Renderer(self.win, vsync=False, accelerated=1)
             self.gpu = True
         except Exception as e:
             log("GPU renderer không dùng được, dùng CPU:", e)
-            self.screen = pygame.display.set_mode((vw + BAR, vh), pygame.RESIZABLE)
-        self.sized_once = False
+            self.screen = pygame.display.set_mode((vw + self._bw(), vh), pygame.RESIZABLE)
         pygame.key.start_text_input()
         threading.Thread(target=self._connect_bg, daemon=True).start()
         clock = pygame.time.Clock(); running = True; dirty = True
@@ -470,7 +596,9 @@ class Viewer:
                 elif e.type in (getattr(pygame, "WINDOWRESIZED", -1), getattr(pygame, "VIDEORESIZE", -1), getattr(pygame, "WINDOWEXPOSED", -1)): dirty = True
                 else:
                     dirty |= self._input(e, pygame)
-            if self.vw and not self.sized_once: self._fit_window(pygame); dirty = True
+            if self.vw and self._need_fit(): self._fit_window(pygame); dirty = True
+            n = self.notice                                   # thông báo do luồng khác đặt / xoá → đọc 1 lần
+            if n and time.time() >= n[1]: self.notice = None; dirty = True
             if dirty: self._draw(pygame); dirty = False
             clock.tick(500)
         if self.cli: self.cli.close()
@@ -481,26 +609,44 @@ class Viewer:
         except Exception as e:
             self.state = ("error", str(e)); log("connect:", traceback.format_exc()); self._post()
 
+    def _need_fit(self):
+        """Chưa chỉnh cỡ lần nào, hoặc hình đổi tỉ lệ (máy XOAY dọc ↔ ngang: bấm Xoay, mở game / bản clone cần màn ngang…)."""
+        if self.fit is None: return True
+        if self.full or not self.vh or not self.fit[1]: return False      # toàn màn hình: hình tự vừa; thoát toàn màn mới chỉnh cửa sổ
+        a0, a1 = self.fit[0] / self.fit[1], self.vw / self.vh
+        return abs(a0 - a1) > 0.03 * a1
+
     def _fit_window(self, pygame):
-        """Lần đầu có hình: đổi cỡ cửa sổ theo đúng tỉ lệ màn hình máy."""
-        self.sized_once = True
+        """Chỉnh cỡ cửa sổ theo hình máy. Lần đầu: to gần hết màn hình. Máy xoay dọc ↔ ngang: cửa sổ XOAY THEO, giữ độ to của hình
+           (không phải tự kéo lại cửa sổ, không phải nghiêng đầu); xoay về hướng cũ → trả đúng cỡ khách đã kéo cho hướng đó."""
+        vw, vh = self.vw, self.vh
+        if not vw or not vh: return
+        prev, self.fit = self.fit, (vw, vh)
         try:
-            sw, sh = pygame.display.get_desktop_sizes()[0]
-            h = int(sh * 0.86); w = int(h * self.vw / self.vh)
-            if w + BAR > sw * 0.95: w = int(sw * 0.95) - BAR; h = int(w * self.vh / self.vw)
+            bw = self._bw()
+            if self.gpu: (x, y), (W, H) = self.win.position, self.win.size
+            else: (x, y), (W, H) = (0, 0), self.screen.get_size()
+            cur = (x, y, W, H)
+            if prev:                                            # nhớ cỡ hình của hướng cũ (khách có thể đã kéo cửa sổ)
+                sc = min(max(1, W - bw) / prev[0], max(1, H) / prev[1])
+                self.geo[orient(prev)] = (int(prev[0] * sc), int(prev[1] * sc))
+            area = work_area(x + W // 2, y + H // 2) if (self.gpu and prev) else work_area()
+            nx, ny, nW, nH = fit_geometry(vw, vh, area, bw, cur if prev else None, prev, self.geo.get(orient((vw, vh))))
+            title = f"{self.name} — CloudBlue"
             if self.gpu:
-                self.win.size = (w + BAR, h); self.win.position = ((sw - w - BAR) // 2, max(0, (sh - h) // 2 - 10))
-                self.win.title = f"{self.name} — CloudBlue"
+                self.win.size = (nW, nH); self.win.position = (nx, ny); self.win.title = title
             else:
-                self.screen = pygame.display.set_mode((w + BAR, h), pygame.RESIZABLE); pygame.display.set_caption(f"{self.name} — CloudBlue")
+                self.screen = pygame.display.set_mode((nW, nH), pygame.RESIZABLE); pygame.display.set_caption(title)
         except Exception as e: log("fit:", e)
+
+    def _bw(self): return BAR if self.bar_on else BAR_MIN
 
     def _size(self):
         if self.gpu: return self.win.size
         return self.screen.get_size()
 
     def _video_rect(self):
-        W, H = self._size(); aw = max(1, W - BAR)
+        W, H = self._size(); aw = max(1, W - self._bw())
         if not self.vw: return (0, 0, aw, H)
         sc = min(aw / self.vw, H / self.vh); w, h = int(self.vw * sc), int(self.vh * sc)
         return ((aw - w) // 2, (H - h) // 2, w, h)
@@ -511,7 +657,8 @@ class Viewer:
         with self.lock: arr = self.frame
         surf_v = pygame.image.frombuffer(arr if arr.flags["C_CONTIGUOUS"] else arr.tobytes(), (arr.shape[1], arr.shape[0]), "RGB") if arr is not None else None
         key = (W, H, self.hover, self.q, tuple(self.state[:2]), self.show_info, surf_v is not None,
-               int(self.fps_show) if self.show_info else 0, self.stats.get("kbps") if self.show_info else 0, self.ping if self.show_info else 0, self.path)
+               int(self.fps_show) if self.show_info else 0, self.stats.get("kbps") if self.show_info else 0, self.ping if self.show_info else 0, self.path,
+               self.bar_on, (self.notice or ("",))[0])
         if key != self._ui_key:                          # lớp nút / chữ chỉ vẽ lại khi có thay đổi (đỡ tốn CPU mỗi khung)
             ui = pygame.Surface((W, H), pygame.SRCALPHA); ui.fill((0, 0, 0, 0))
             self._draw_bar(pygame, ui, W, H)
@@ -532,15 +679,22 @@ class Viewer:
             self.fps_show = self.fps_n / (time.time() - self.fps_t); self.fps_n = 0; self.fps_t = time.time()
 
     def _tool_rects(self, W, H):
-        n = len(TOOLS); step = max(44, min(64, (H - 20) // n)); top = max(8, (H - step * n) // 2)
+        if not self.bar_on: return []
+        n = len(TOOLS); step = max(22, min(64, (H - 16) // n)); top = max(6, (H - step * n) // 2)
         return [(name, label, (W - BAR + 6, top + i * step, BAR - 12, step - 6)) for i, (name, label) in enumerate(TOOLS)]
 
     def _draw_bar(self, pygame, s, W, H):
+        if not self.bar_on:                              # thanh đang ẩn: dải mỏng có mũi tên ‹ — bấm vào để hiện lại
+            hot = self.hover == "showbar"; x0 = W - BAR_MIN; cy = H // 2
+            pygame.draw.rect(s, ((47, 123, 255, 150) if hot else C_BAR + (235,)), (x0, 0, BAR_MIN, H))
+            pygame.draw.polygon(s, C_TXT if hot else C_ICON, [(x0 + 10, cy - 8), (x0 + 4, cy), (x0 + 10, cy + 8)])
+            return
         pygame.draw.rect(s, C_BAR + (255,), (W - BAR, 0, BAR, H))
         for name, label, (x, y, w, h) in self._tool_rects(W, H):
-            hot = self.hover == name
+            hot = self.hover == name; small = h < 38             # cửa sổ thấp: chỉ còn biểu tượng (bỏ chữ dưới nút)
             if hot: pygame.draw.rect(s, (47, 123, 255, 70), (x, y, w, h), border_radius=10)
-            cx, cy = x + w // 2, y + int(h * 0.38); c = C_HOT if hot else C_ICON; r = max(7, min(11, h // 5))
+            cx, cy = x + w // 2, y + (h // 2 if small else int(h * 0.38)); c = C_HOT if hot else C_ICON
+            r = max(6, min(9, h // 3)) if small else max(7, min(11, h // 5))
             if name == "back": pygame.draw.polygon(s, c, [(cx + r, cy - r), (cx - r, cy), (cx + r, cy + r)], 2)
             elif name == "home": pygame.draw.circle(s, c, (cx, cy), r, 2)
             elif name == "recents": pygame.draw.rect(s, c, (cx - r, cy - r, 2 * r, 2 * r), 2, border_radius=3)
@@ -564,11 +718,30 @@ class Viewer:
                     pygame.draw.line(s, c, (ax, ay), (ax - dx * 6, ay), 2); pygame.draw.line(s, c, (ax, ay), (ax, ay - dy * 6), 2)
             elif name == "info":
                 pygame.draw.circle(s, c, (cx, cy), r, 2); t = self.font_s.render("i", True, c); s.blit(t, t.get_rect(center=(cx, cy)))
+            elif name == "shot":                                   # máy ảnh: thân + ống kính
+                pygame.draw.rect(s, c, (cx - r, cy - r + 3, 2 * r, 2 * r - 4), 2, border_radius=3)
+                pygame.draw.rect(s, c, (cx - 4, cy - r, 8, 4), 0, border_radius=1)
+                pygame.draw.circle(s, c, (cx, cy + 1), max(3, r // 2), 2)
+            elif name == "hide":                                   # » = thu thanh sang phải
+                for off in (-4, 3):
+                    pygame.draw.lines(s, c, False, [(cx + off - 3, cy - r + 2), (cx + off + 3, cy), (cx + off - 3, cy + r - 2)], 2)
+            if small: continue
             lb = self.font_s.render(label if name != "quality" else dict(QUALITIES)[self.q], True, C_DIM if not hot else C_TXT)
             s.blit(lb, lb.get_rect(center=(x + w // 2, y + int(h * 0.80))))
 
     def _draw_overlay(self, pygame, s, W, H, has_video):
-        st = self.state[0]; aw = W - BAR
+        st = self.state[0]; aw = W - self._bw()
+        self.notice_rect = None; n = self.notice
+        if n:                                            # thông báo nhỏ phía dưới hình (VD "Đang xoay ngang…", "Đã lưu ảnh…")
+            lines = [ln for ln in wrap_text(self.font, n[0], max(120, min(aw - 60, 560))) if ln][:3]
+            if lines:
+                lh = self.font.get_height() + 4; bw_ = max(self.font.size(ln)[0] for ln in lines) + 28; bh = lh * len(lines) + 16
+                x0, y0 = max(4, (aw - bw_) // 2), max(4, H - bh - 30)
+                pygame.draw.rect(s, (10, 16, 30, 228), (x0, y0, bw_, bh), border_radius=12)
+                if n[2]: pygame.draw.rect(s, C_ACC + (200,), (x0, y0, bw_, bh), 1, border_radius=12)   # bấm được → có viền
+                for i, ln in enumerate(lines):
+                    s.blit(self.font.render(ln, True, C_TXT), (x0 + 14, y0 + 8 + i * lh))
+                self.notice_rect = (x0, y0, bw_, bh)
         if st != "connected" or not has_video:
             msg = self.state[1] if len(self.state) > 1 else ""
             if st == "connected" and not has_video: msg = "Đang lấy hình…"
@@ -600,13 +773,16 @@ class Viewer:
 
     def _tool_at(self, pos):
         W, H = self._size()
+        if not self.bar_on: return "showbar" if pos[0] >= W - BAR_MIN else None
         for name, _, (x, y, w, h) in self._tool_rects(W, H):
             if x <= pos[0] <= x + w and y <= pos[1] <= y + h: return name
         return None
 
     def _tool(self, name, pygame):
         c = self.cli
-        if name in ("back", "home", "recents", "volup", "voldown", "rotate") and c: c.cmd(name)
+        if name in ("back", "home", "recents", "volup", "voldown") and c: c.cmd(name)
+        elif name == "rotate": self._rotate()
+        elif name == "shot": self._shot()
         elif name == "paste" and c:
             t = clip_get()
             if t: c.clip_set(t, True)
@@ -614,13 +790,73 @@ class Viewer:
             i = [q for q, _ in QUALITIES].index(self.q); self.q = QUALITIES[(i + 1) % len(QUALITIES)][0]; prefs({"q": self.q})
             if c: c.quality(self.q)
         elif name == "full": self._toggle_full(pygame)
+        elif name in ("hide", "showbar"): self._toggle_bar(pygame)
         elif name == "tools": spawn_tools(self.pid)
         elif name == "info": self.show_info = not self.show_info; prefs({"info": self.show_info})
 
+    def _say(self, text, secs=3.0, action=None):
+        self.notice = (str(text), time.time() + secs, action); self._post()
+
+    def _rotate(self, to=None):
+        """XOAY: khoá màn máy ngang / dọc qua cổng công cụ (mọi máy chủ đều có, xoay chắc chắn — không tự quay về như lệnh xoay cũ);
+           không tới được thì gửi qua luồng hình. Hình đổi hướng → cửa sổ tự xoay theo (_fit_window)."""
+        if self.state[0] != "connected" or not self.vw: return
+        to = to or ("port" if self.vw > self.vh else "land"); land = to == "land"
+        self._say("Đang xoay ngang…" if land else "Đang xoay dọc…", 4)
+        def job():
+            try: self._cp().json("POST", "rotate", {"to": to, "dir": 1 if land else 0}, timeout=20)
+            except Exception as e:
+                log("rotate:", e)
+                if self.cli: self.cli.rotate(to)
+            time.sleep(3.5)                              # 3,5 giây sau hình vẫn chưa đổi hướng → app đang mở chỉ chạy 1 hướng: nói rõ (khỏi tưởng nút hỏng)
+            if ((self.vw or 0) > (self.vh or 0)) != land:
+                self._say("Đã khoá màn NGANG. App đang mở chỉ chạy màn dọc nên chưa xoay — mở game / app hỗ trợ ngang là tự ngang." if land
+                          else "Đã khoá màn DỌC. App đang mở chỉ chạy màn ngang nên chưa xoay.", 7)
+            else:
+                n = self.notice
+                if n and n[0].startswith("Đang xoay"): self.notice = None; self._post()
+        threading.Thread(target=job, daemon=True).start()
+
+    def _shot(self):
+        """CHỤP MÀN: ảnh gốc từ máy (nét, không nén) → thư mục Ảnh\\CloudBlue; máy chủ không chụp được thì lưu khung hình đang xem."""
+        self._say("Đang chụp màn hình…", 10)
+        with self.lock: arr = self.frame
+        def job():
+            fp, err = None, ""
+            try:
+                code, raw = self._cp().request("GET", "shot?fresh=1", timeout=40)
+                if code == 200 and raw[:8] == b"\x89PNG\r\n\x1a\n":
+                    fp = shot_path()
+                    with open(fp, "wb") as f: f.write(raw)
+                else: err = err_text(code, raw)
+            except Exception as e:
+                err = str(e); log("shot:", e)
+            if fp is None and arr is not None:
+                try:
+                    import pygame
+                    fp = shot_path(); pygame.image.save(pygame.image.frombuffer(arr.tobytes(), (arr.shape[1], arr.shape[0]), "RGB"), fp)
+                except Exception as e:
+                    log("shot local:", e); fp = None
+            if fp: self._say(f"Đã lưu ảnh vào {os.path.dirname(fp)} — bấm vào đây để mở thư mục.", 8, lambda: open_folder(fp))
+            else: self._say("Không chụp được màn hình" + (f": {err}" if err else "."), 6)
+        threading.Thread(target=job, daemon=True).start()
+
+    def _toggle_bar(self, pygame):
+        """Ẩn / hiện thanh công cụ (F10). Cửa sổ hẹp / rộng ra đúng bằng phần thanh → hình giữ nguyên cỡ."""
+        self.bar_on = not self.bar_on; self.hover = None; prefs({"bar_hidden": not self.bar_on})
+        if not self.bar_on: self._say("Đã ẩn thanh công cụ — bấm dải mỏng bên phải hoặc phím F10 để hiện lại.", 4)
+        if self.full: return
+        d = (BAR - BAR_MIN) * (1 if self.bar_on else -1)
+        try:
+            if self.gpu: W, H = self.win.size; self.win.size = (max(160, W + d), H)
+            else: W, H = self.screen.get_size(); self.screen = pygame.display.set_mode((max(160, W + d), H), pygame.RESIZABLE)
+        except Exception as e: log("bar:", e)
+
     def _toggle_full(self, pygame):
         try:
+            self.full = not self.full
+            if self.full: self._say("Toàn màn hình — bấm phím F11 (hoặc nút Toàn màn) để thoát.", 3)
             if self.gpu:
-                self.full = not getattr(self, "full", False)
                 if self.full: self.win.set_fullscreen(True)
                 else: self.win.set_windowed()
             else: pygame.display.toggle_fullscreen()
@@ -630,6 +866,13 @@ class Viewer:
         if self.state[0] in ("kicked", "error"):
             self.kicked = False; self.state = ("connecting", "Đang kết nối…"); self.need_key = True
             threading.Thread(target=self._connect_bg, daemon=True).start()
+
+    def _reload(self):
+        """F5 — TẢI LẠI HÌNH: đóng luồng hình đang có, nối lại từ đầu (hình đứng / mờ lâu)."""
+        old, self.cli = self.cli, None; self.gen += 1                    # bỏ mọi sự kiện còn lại của luồng cũ
+        if old: threading.Thread(target=old.close, daemon=True).start()
+        self.kicked = False; self.state = ("connecting", "Đang tải lại hình…"); self.need_key = True; self._post()
+        threading.Thread(target=self._connect_bg, daemon=True).start()
 
     def _input(self, e, pygame):
         c = self.cli; t = e.type
@@ -641,6 +884,12 @@ class Viewer:
         if t == pygame.MOUSEBUTTONDOWN and e.button in (1, 2, 3):
             tl = self._tool_at(e.pos)
             if tl and e.button == 1: self._tool(tl, pygame); return True
+            nr, n = self.notice_rect, self.notice
+            if e.button == 1 and nr and n and n[2] and nr[0] <= e.pos[0] <= nr[0] + nr[2] and nr[1] <= e.pos[1] <= nr[1] + nr[3]:
+                act = n[2]; self.notice = None
+                try: act()
+                except Exception as ex: log("notice:", ex)
+                return True
             if self.state[0] in ("kicked", "error") and e.button == 1: self._retry(); return True
             p = self._norm(e.pos)
             if p and c:
@@ -661,6 +910,8 @@ class Viewer:
         if t in (pygame.KEYDOWN, pygame.KEYUP):
             down = t == pygame.KEYDOWN; mods = pygame.key.get_mods(); name = pygame.key.name(e.key)
             if down and e.key == pygame.K_F11: self._toggle_full(pygame); return True
+            if down and e.key == pygame.K_F10: self._toggle_bar(pygame); return True
+            if down and e.key == pygame.K_F5: self._reload(); return True
             if down and e.key == pygame.K_F3: self.show_info = not self.show_info; return True
             if down and e.key == pygame.K_r and self.state[0] in ("kicked", "error"): self._retry(); return True
             if not c: return False
@@ -946,9 +1197,9 @@ class Dlg:
     def label(self, parent, text, font=None, fg=TXT, **kw):
         return self.app.tk.Label(parent, text=text, font=font or self.app.f_t, fg=fg, bg=parent["bg"], anchor="w", justify="left", **kw)
 
-    def section(self, title, right=""):
+    def section(self, title, right="", parent=None):
         tk = self.app.tk
-        f = tk.Frame(self.body, bg=BG); f.pack(fill="x", padx=18, pady=(12, 2))
+        f = tk.Frame(parent or self.body, bg=BG); f.pack(fill="x", padx=18, pady=(12, 2))
         hr = tk.Frame(f, bg=BG); hr.pack(fill="x")
         self.label(hr, title, ("Segoe UI", 10, "bold"), DIM).pack(side="left")
         if right: self.label(hr, right, self.app.f_s, DIM).pack(side="right")
@@ -1426,37 +1677,36 @@ APP_NAMES = {"com.roblox.client": "Roblox", "com.facebook.katana": "Facebook", "
 def app_label(pkg): return APP_NAMES.get(pkg, pkg)
 
 
+def missing(m):
+    """Máy chủ chưa lên bản có chức năng này → nói rõ thay vì lỗi khó hiểu."""
+    return "Máy chủ của máy này chưa có tính năng này — đang được cập nhật, thử lại sau." if "Không có chức năng" in (m or "") else m
+
+
 class ToolsDlg(Dlg):
-    """CÔNG CỤ của 1 máy: cài file APK / chép file vào máy, cài từ link, CLONE TAB (chạy thêm bản 2, 3… của 1 app — VD Roblox
-       chính thức — mỗi bản 1 hồ sơ riêng để đăng nhập acc khác). Gọi cpapi qua đường thẳng tới máy chủ (CpClient)."""
-    def __init__(self, app, phone):
-        super().__init__(app, "Công cụ — " + (phone.get("name") or "máy"), 620, 720)
+    """CÔNG CỤ của 1 máy — đủ như bảng Công cụ của app điện thoại, chia thẻ:
+       Màn hình: xoay ngang / dọc, độ rộng nhỏ nhất · Cài app: file APK / file khác / link · Ứng dụng: mở, dừng, xoá dữ liệu, gỡ
+       · Clone tab: chạy thêm bản 2, 3… của 1 app (VD Roblox chính thức), mỗi bản 1 hồ sơ riêng để đăng nhập acc khác
+       · Khác: mở link, vị trí GPS, chụp màn, nút nguồn, root, khởi động lại. Gọi cpapi qua đường thẳng tới máy chủ (CpClient)."""
+    TABS = [("screen", "Màn hình"), ("install", "Cài app"), ("apps", "Ứng dụng"), ("clone", "Clone tab"), ("more", "Khác")]
+    SW = [320, 360, 411, 480, 540, 600, 720, 800]
+
+    def __init__(self, app, phone, tab=None):
+        super().__init__(app, "Công cụ — " + (phone.get("name") or "máy"), 640, 720)
         self.p = phone; self.cp = CpClient(app.auth, phone["id"]); self.busy = False
         self.pkg, self.n, self.apps, self.counts, self.max = None, 1, [], {}, 4
-        tk = app.tk
-        # ---- 1. cài app / chép file vào máy ----
-        f = self.section("Cài app / chép file vào máy")
-        self.label(f, "File .apk / .apks / .xapk / .apkm → cài vào máy. File khác (ảnh, video, tài liệu…) → chép vào thư mục Download của máy.",
-                   self.app.f_s, DIM, wraplength=560).pack(fill="x")
-        r = tk.Frame(f, bg=BG); r.pack(fill="x", pady=(8, 0))
-        self.pick_btn = self.app.btn(r, "Chọn file trên máy tính…", self.pick); self.pick_btn.pack(side="left")
-        lr = tk.Frame(f, bg=BG); lr.pack(fill="x", pady=(8, 0))
-        self.link = tk.Entry(lr, font=("Segoe UI", 10), bg=CARD, fg=TXT, insertbackground=TXT, relief="flat")
-        self.link.pack(side="left", fill="x", expand=True, ipady=6)
-        self.link_btn = self.app.btn(lr, "Cài từ link", self.from_link, "soft"); self.link_btn.pack(side="left", padx=(6, 0))
-        self.label(f, "Link tải trực tiếp file (thường kết thúc bằng .apk), không phải link trang web.", self.app.f_s, DIM).pack(fill="x", pady=(2, 0))
-        self.up_msg = self.label(f, "", ("Segoe UI", 10, "bold"), TXT, wraplength=560); self.up_msg.pack(fill="x", pady=(8, 0))
-        # ---- 2. clone tab ----
-        f = self.section("Clone tab — chạy thêm bản 2, 3… của 1 app để đăng nhập acc khác")
-        self.label(f, "Mỗi bản clone là 1 hồ sơ riêng của Android, dùng đúng app gốc đã cài trong máy. Bản clone hiện thành biểu tượng "
-                      "\"Clone 1, 2…\" (hoặc tab Công việc) trên màn hình chính, hoặc bấm Mở bản ở đây. Mỗi bản cần thêm RAM / CPU.",
-                   self.app.f_s, DIM, wraplength=560).pack(fill="x")
-        self.clone_box = tk.Frame(f, bg=BG); self.clone_box.pack(fill="x", pady=(8, 0))
-        self.cl_msg = self.label(f, "", ("Segoe UI", 10, "bold"), TXT, wraplength=560); self.cl_msg.pack(fill="x", pady=(8, 16))
+        self.dens = None; self.dens_busy = False; self.loaded = set(); self.jobs_on = set()
+        tk = app.tk; names = dict(self.TABS)
+        if tab not in names: tab = prefs().get("tools_tab")
+        self.tab = tab if tab in names else "screen"
+        hdr = tk.Frame(self.win, bg=BG); hdr.pack(side="top", fill="x", padx=16, pady=(12, 0), before=self.body.master.master)   # thẻ đứng yên, phần dưới cuộn
+        self.c_tab = Chips(app, hdr, self.TABS, lambda: self.tab, lambda v: setattr(self, "tab", v), self._show_tab)
+        self.c_tab.frame.pack(fill="x")
+        self.pages = {k: tk.Frame(self.body, bg=BG) for k in names}
+        self._page_screen(); self._page_install(); self._page_apps(); self._page_clone(); self._page_more()
         bb = tk.Frame(self.foot, bg=CARD); bb.pack(fill="x", padx=16, pady=10)
-        self.app.btn(bb, "Làm mới", self.load, "soft").pack(side="left")
+        self.app.btn(bb, "Làm mới", self.refresh, "soft").pack(side="left")
         self.app.btn(bb, "Đóng", self.close, "soft").pack(side="right")
-        self.load()
+        self._show_tab()
 
     def close(self):
         super().close()
@@ -1467,7 +1717,120 @@ class ToolsDlg(Dlg):
     def say(self, lbl, text, col=TXT):
         if self.alive and lbl.winfo_exists(): lbl.config(text=text, fg=col)
 
-    # ---------- cài app / chép file ----------
+    def muted(self, parent, text):
+        self.label(parent, text, self.app.f_s, DIM, wraplength=580).pack(fill="x")
+
+    def msg(self, parent, pady=(8, 0)):
+        lb = self.label(parent, "", ("Segoe UI", 10, "bold"), TXT, wraplength=580); lb.pack(fill="x", pady=pady)
+        return lb
+
+    def _show_tab(self):
+        for f in self.pages.values(): f.pack_forget()
+        self.pages[self.tab].pack(fill="x", pady=(0, 16))
+        self.c_tab.paint(); prefs({"tools_tab": self.tab})
+        cv = self.app.scrollers.get(str(self.win))
+        if cv is not None:
+            try: cv.yview_moveto(0)
+            except Exception: pass
+        if self.tab not in self.loaded: self.refresh()
+
+    def refresh(self):
+        """Đọc lại dữ liệu của thẻ đang mở (màn hình máy / danh sách app)."""
+        self.loaded.add(self.tab)
+        if self.tab == "screen": self.load_density()
+        elif self.tab in ("apps", "clone"): self.loaded.update(("apps", "clone")); self.load()
+
+    def _bgjob(self, lbl, start, first):
+        """Việc chạy lâu trên máy chủ (root, khởi động lại…): gửi → theo dõi mã việc → báo kết quả vào lbl."""
+        if lbl in self.jobs_on: return
+        self.jobs_on.add(lbl); self.say(lbl, first, WARN)
+        def job():
+            try:
+                j = start()
+                msg = self.cp.wait_job(j["job"], lambda m: self.app.ui(lambda: self.say(lbl, m, WARN))) if j.get("job") else (j.get("msg") or "Xong.")
+                self.app.ui(lambda: self.say(lbl, ("" if msg[:1] in ("✅", "⏳") else "✓ ") + msg, OK))
+            except Exception as e:
+                m = str(e) or "Có lỗi."; log("tools job:", m); self.app.ui(lambda: self.say(lbl, "✗ " + missing(m), BAD))
+            finally:
+                self.app.ui(lambda: self.jobs_on.discard(lbl))
+        threading.Thread(target=job, daemon=True).start()
+
+    # ================= thẻ MÀN HÌNH: xoay + độ rộng nhỏ nhất =================
+    def _page_screen(self):
+        tk = self.app.tk; pg = self.pages["screen"]
+        f = self.section("Xoay màn", parent=pg)
+        self.muted(f, "Khoá màn máy NGANG hoặc DỌC (giữ luôn cả khi tắt app). Game chỉ chạy màn ngang (VD Roblox) vẫn tự xoay ngang. "
+                      "Cửa sổ máy trên máy tính tự xoay theo — không phải nghiêng đầu.")
+        r = tk.Frame(f, bg=BG); r.pack(fill="x", pady=(8, 0))
+        self.app.btn(r, "▭  Màn ngang", lambda: self.rotate("land")).pack(side="left")
+        self.app.btn(r, "▯  Màn dọc", lambda: self.rotate("port"), "soft").pack(side="left", padx=(8, 0))
+        self.rot_msg = self.msg(f)
+        f = self.section("Độ rộng nhỏ nhất (Smallest width)", parent=pg)
+        self.muted(f, "Như \"Độ rộng nhỏ nhất\" trong Tuỳ chọn nhà phát triển của Android: số càng LỚN thì chữ, biểu tượng, cửa sổ app càng NHỎ — "
+                      "màn chứa được nhiều hơn (VD xếp nhiều tab clone). Số càng nhỏ thì mọi thứ càng to.")
+        self.dens_now = self.label(f, "Đang đọc màn hình máy…", ("Segoe UI", 11, "bold"), TXT); self.dens_now.pack(fill="x", pady=(8, 2))
+        self.c_sw = Chips(self.app, f, [(v, f"{v} dp") for v in self.SW], lambda: (self.dens or {}).get("sw"), self.set_density, lambda: None, wrap=4)
+        self.c_sw.frame.pack(fill="x", pady=(4, 0))
+        r = tk.Frame(f, bg=BG); r.pack(fill="x", pady=(8, 0))
+        self.label(r, "Số khác (240 – 1600):", self.app.f_t, DIM).pack(side="left")
+        self.sw_ent = tk.Entry(r, font=("Segoe UI", 11), width=7, bg=CARD, fg=TXT, insertbackground=TXT, relief="flat")
+        self.sw_ent.pack(side="left", padx=6, ipady=5); self.sw_ent.bind("<Return>", lambda e: self.custom_density())
+        self.app.btn(r, "Đặt", self.custom_density).pack(side="left")
+        self.sw_reset = self.app.btn(r, "Trả về mặc định", lambda: self.set_density(0, True), "soft"); self.sw_reset.pack(side="right")
+        self.dens_msg = self.msg(f)
+
+    def rotate(self, to):
+        land = to == "land"; self.say(self.rot_msg, "Đang xoay ngang…" if land else "Đang xoay dọc…", WARN)
+        def ok(j):
+            m = j.get("msg") or ("Đã khoá màn NGANG." if land else "Đã khoá màn DỌC.")
+            self.say(self.rot_msg, "✓ " + m + (" App / game hỗ trợ ngang sẽ hiện ngang; app chỉ chạy màn dọc thì vẫn dọc." if land else ""), OK)
+        self.bg(lambda: self.cp.json("POST", "rotate", {"to": to, "dir": 1 if land else 0}, timeout=30), ok,
+                lambda m: self.say(self.rot_msg, "✗ " + missing(m), BAD))
+
+    def _paint_density(self):
+        d = self.dens or {}
+        if d.get("sw"): self.say(self.dens_now, f"Đang dùng: {d['sw']} dp" + (f"   ·   mặc định của máy: {d['sw_default']} dp" if d.get("sw_default") else ""), TXT)
+        if self.sw_reset.winfo_exists(): self.sw_reset.config(text=f"Trả về mặc định ({d['sw_default']} dp)" if d.get("sw_default") else "Trả về mặc định")
+        self.c_sw.paint()
+
+    def load_density(self):
+        self.say(self.dens_now, "Đang đọc màn hình máy…", DIM)
+        def got(j):
+            self.dens = j; self._paint_density()
+        self.bg(lambda: self.cp.json("GET", "density", timeout=30), got, lambda m: self.say(self.dens_now, "✗ " + missing(m), BAD))
+
+    def custom_density(self):
+        try: v = int(self.sw_ent.get().strip())
+        except ValueError: v = 0
+        if not 240 <= v <= 1600: self.say(self.dens_msg, "Nhập số từ 240 đến 1600 (dp).", BAD); return
+        self.set_density(v)
+
+    def set_density(self, sw, reset=False):
+        if self.dens_busy: return
+        self.dens_busy = True
+        self.say(self.dens_msg, "Đang trả về mặc định…" if reset else f"Đang đặt {sw} dp…", WARN)
+        def ok(j):
+            self.dens_busy = False
+            if j.get("sw"): self.dens = j
+            self._paint_density(); self.say(self.dens_msg, "✓ " + (j.get("msg") or "Đã đổi."), OK)
+        def fail(m):
+            self.dens_busy = False; self.say(self.dens_msg, "✗ " + missing(m), BAD)
+        self.bg(lambda: self.cp.json("POST", "density", {"reset": True} if reset else {"sw": int(sw)}, timeout=40), ok, fail)
+
+    # ================= thẻ CÀI APP: file APK / file khác / link =================
+    def _page_install(self):
+        tk = self.app.tk; pg = self.pages["install"]
+        f = self.section("Cài app / chép file vào máy", parent=pg)
+        self.muted(f, "File .apk / .apks / .xapk / .apkm → cài vào máy. File khác (ảnh, video, tài liệu…) → chép vào thư mục Download của máy.")
+        r = tk.Frame(f, bg=BG); r.pack(fill="x", pady=(8, 0))
+        self.pick_btn = self.app.btn(r, "Chọn file trên máy tính…", self.pick); self.pick_btn.pack(side="left")
+        lr = tk.Frame(f, bg=BG); lr.pack(fill="x", pady=(8, 0))
+        self.link = tk.Entry(lr, font=("Segoe UI", 10), bg=CARD, fg=TXT, insertbackground=TXT, relief="flat")
+        self.link.pack(side="left", fill="x", expand=True, ipady=6)
+        self.link_btn = self.app.btn(lr, "Cài từ link", self.from_link, "soft"); self.link_btn.pack(side="left", padx=(6, 0))
+        self.label(f, "Link tải trực tiếp file (thường kết thúc bằng .apk), không phải link trang web.", self.app.f_s, DIM).pack(fill="x", pady=(2, 0))
+        self.up_msg = self.msg(f)
+
     def pick(self):
         from tkinter import filedialog
         if self.busy: return
@@ -1498,7 +1861,7 @@ class ToolsDlg(Dlg):
                 if not jid: raise ApiError(0, "Máy chủ chưa nhận việc — thử lại.")
                 self.app.ui(lambda: self.say(self.up_msg, "Đang cài / chép vào máy…", WARN))
                 msg = self.cp.wait_job(jid, lambda m: self.app.ui(lambda: self.say(self.up_msg, m, WARN)))
-                self.app.ui(lambda: (self.say(self.up_msg, "✓ " + msg, OK), self.load()))
+                self.app.ui(lambda: (self.say(self.up_msg, "✓ " + msg, OK), self.loaded.difference_update(("apps", "clone"))))
             except Exception as e:
                 m = str(e) or "Có lỗi."; log("tools upload:", traceback.format_exc())
                 self.app.ui(lambda: self.say(self.up_msg, "✗ " + m, BAD))
@@ -1510,27 +1873,80 @@ class ToolsDlg(Dlg):
                 self.app.ui(done)
         threading.Thread(target=job, daemon=True).start()
 
-    # ---------- clone tab ----------
+    # ================= danh sách app (dùng chung cho thẻ Ứng dụng + Clone tab) =================
     def load(self):
-        for w in self.clone_box.winfo_children(): w.destroy()
-        self.label(self.clone_box, "Đang đọc danh sách app trong máy…", self.app.f_t, DIM).pack(fill="x")
+        for box in (self.clone_box, self.apps_box):
+            for w in box.winfo_children(): w.destroy()
+            self.label(box, "Đang đọc danh sách app trong máy…", self.app.f_t, DIM).pack(fill="x")
         def got(r):
             a, c = r
             self.apps = list(a.get("apps") or []); self.counts = dict(c.get("counts") or {}); self.max = int(num(c.get("max")) or 4)
             if self.pkg not in self.apps: self.pkg = "com.roblox.client" if "com.roblox.client" in self.apps else (self.apps[0] if self.apps else None)
             self.n = max(1, min(self.max, self.counts.get(self.pkg, 0) + 1)) if self.pkg else 1
-            self.draw()
+            self.draw(); self.draw_apps()
         def fail(m):
-            for w in self.clone_box.winfo_children(): w.destroy()
-            self.say(self.cl_msg, "✗ " + m, BAD)
+            for box in (self.clone_box, self.apps_box):
+                for w in box.winfo_children(): w.destroy()
+            self.say(self.cl_msg, "✗ " + m, BAD); self.say(self.ap_msg, "✗ " + m, BAD)
+            self.loaded.difference_update(("apps", "clone"))
         self.bg(lambda: (self.cp.json("GET", "apps"), self.cp.json("GET", "clone")), got, fail)
+
+    # ================= thẻ ỨNG DỤNG: mở / dừng / xoá dữ liệu / gỡ =================
+    def _page_apps(self):
+        pg = self.pages["apps"]
+        f = self.section("Ứng dụng trong máy", parent=pg)
+        self.muted(f, "App bạn đã cài (không gồm app hệ thống). Mở = mở toàn màn hình (game cần màn ngang tự xoay ngang).")
+        self.apps_box = self.app.tk.Frame(f, bg=BG); self.apps_box.pack(fill="x", pady=(8, 0))
+        self.ap_msg = self.msg(f)
+
+    def draw_apps(self):
+        tk = self.app.tk
+        for w in self.apps_box.winfo_children(): w.destroy()
+        if not self.apps:
+            self.label(self.apps_box, "Máy chưa có app nào do bạn cài. Cài ở thẻ Cài app, hoặc từ CH Play trong máy.", self.app.f_t, DIM, wraplength=580).pack(fill="x")
+            return
+        for pkg in self.apps:
+            row = tk.Frame(self.apps_box, bg=CARD, highlightbackground=LINE, highlightthickness=1); row.pack(fill="x", pady=(0, 6))
+            br = tk.Frame(row, bg=CARD); br.pack(side="right", padx=8, pady=6)           # nút đặt trước → tên dài không đẩy mất nút
+            for text, act, kind in (("Mở", "launch", "primary"), ("Dừng", "stop", "soft"), ("Xoá dữ liệu", "clear", "soft"), ("Gỡ", "uninstall", "danger")):
+                self.app.btn(br, text, lambda a=act, p=pkg: self.app_act(a, p), kind, padx=9, pady=4).pack(side="left", padx=(4, 0))
+            lf = tk.Frame(row, bg=CARD); lf.pack(side="left", fill="x", expand=True, padx=10, pady=6)
+            k = self.counts.get(pkg, 0)
+            self.label(lf, app_label(pkg) + (f"  ·  {k} bản clone" if k else ""), ("Segoe UI", 10, "bold"), TXT).pack(fill="x")
+            if app_label(pkg) != pkg: self.label(lf, pkg, self.app.f_s, DIM).pack(fill="x")
+
+    def app_act(self, act, pkg):
+        import tkinter.messagebox as mb
+        nm = app_label(pkg); k = self.counts.get(pkg, 0)
+        if act == "clear" and not mb.askyesno("Xoá dữ liệu app", f"Xoá toàn bộ dữ liệu của {nm}?\n\nApp trở về như mới cài: acc đăng nhập, cài đặt trong app sẽ mất.",
+                                              icon="warning", default="no", parent=self.win): return
+        if act == "uninstall" and not mb.askyesno("Gỡ app", f"Gỡ {nm} khỏi máy?\n\nDữ liệu của app sẽ bị xoá" + (f", {k} bản clone cũng bị gỡ." if k else "."),
+                                                  icon="warning", default="no", parent=self.win): return
+        verb = {"launch": "mở", "stop": "dừng", "clear": "xoá dữ liệu", "uninstall": "gỡ"}[act]
+        self.say(self.ap_msg, f"Đang {verb} {nm}…", WARN)
+        def ok(j):
+            o = str(j.get("out") or "")
+            if "Failure" in o or "Exception" in o: self.say(self.ap_msg, f"✗ Chưa {verb} được {nm}: {o[-140:]}", BAD); return
+            self.say(self.ap_msg, f"✓ Đã {verb} {nm}.", OK)
+            if act == "uninstall": self.load()
+        self.bg(lambda: self.cp.json("POST", act, {"pkg": pkg}, timeout=90), ok, lambda m: self.say(self.ap_msg, "✗ " + m, BAD))
+
+    # ================= thẻ CLONE TAB =================
+    def _page_clone(self):
+        pg = self.pages["clone"]
+        f = self.section("Clone tab — chạy thêm bản 2, 3… của 1 app để đăng nhập acc khác", parent=pg)
+        self.muted(f, "Mỗi bản clone là 1 hồ sơ riêng của Android, dùng đúng app gốc đã cài trong máy. Bản clone hiện thành biểu tượng "
+                      "\"Clone 1, 2…\" (hoặc tab Công việc) trên màn hình chính, hoặc bấm Mở bản ở đây — mở toàn màn hình, game ngang tự xoay ngang. "
+                      "Mỗi bản cần thêm RAM / CPU.")
+        self.clone_box = self.app.tk.Frame(f, bg=BG); self.clone_box.pack(fill="x", pady=(8, 0))
+        self.cl_msg = self.msg(f)
 
     def draw(self):
         tk = self.app.tk
         for w in self.clone_box.winfo_children(): w.destroy()
         if not self.apps:
-            self.label(self.clone_box, "Máy chưa có app nào. Cài app trước (VD game từ CH Play trong máy, hoặc file APK ở trên) rồi bấm Làm mới.",
-                       self.app.f_t, DIM, wraplength=560).pack(fill="x"); return
+            self.label(self.clone_box, "Máy chưa có app nào. Cài app trước (VD game từ CH Play trong máy, hoặc file APK ở thẻ Cài app) rồi bấm Làm mới.",
+                       self.app.f_t, DIM, wraplength=580).pack(fill="x"); return
         self.label(self.clone_box, "App cần clone", ("Segoe UI", 10, "bold"), DIM).pack(fill="x")
         items = [(k, app_label(k) + (f"  ×{self.counts[k]}" if self.counts.get(k) else "")) for k in self.apps]
         self.c_app = Chips(self.app, self.clone_box, items, lambda: self.pkg, self._pick_app, self.draw, wrap=3); self.c_app.frame.pack(fill="x")
@@ -1584,6 +2000,83 @@ class ToolsDlg(Dlg):
         self.say(self.cl_msg, "Đang bỏ các bản clone…", WARN)
         self.bg(lambda: self.cp.json("POST", "clone", {"pkg": pkg, "remove": True}),
                 lambda j: (self.say(self.cl_msg, "✓ " + (j.get("msg") or "Đã bỏ các bản clone."), OK), self.load()), lambda m: self.say(self.cl_msg, "✗ " + m, BAD))
+
+    # ================= thẻ KHÁC: mở link, GPS, chụp màn, nút nguồn, root, khởi động lại =================
+    def _page_more(self):
+        tk = self.app.tk; pg = self.pages["more"]
+        f = self.section("Mở link trên máy", parent=pg)
+        r = tk.Frame(f, bg=BG); r.pack(fill="x", pady=(6, 0))
+        self.url_ent = tk.Entry(r, font=("Segoe UI", 10), bg=CARD, fg=TXT, insertbackground=TXT, relief="flat")
+        self.url_ent.pack(side="left", fill="x", expand=True, ipady=6); self.url_ent.bind("<Return>", lambda e: self.open_url())
+        self.app.btn(r, "Mở trên máy", self.open_url, "soft").pack(side="left", padx=(6, 0))
+        self.url_msg = self.msg(f, (4, 0))
+        f = self.section("Vị trí GPS giả (máy Android 12 trở lên)", parent=pg)
+        self.muted(f, "Nhập toạ độ dạng: vĩ độ, kinh độ — trên Google Maps bấm chuột phải vào 1 điểm rồi bấm dòng số để copy. VD Hà Nội: 21.0285, 105.8542")
+        r = tk.Frame(f, bg=BG); r.pack(fill="x", pady=(6, 0))
+        self.gps_ent = tk.Entry(r, font=("Segoe UI", 10), bg=CARD, fg=TXT, insertbackground=TXT, relief="flat")
+        self.gps_ent.insert(0, str(prefs().get("gps_" + str(self.p["id"])) or ""))
+        self.gps_ent.pack(side="left", fill="x", expand=True, ipady=6); self.gps_ent.bind("<Return>", lambda e: self.set_gps())
+        self.app.btn(r, "Đặt vị trí", self.set_gps).pack(side="left", padx=(6, 0))
+        self.app.btn(r, "Tắt", lambda: self.set_gps(off=True), "soft").pack(side="left", padx=(6, 0))
+        self.gps_msg = self.msg(f, (4, 0))
+        f = self.section("Máy", parent=pg)
+        r = tk.Frame(f, bg=BG); r.pack(fill="x", pady=(6, 0))
+        self.app.btn(r, "Chụp màn hình", self.shot, "soft").pack(side="left")
+        self.app.btn(r, "Nút nguồn (tắt / mở màn)", self.power, "soft").pack(side="left", padx=(8, 0))
+        self.app.btn(r, "Root máy", self.root_phone, "soft").pack(side="left", padx=(8, 0))
+        r = tk.Frame(f, bg=BG); r.pack(fill="x", pady=(8, 0))
+        self.app.btn(r, "⟳  Khởi động lại máy", self.reboot, "danger").pack(side="left")
+        self.more_msg = self.msg(f)
+
+    def open_url(self):
+        u = self.url_ent.get().strip()
+        if not u: return
+        if not re.match(r"^https?://", u, re.I) and re.match(r"^[\w-]+(\.[\w-]+)+(/\S*)?$", u): u = "https://" + u      # gõ "google.com" cũng mở được
+        if not re.match(r"^https?://\S+$", u, re.I): self.say(self.url_msg, "Link phải bắt đầu bằng http:// hoặc https://", BAD); return
+        self.say(self.url_msg, "Đang mở…", WARN)
+        self.bg(lambda: self.cp.json("POST", "url", {"url": u}, timeout=30), lambda j: self.say(self.url_msg, "✓ Đã mở trên máy.", OK),
+                lambda m: self.say(self.url_msg, "✗ " + m, BAD))
+
+    def set_gps(self, off=False):
+        if off:
+            self.say(self.gps_msg, "Đang tắt vị trí giả…", WARN)
+            self.bg(lambda: self.cp.json("POST", "gps", {"off": True}, timeout=40), lambda j: self.say(self.gps_msg, "✓ " + (j.get("msg") or "Đã tắt vị trí giả."), OK),
+                    lambda m: self.say(self.gps_msg, "✗ " + m, BAD))
+            return
+        m = re.search(r"(-?\d+(?:\.\d+)?)\s*[,; ]\s*(-?\d+(?:\.\d+)?)", self.gps_ent.get())
+        if not m: self.say(self.gps_msg, "Nhập dạng: 21.0285, 105.8542", BAD); return
+        lat, lng = float(m.group(1)), float(m.group(2))
+        if not (-90 <= lat <= 90 and -180 <= lng <= 180): self.say(self.gps_msg, "Toạ độ không hợp lệ (vĩ độ −90 … 90, kinh độ −180 … 180).", BAD); return
+        prefs({"gps_" + str(self.p["id"]): f"{m.group(1)}, {m.group(2)}"})
+        self.say(self.gps_msg, "Đang đặt vị trí…", WARN)
+        self.bg(lambda: self.cp.json("POST", "gps", {"lat": lat, "lng": lng}, timeout=60), lambda j: self.say(self.gps_msg, "✓ " + (j.get("msg") or "Đã đặt vị trí."), OK),
+                lambda e: self.say(self.gps_msg, "✗ " + e, BAD))
+
+    def shot(self):
+        self.say(self.more_msg, "Đang chụp màn hình…", WARN)
+        def job():
+            code, raw = self.cp.request("GET", "shot?fresh=1", timeout=40)
+            if code != 200 or raw[:8] != b"\x89PNG\r\n\x1a\n":
+                raise ApiError(code, err_text(code, raw) if code != 200 else "Không chụp được màn hình.")
+            fp = shot_path()
+            with open(fp, "wb") as f: f.write(raw)
+            return fp
+        def ok(fp):
+            self.say(self.more_msg, f"✓ Đã lưu ảnh: {fp}", OK); open_folder(fp)
+        self.bg(job, ok, lambda m: self.say(self.more_msg, "✗ " + m, BAD))
+
+    def power(self):
+        self.say(self.more_msg, "Đang bấm nút nguồn…", WARN)
+        self.bg(lambda: self.cp.json("POST", "key", {"code": 26}, timeout=20),
+                lambda j: self.say(self.more_msg, "✓ Đã bấm nút nguồn — màn đang tắt thì bật lên, đang bật thì tắt.", OK), lambda m: self.say(self.more_msg, "✗ " + m, BAD))
+
+    def root_phone(self):
+        self._bgjob(self.more_msg, lambda: self.cp.json("POST", "root", {}, timeout=60), "Đang kiểm tra / bật root (máy có thể khởi động lại ~1 phút)…")
+
+    def reboot(self):
+        import tkinter.messagebox as mb
+        if not mb.askyesno("Khởi động lại", f"Khởi động lại máy “{self.p.get('name')}”?\n\nMáy tắt khoảng 1 phút rồi tự bật lại. Dữ liệu vẫn giữ.", parent=self.win): return
+        self._bgjob(self.more_msg, lambda: self.cp.json("POST", "reboot", {}, timeout=60), "Đang khởi động lại máy (1–3 phút)…")
 
 
 ERRORS.update({"UPGRADE_PENDING": "Máy đang được nâng cấp, đợi khoảng 1 phút rồi thử lại.", "FREE_NO_UPGRADE": "Máy miễn phí không nâng cấp được — thuê máy trả phí để nâng.",
@@ -1670,11 +2163,13 @@ class Launcher:
         threading.Thread(target=job, daemon=True).start()
 
     def more(self, p, widget):
-        """Menu "Khác" của 1 máy: nâng cấp RAM/CPU, huỷ máy."""
+        """Menu "Khác" của 1 máy: công cụ (xoay màn, độ rộng, cài app, ứng dụng, clone tab…), nâng cấp RAM/CPU, huỷ máy."""
         m = self.tk.Menu(self.root, tearoff=0, bg=CARD, fg=TXT, activebackground=ACC, activeforeground=TXT, font=("Segoe UI", 10))
         can_up = p.get("status") == "active" and not p.get("locked") and not p.get("is_free") and p.get("pending_ram") is None
         on = p.get("status") == "active" and (not p.get("locked") or (getattr(self, "prof", None) or {}).get("role") == "admin")
-        m.add_command(label="Công cụ: cài APK, Clone tab…", command=lambda: ToolsDlg(self, p), state="normal" if on else "disabled")
+        for lab, tab in (("Xoay màn · Độ rộng nhỏ nhất…", "screen"), ("Cài app (APK / link)…", "install"), ("Ứng dụng trong máy…", "apps"),
+                         ("Clone tab…", "clone"), ("Khác: mở link, GPS, chụp màn, root…", "more")):
+            m.add_command(label=lab, command=lambda t=tab: ToolsDlg(self, p, t), state="normal" if on else "disabled")
         m.add_separator()
         m.add_command(label="Nâng cấp RAM / CPU", command=lambda: self.open_upgrade(p), state="normal" if can_up else "disabled")
         m.add_separator()
@@ -1726,6 +2221,8 @@ class Launcher:
         tk.Label(sub, text=self.auth.email, font=self.f_s, fg=DIM, bg=BG).pack(side="left")
         lk = tk.Label(sub, text="Mở web ↗", font=self.f_s, fg=ACC, bg=BG, cursor="hand2"); lk.pack(side="right")
         lk.bind("<Button-1>", lambda *_: webbrowser.open(WEB))
+        self.upd_slot = tk.Frame(self.body, bg=BG); self.upd_slot.pack(fill="x", padx=18)    # báo có bản app mới (nếu có)
+        self._paint_update()
         shop = tk.Frame(self.body, bg=CARD, highlightbackground=LINE, highlightthickness=1); shop.pack(fill="x", padx=18, pady=(10, 0))
         bl = tk.Frame(shop, bg=CARD); bl.pack(side="left", padx=14, pady=8)
         tk.Label(bl, text="Số dư", font=self.f_s, fg=DIM, bg=CARD, anchor="w").pack(fill="x")
@@ -1755,11 +2252,19 @@ class Launcher:
                 if not getattr(self, "_site_ok", False):           # 1 lần mỗi lần mở app: lấy tên miền web hiện tại
                     try: self.shop.site(); self._site_ok = True
                     except Exception: pass
+                if FROZEN and not getattr(self, "_upd_checked", False):   # 1 lần mỗi lần mở app: web có bản app máy tính mới hơn không
+                    self._upd_checked = True
+                    try:
+                        code, raw = http("GET", WEB.rstrip("/") + "/download/pc.json", timeout=10)
+                        j = json.loads(raw.decode("utf-8") or "{}") if code == 200 else {}
+                        if isinstance(j, dict) and int(num(j.get("code"))) > app_code(): self.update_info = j
+                    except Exception as e: log("update check:", e)
                 try: prof = self.shop.profile()
                 except ApiError as e:
                     if e.code == 401: raise
                     prof = None
                 def show():
+                    self._paint_update()
                     if prof is not None: self.prof = prof
                     if prof is not None and hasattr(self, "bal") and self.bal.winfo_exists():
                         self.bal.config(text=vnd(prof.get("balance")) + (f"  · CTV −{int(num(prof.get('ctv_discount')))}%" if is_ctv(prof) else ""))
@@ -1772,6 +2277,19 @@ class Launcher:
             except Exception as e:
                 log("refresh:", traceback.format_exc())
         threading.Thread(target=job, daemon=True).start()
+
+    def _paint_update(self):
+        """Dải báo "Có bản app mới" trên danh sách máy — bấm để tải bản mới trên web (app máy tính chưa tự cập nhật được)."""
+        u = getattr(self, "update_info", None); slot = getattr(self, "upd_slot", None)
+        if not u or slot is None or not slot.winfo_exists() or slot.winfo_children(): return
+        tk = self.tk
+        b = tk.Frame(slot, bg="#14324f", highlightbackground=ACC, highlightthickness=1, cursor="hand2"); b.pack(fill="x", pady=(10, 0))
+        t1 = tk.Label(b, text=f"Có bản app mới {u.get('version') or ''} (máy đang dùng {APP_VER}) — bấm để tải về", font=("Segoe UI", 10, "bold"),
+                      fg=TXT, bg="#14324f", anchor="w", cursor="hand2")
+        t2 = tk.Label(b, text="Tải xong: đóng app này, giải nén đè lên thư mục app cũ rồi mở lại CloudBluePC.exe.", font=self.f_s, fg=DIM,
+                      bg="#14324f", anchor="w", cursor="hand2")
+        t1.pack(fill="x", padx=12, pady=(8, 0)); t2.pack(fill="x", padx=12, pady=(0, 8))
+        for w in (b, t1, t2): w.bind("<Button-1>", lambda *_: webbrowser.open(WEB.rstrip("/") + "/download/CloudBluePC.zip"))
 
     def render(self, rows):
         tk = self.tk

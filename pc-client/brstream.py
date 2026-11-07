@@ -295,6 +295,9 @@ class StreamClient:
         if s: self._send(C_TEXT, s.encode("utf-8"))
     def scroll(self, nx, ny, h, v): self._send(C_SCROLL, struct.pack(">HHhh", self._u16(nx), self._u16(ny), int(h), int(v)))
     def cmd(self, name): self._send(C_CMD, json.dumps({"cmd": name}).encode())
+    def rotate(self, to):
+        """Xoay máy: "land" khoá ngang · "port" khoá dọc (máy chủ cũ hiểu như "rotate" đổi qua lại)."""
+        self._send(C_CMD, json.dumps({"cmd": "rotate", "to": to}).encode())
     def quality(self, q, fps=None, kbps=None):
         self.q = q; j = {"q": q}
         if fps: j["fps"] = fps
